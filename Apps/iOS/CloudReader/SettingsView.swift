@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage("sftp.directory") private var sftpDirectory = "CloudReader"
     @State private var webDAVUsername = ""
     @State private var webDAVPassword = ""
+    @State private var googleClientSecret = ""
     @State private var sftpPassword = ""
     @State private var sftpHostKey = ""
     @State private var showingFolderPicker = false
@@ -54,14 +55,15 @@ struct SettingsView: View {
 
                 Section {
                     providerCard(.googleDrive) {
-                        TextField("OAuth client ID", text: $googleClientID)
+                        TextField("iOS OAuth client ID", text: $googleClientID)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
-                        Text("Use an iOS OAuth client ID from Google Cloud Console. CloudReader derives its callback from that ID.")
+                        SecureField("OAuth client secret (if provided)", text: $googleClientSecret)
+                        Text("Create an iOS OAuth client for this app’s bundle ID in Google Cloud Console. This iOS client ID is separate from the Desktop client used on Mac. If Google provided a client secret, enter it here; CloudReader stores it in this device’s Keychain. The callback is derived from the iOS client ID.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                        connectButton(.googleDrive, clientID: googleClientID)
+                        connectButton(.googleDrive, clientID: googleClientID, clientSecret: googleClientSecret)
                     }
                     providerCard(.dropbox) {
                         TextField("OAuth app key", text: $dropboxClientID)
@@ -259,6 +261,9 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                googleClientSecret = SecureVault.load(OAuthClientSecret.self, account: "googleDrive.clientSecret")?.value ?? ""
+            }
             .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
                 switch result {
                 case .success(let urls):
@@ -306,7 +311,7 @@ struct SettingsView: View {
         .padding(.vertical, 5)
     }
 
-    private func connectButton(_ provider: CloudProviderKind, clientID: String) -> some View {
+    private func connectButton(_ provider: CloudProviderKind, clientID: String, clientSecret: String? = nil) -> some View {
         Button {
             let normalizedClientID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalizedClientID.isEmpty else {
@@ -318,7 +323,7 @@ struct SettingsView: View {
             Task {
                 connectingProvider = provider
                 defer { connectingProvider = nil }
-                let didConnect = await cloudSync.connectOAuth(provider, clientID: normalizedClientID)
+                let didConnect = await cloudSync.connectOAuth(provider, clientID: normalizedClientID, clientSecret: clientSecret)
                 if didConnect { await cloudSync.sync(library: library) }
                 cloudAlertTitle = didConnect ? "\(provider.title) connection" : "Couldn’t connect to \(provider.title)"
                 cloudAlertMessage = cloudSync.errorMessage ?? (didConnect ? "Connected to \(provider.title)." : "Sign-in did not complete.")
