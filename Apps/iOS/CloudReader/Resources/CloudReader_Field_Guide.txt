@@ -1,0 +1,74 @@
+THE OPEN SHELF
+A field guide to CloudReader
+
+The CloudReader Project
+Demo edition · 2026
+
+This is an original sample book written for CloudReader. No outside book text is included. The project dedicates this sample text to the public domain under CC0 1.0 Universal: https://creativecommons.org/publicdomain/zero/1.0/.
+
+
+CHAPTER ONE
+A shelf that belongs to you
+
+A book is a small portable room. It can hold a whole city, a careful argument, a memory someone kept for decades, or a question that follows you through the day. A reading app should make it easy to enter that room and just as easy to leave with your place remembered.
+
+CloudReader begins with a simple promise: your books should feel like yours. Import a file and the app keeps a managed copy in its local library. The source remains where you put it. Your reading can continue when the network is gone, and the library does not require a CloudReader account or a CloudReader server.
+
+The app is being built one platform at a time. Its first homes are native SwiftUI apps for iOS and macOS. iPhone and iPad layouts adapt to the space available, and the desktop reader shares its book library and cloud sync behavior with iOS. Windows, Android, and Linux remain future platforms.
+
+The shelf is not a social feed. It is a place to find the next page. Search, import, bookmarks, and a continue-reading card should help without competing with the book. The best reading interface knows when to disappear.
+
+
+CHAPTER TWO
+Keep the page, not just the percentage
+
+Progress looks like a number, but it is really a promise. When you return tomorrow, the app should bring you to the same meaningful place. A PDF can remember a page number. A reflowable EPUB should remember a position in the book that survives a change in font size, margins, or device. A text file can remember a stable paragraph or character offset.
+
+CloudReader stores a local library index next to its managed book files. Each book has a stable identifier, title, format, import date, last-opened date, reading progress, favorite state, and modified time. The sync index records those book entries together with a content hash. The hash lets another device check whether the file it received is complete and whether it needs to download it again.
+
+The current sync manifest is named manifest.json. It describes books, their content hashes, bookmarks, progress, saved AI conversations, and deletions; the book bytes live beside that index as separate objects. The same manifest shape works for the iOS and macOS apps. A small progress change updates a small record, not every book file.
+
+When you select one or more shared destinations, CloudReader compares each remote index with the local library, merges changes, and sends the combined state to every selected destination. Newer reading state can move to another device along with the corresponding book file. Saved AI chats, their messages, and book context the reader chose to include also move between devices. Concurrent messages in one conversation are merged by their stable IDs. A deletion is recorded as a tombstone so an offline device does not silently bring back a book or chat removed elsewhere.
+
+The cloud locations are yours to choose. Select multiple connected destinations in Settings to keep them in sync. Direct connections are planned and implemented for Google Drive, Dropbox, WebDAV, and SFTP. On Apple devices, a folder selected through Files can point to iCloud Drive, a mounted SMB share, or another storage app that exposes a Files location. Every destination contains an index that a person can inspect and back up. Provider credentials do not belong in that index.
+
+
+CHAPTER THREE
+Ask a question in the margin
+
+Sometimes a book gives you a sentence and you want to ask what it means. Sometimes you want to connect two ideas, check a term, or ask a question that has nothing to do with the book at all. An AI assistant can be another tool on the shelf, as long as the reader stays in control.
+
+CloudReader's assistant can use a provider the reader configures: OpenAI's Chat Completions API, OpenAI's Responses API, Anthropic's Messages API, or a compatible custom endpoint. The model name, endpoint, and API key belong to the user's own configuration. The key stays in the operating system's secure credential store. A question and any attached book excerpt are sent only after the reader presses Ask, and the interface should make clear which context is included.
+
+An open endpoint means there is no single CloudReader AI account. It also means the person who supplies a key is responsible for the provider's billing and data rules. The assistant should never silently upload an entire library. A book excerpt is optional, limited to a reasonable size, and visible before it leaves the device. A reader can ask an ordinary question without adding any book context.
+
+On Apple devices, CloudReader can expose a question action to Siri and Shortcuts through App Intents. If Apple Intelligence and its ChatGPT extension are configured on the device, Siri can use that system integration according to the reader's settings. A separate share action can pass a prompt to another app, such as ChatGPT when iOS offers it as a share destination. These are system handoffs; CloudReader does not pretend to own the other app or its account.
+
+
+CHAPTER FOUR
+One library, several kinds of device
+
+A phone is good for a few pages in a waiting room. A wide foldable display is good for seeing the book beside the shelf or a note. A laptop is good for long sessions and keyboard shortcuts. Each screen deserves a layout that fits, but the library underneath should not fork into a different product on every platform.
+
+Portable data makes that possible. A book record should use a stable identifier and a reader-neutral description. Each reading engine can add a position format it understands. An EPUB adapter can keep a canonical EPUB location; a PDF adapter can store a page index; a plain-text adapter can store a stable offset. All of them can share a normalized progress fraction for a shelf preview. An annotation should identify its book and its anchor, while the display style remains up to each platform.
+
+The file format is a boundary, not a user interface. SwiftUI is the native iOS shell. A future macOS app can use the same portable index and sync protocol while taking advantage of its larger windows. Android can do the same with its own native patterns. Linux and Windows can select readers and storage adapters that suit their systems. None of those future clients should need to copy a provider password into the library folder.
+
+The first reader formats are EPUB, PDF, and text. The library can preserve additional imports while their readers are built. The sync layer should not care whether a format is shown in a continuous text column, a page canvas, a comic spread, or another reader. It moves stable book objects and portable reading records; a reader adapter gives those records meaning on screen.
+
+
+CHAPTER FIVE
+Small rules for trust
+
+Offline reading is a feature, not an error state. A connection can be unavailable without making a book disappear. A failed upload should remain visible and retryable. A broken or partial transfer should fail its hash check rather than replace a good local copy. A provider token should be stored in Keychain on Apple platforms and the matching credential vault on other systems.
+
+Readers should be able to export their library as book files and portable reading data. The export should never include API keys, OAuth tokens, or server passwords. Deletions should be reversible for a reasonable period, and a person should be able to inspect the index with ordinary tools. When a provider requires permission, CloudReader should ask only for the access it needs and explain where the data is stored.
+
+AI requests deserve the same care. The reader chooses a provider and model. A clearly named control chooses whether the current book is included in a request. The conversation and the context saved with it are kept locally and sync to the selected storage home, so the reader can return to them on another device. API keys and provider credentials stay in the operating system's secure credential store and are never copied into the sync manifest.
+
+These rules are modest: remember the page, keep the file intact, show where data goes, and let the reader choose. They make the rest of the experience possible. A good shelf is not only beautiful. It earns the right to hold someone's books.
+
+
+END OF DEMO EDITION
+
+CloudReader is an open-source reader project. The guide is original demo content, not an excerpt from a commercial or public-domain book. CC0 dedication applies to this guide text; software licenses and third-party notices are documented separately in the repository.

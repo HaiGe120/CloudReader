@@ -1,0 +1,1 @@
+../Apps/iOS/CloudReader/Resources/CloudReader_Field_Guide.txt

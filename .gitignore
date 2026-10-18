@@ -1,0 +1,18 @@
+# macOS and Xcode
+.DS_Store
+*.app/
+**/xcuserdata/
+**/DerivedData/
+**/build/
+/Build/
+*.xcuserstate
+*.moved-aside
+*.ipa
+*.xcarchive/
+
+# Signing material
+*.p8
+*.mobileprovision
+*.provisionprofile
+*.p12
+*.key

@@ -1,0 +1,85 @@
+name: CloudReader
+options:
+  bundleIdPrefix: io.github.haige120
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader
+    PRODUCT_NAME: CloudReader
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_CFBundleDisplayName: CloudReader
+    INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+    INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
+targets:
+  CloudReader:
+    type: application
+    platform: iOS
+    info:
+      path: CloudReader/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLName: io.github.haige120.cloudreader
+            CFBundleURLSchemes:
+              - io.github.haige120.cloudreader
+              - cloudreader
+    sources:
+      - path: CloudReader
+      - path: ../Shared
+    resources:
+      - path: CloudReader/Resources/CloudReader_Field_Guide.txt
+    dependencies:
+      - package: Citadel
+        product: Citadel
+      - package: swift-nio-ssh
+        product: NIOSSH
+      - package: swift-nio
+        product: NIO
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        SUPPORTS_MACCATALYST: NO
+        SWIFT_EMIT_LOC_STRINGS: YES
+  CloudReaderTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: CloudReaderTests
+    dependencies:
+      - target: CloudReader
+    settings:
+      base:
+        PRODUCT_NAME: CloudReaderTests
+        PRODUCT_MODULE_NAME: CloudReaderTests
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  CloudReader:
+    build:
+      targets:
+        CloudReader: all
+    run:
+      config: Debug
+    test:
+      targets:
+        - CloudReaderTests
+packages:
+  Citadel:
+    url: https://github.com/orlandos-nl/Citadel.git
+    from: 0.12.1
+  swift-nio-ssh:
+    url: https://github.com/Wellz26/swift-nio-ssh.git
+    from: 0.3.4
+  swift-nio:
+    url: https://github.com/apple/swift-nio.git
+    from: 2.81.0

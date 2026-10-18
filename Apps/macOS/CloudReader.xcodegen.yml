@@ -1,0 +1,62 @@
+name: CloudReader
+options:
+  bundleIdPrefix: io.github.haige120
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader.macos
+    PRODUCT_NAME: CloudReader
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    GENERATE_INFOPLIST_FILE: YES
+    INFOPLIST_KEY_CFBundleDisplayName: CloudReader
+    INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.books
+    CODE_SIGN_ENTITLEMENTS: CloudReader/CloudReader.entitlements
+    ENABLE_APP_SANDBOX: YES
+targets:
+  CloudReader:
+    type: application
+    platform: macOS
+    info:
+      path: CloudReader/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: io.github.haige120.cloudreader
+            CFBundleURLSchemes:
+              - io.github.haige120.cloudreader
+              - cloudreader
+    sources:
+      - path: CloudReader
+      - path: ../Shared
+    resources:
+      - path: CloudReader/Resources/CloudReader_Field_Guide.txt
+    dependencies:
+      - package: Citadel
+        product: Citadel
+      - package: swift-nio-ssh
+        product: NIOSSH
+      - package: swift-nio
+        product: NIO
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_EMIT_LOC_STRINGS: YES
+schemes:
+  CloudReader:
+    build:
+      targets:
+        CloudReader: all
+    run:
+      config: Debug
+packages:
+  Citadel:
+    url: https://github.com/orlandos-nl/Citadel.git
+    from: 0.12.1
+  swift-nio-ssh:
+    url: https://github.com/Wellz26/swift-nio-ssh.git
+    from: 0.3.4
+  swift-nio:
+    url: https://github.com/apple/swift-nio.git
+    from: 2.81.0
