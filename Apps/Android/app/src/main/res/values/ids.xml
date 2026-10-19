@@ -1,0 +1,4 @@
+<resources>
+    <item name="pdf_viewer_container" type="id" />
+    <item name="epub_viewer_container" type="id" />
+</resources>

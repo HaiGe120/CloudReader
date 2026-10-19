@@ -6,7 +6,7 @@ This is the canonical product brief for CloudReader across iOS, macOS, Android, 
 
 CloudReader is a polished, offline-first reader that lets people keep DRM-free books and reading state together across their own devices. It requires no CloudReader account or CloudReader-hosted service. A reader chooses a cloud provider or folder they control. The local library remains usable when offline, and importing a book copies it into managed storage without changing the original file.
 
-The product is built in phases. The native iOS app targets iOS 26 or later with SwiftUI and the system's Liquid Glass controls. The native macOS app targets macOS 15 or later. Both Apple targets compile the same Swift sources from `Apps/Shared` for the book model, library, provider sync, AI service, and Ask CloudReader App Intent, while using separate native SwiftUI screens. Android, Windows, and Linux remain future clients governed by the portable library, sync, provider, and AI contracts defined here. There is no web app in the current product plan.
+The product is built in phases. The native iOS app targets iOS 26 or later with SwiftUI and the system's Liquid Glass controls. The native macOS app targets macOS 15 or later. Both Apple targets compile the same Swift sources from `Apps/Shared` for the book model, library, provider sync, AI service, and Ask CloudReader App Intent, while using separate native SwiftUI screens. The Android client is a Kotlin and Jetpack Compose app targeting Android 12+ (API 31), with application ID `io.github.haige120.cloudreader`; it follows the same portable schema while keeping format-specific reading positions local. Windows and Linux remain future clients governed by these contracts. There is no web app in the current product plan.
 
 ## Product principles
 
@@ -22,7 +22,7 @@ The product is built in phases. The native iOS app targets iOS 26 or later with 
 
 1. **iOS:** native SwiftUI app, iPhone and iPad layouts, current iOS 26+ target. Include iPhone Duo and other wide/compact postures in layout testing.
 2. **macOS:** native desktop reader using the same library index, AI profile model, storage adapters, and portable position records. Local library, adjustable TXT and PDF layouts, EPUB reader, foreground sync, remote AI, and Apple Foundation Models integration are implemented. Google Drive uses a Desktop OAuth client and local loopback callback; provider app identifiers remain in Settings.
-3. **Android:** native app with matching offline library, provider connections, and data semantics.
+3. **Android:** native Kotlin/Compose app for phones, tablets, and foldables; first delivery is an installable debug APK. Current implementation is in `Apps/Android`.
 4. **Windows and Linux:** desktop readers using the shared format and provider behavior, with OS-native credential stores and file pickers.
 
 All clients must be able to exchange a library created by another client. A platform-specific reader may store a location it understands, but it must preserve unknown optional metadata when it rewrites a record.
@@ -134,17 +134,17 @@ Supported protocol shapes:
 | Anthropic Messages | `POST /v1/messages`, `x-api-key`, `anthropic-version`, required `max_tokens`, text content blocks. |
 | Custom endpoint | User-provided full endpoint URL using one of the three protocol shapes above; HTTPS is required except localhost for development. |
 
-The reader may ask general questions or optionally attach a bounded text excerpt from a supported book. The user sees and controls that choice. The shared Ask CloudReader App Intent uses the active provider, including the on-device model when selected. iOS includes a built-in Siri phrase; on macOS, App Shortcuts are unsupported, but the App Intent can be added to a custom action in the Shortcuts app. Siri's Apple Intelligence ChatGPT extension is configured by the user at system level; CloudReader does not control or impersonate that integration. The assistant can share prompt text through the iOS share sheet so the user can choose another app, including ChatGPT if it appears as an available destination. Do not rely on private ChatGPT URL schemes.
+The reader may ask general questions or optionally attach a bounded text excerpt from a supported book. The user sees and controls that choice. The shared Ask CloudReader App Intent uses the active provider, including the on-device model when selected. iOS includes a built-in Siri phrase; on macOS, App Shortcuts are unsupported, but the App Intent can be added to a custom action in the Shortcuts app. Android uses remote AI and the Android share sheet. Siri's Apple Intelligence ChatGPT extension is configured by the user at system level; CloudReader does not control or impersonate that integration. The assistant can share prompt text through the iOS share sheet so the user can choose another app, including ChatGPT if it appears as an available destination. Do not rely on private ChatGPT URL schemes.
 
-Conversation history is session-only in the current UI and is not part of library sync. Never attach book text to a request launched from Siri unless the user explicitly supplies it in the question. Show useful failures for invalid endpoint, missing key, authentication failure, rate limits, and unreadable responses.
+Conversation history is stored locally and included in library sync. Chats and messages have stable IDs and Foundation reference-date timestamps; deletions use tombstones. Provider credentials and AI settings remain device-local. Never attach book text to a request launched from Siri unless the user explicitly supplies it in the question. Show useful failures for invalid endpoint, missing key, authentication failure, rate limits, and unreadable responses.
 
 ## User experience and accessibility
 
 Use native system controls and materials. Book pages prioritize legibility over decorative effects. Layouts adapt to compact and expanded width, portrait/landscape, foldable posture, and desktop windows; wide iPhone layouts should use the added space for a featured book, sync state, and shelf rather than simply stretching a narrow column. Respect Dynamic Type, VoiceOver/TalkBack/Narrator, keyboard navigation, high contrast, reduce motion, and reduce transparency. Status must be readable without color alone.
 
-Wide reading surfaces should offer single-page scrolling and facing-page spreads with horizontal page turns. Text books should provide system, light, sepia, dark, and reader-defined paper/text colors plus multiple fonts and adjustable type size. PDF remains fixed-layout: offer PDFKit two-up pages and a themed reading canvas, while leaving the document's ink and typography intact. EPUB uses the system preview until a native EPUB renderer is introduced, so its page layout and typography follow that preview's controls.
+Wide reading surfaces should offer single-page scrolling and facing-page spreads with horizontal page turns. Text books should provide system, light, sepia, dark, and reader-defined paper/text colors plus multiple fonts and adjustable type size. PDF remains fixed-layout: offer PDFKit two-up pages and a themed reading canvas, while leaving the document's ink and typography intact. Apple EPUB uses the system preview until a native Apple EPUB renderer is introduced; Android uses Readium's EPUB navigator and keeps its precise locator on-device.
 
-Selecting text in a supported reader should expose an **Ask CloudReader AI** action. The selected passage opens the assistant with a relevant starter question and a clear excerpt-sharing switch; text is not sent until the reader submits. PDF may use a contextual floating action when its native selection menu cannot be extended. EPUB selection-to-AI requires the future native EPUB renderer.
+Selecting text in a supported reader should expose an **Ask CloudReader AI** action. The selected passage opens the assistant with a relevant starter question and a clear excerpt-sharing switch; text is not sent until the reader submits. PDF may use a contextual floating action when its native selection menu cannot be extended. EPUB selection-to-AI remains planned for Apple clients, which still use the system preview.
 
 ## iOS implementation status
 
@@ -167,7 +167,8 @@ Selecting text in a supported reader should expose an **Ask CloudReader AI** act
 | Siri/Shortcuts Ask CloudReader intent | Implemented as a shared App Intent; iOS phrases and Mac custom Shortcuts action |
 | EPUB CFI positions, in-book annotations, conflict-choice UI, background sync | Planned |
 | macOS client | Implemented: native library, local persistence, paged TXT/PDF layouts, EPUB reader, shared provider sync, desktop Google OAuth, remote AI, on-device AI, and App Intent |
-| Android, Windows, Linux clients | Planned |
+| Android client | Kotlin/Compose app builds as an installable debug APK; unit tests, lint, and an Android 12 instrumentation test for import, duplicate titles, CJK content, unsupported files, and source preservation pass. Offline TXT resume and process recreation were also checked with Wi-Fi disabled on ARM64 Android 12; launch and recreation were checked on Android 16. Full tablet/foldable/accessibility coverage, the broader format matrix, cross-platform sync round trips, and live provider/OAuth checks remain to be completed. |
+| Windows, Linux clients | Planned |
 
 ## Project checks
 

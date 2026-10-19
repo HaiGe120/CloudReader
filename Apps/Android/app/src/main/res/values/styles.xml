@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.CloudReader" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F7F3E9</item>
+        <item name="android:navigationBarColor">#F7F3E9</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:colorAccent">#536D59</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>
