@@ -83,6 +83,7 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRow, onClose: () -> Unit, onAs
     val layoutSetting by app.preferences.observe("reader.layout", "scroll").collectAsState(initial = "scroll")
     val fontSize = fontSizeSetting.toFloatOrNull()?.coerceIn(14f, 38f) ?: 20f
     var saveJob by remember { mutableStateOf<Job?>(null) }
+    var controlsVisible by rememberSaveable(book.id) { mutableStateOf(true) }
     var facingOffset by rememberSaveable(book.id) { mutableIntStateOf(book.localLocation?.substringAfter("txt:")?.substringBefore(':')?.toIntOrNull() ?: 0) }
     val readerTheme = if (themeSetting == "system" && isSystemInDarkTheme()) "dark" else themeSetting
 
@@ -96,70 +97,92 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRow, onClose: () -> Unit, onAs
     }
 
     Surface(Modifier.fillMaxSize(), color = Color(readerBackground(readerTheme, customBackground))) {
-        Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close book") }
-                Column(Modifier.weight(1f)) {
-                    Text(book.title, fontFamily = FontFamily.Serif, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    Text("${(book.progress * 100).toInt()}% read", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                }
-                IconButton(onClick = { scope.launch { app.preferences.set("reader.fontSize", (fontSize - 1f).coerceAtLeast(14f).toInt().toString()) } }, content = { Icon(Icons.Filled.Remove, "Smaller text") })
-                Text("${fontSize.toInt()}", style = MaterialTheme.typography.labelMedium)
-                IconButton(onClick = { scope.launch { app.preferences.set("reader.fontSize", (fontSize + 1f).coerceAtMost(38f).toInt().toString()) } }, content = { Icon(Icons.Filled.Add, "Larger text") })
-            }
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                listOf("system", "light", "sepia", "dark", "custom").forEach { theme ->
-                    FilterChip(selected = themeSetting == theme, onClick = { scope.launch { app.preferences.set("reader.theme", theme) } }, label = { Text(theme.replaceFirstChar(Char::uppercase)) })
-                }
-            }
-            if (themeSetting == "custom") {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text("Paper", style = MaterialTheme.typography.labelSmall)
-                    listOf("#F8F4EB", "#FFFEF8", "#E6E8D8", "#F2DEC2", "#232322").forEach { value ->
-                        ColorChoice(value, customBackground == value) { scope.launch { app.preferences.set("reader.customBackground", value) } }
-                    }
-                    Text("Ink", style = MaterialTheme.typography.labelSmall)
-                    listOf("#292621", "#3C332A", "#1D3A2A", "#F2EFE8", "#FFFFFF").forEach { value ->
-                        ColorChoice(value, customForeground == value) { scope.launch { app.preferences.set("reader.customForeground", value) } }
-                    }
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = fontSetting == "serif", onClick = { scope.launch { app.preferences.set("reader.font", "serif") } }, label = { Text("Serif") })
-                    FilterChip(selected = fontSetting == "sans", onClick = { scope.launch { app.preferences.set("reader.font", "sans") } }, label = { Text("Sans") })
-                    FilterChip(selected = fontSetting == "mono", onClick = { scope.launch { app.preferences.set("reader.font", "mono") } }, label = { Text("Mono") })
-                }
-                if ((configuration.smallestScreenWidthDp >= 600) || layoutSetting == "facing") {
-                    FilterChip(selected = layoutSetting == "facing", onClick = {
-                        scope.launch { app.preferences.set("reader.layout", if (layoutSetting == "facing") "scroll" else "facing") }
-                    }, label = { Text(if (layoutSetting == "facing") "Facing pages" else "Pages") })
-                }
-            }
-            when {
-                contents != null -> {
-                    if (layoutSetting == "facing") {
-                        FacingTextPages(
-                            text = contents!!, offset = facingOffset, fontSize = fontSize, font = fontSetting, theme = readerTheme,
-                            customBackground = customBackground, customForeground = customForeground,
-                            onPageChanged = { offset -> facingOffset = offset; saveJob?.cancel(); saveJob = scope.launch { app.library.progress(book, (offset.toDouble() / contents!!.length.coerceAtLeast(1)).coerceIn(0.0, 1.0), "txt:$offset:utf16") } },
-                            onAsk = onAsk,
-                        )
-                    } else {
-                        SingleScrollText(
-                            text = contents!!, bookId = book.id, fontSize = fontSize, font = fontSetting, theme = readerTheme,
-                            customBackground = customBackground, customForeground = customForeground,
-                            initialProgress = book.progress,
-                            onScroll = { fraction, offset ->
-                                saveJob?.cancel()
-                                saveJob = scope.launch { delay(450); app.library.progress(book, fraction, "txt:$offset:utf16") }
-                            },
-                            onAsk = onAsk,
-                        )
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                if (controlsVisible) {
+                    Column {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close book") }
+                            Column(Modifier.weight(1f)) {
+                                Text(book.title, fontFamily = FontFamily.Serif, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                Text("${(book.progress * 100).toInt()}% read", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                            }
+                            IconButton(onClick = { scope.launch { app.preferences.set("reader.fontSize", (fontSize - 1f).coerceAtLeast(14f).toInt().toString()) } }, content = { Icon(Icons.Filled.Remove, "Smaller text") })
+                            Text("${fontSize.toInt()}", style = MaterialTheme.typography.labelMedium)
+                            IconButton(onClick = { scope.launch { app.preferences.set("reader.fontSize", (fontSize + 1f).coerceAtMost(38f).toInt().toString()) } }, content = { Icon(Icons.Filled.Add, "Larger text") })
+                            IconButton(onClick = { controlsVisible = false }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Hide reading controls")
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            listOf("system", "light", "sepia", "dark", "custom").forEach { theme ->
+                                FilterChip(selected = themeSetting == theme, onClick = { scope.launch { app.preferences.set("reader.theme", theme) } }, label = { Text(theme.replaceFirstChar(Char::uppercase)) })
+                            }
+                        }
+                        if (themeSetting == "custom") {
+                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                                Text("Paper", style = MaterialTheme.typography.labelSmall)
+                                listOf("#F8F4EB", "#FFFEF8", "#E6E8D8", "#F2DEC2", "#232322").forEach { value ->
+                                    ColorChoice(value, customBackground == value) { scope.launch { app.preferences.set("reader.customBackground", value) } }
+                                }
+                                Text("Ink", style = MaterialTheme.typography.labelSmall)
+                                listOf("#292621", "#3C332A", "#1D3A2A", "#F2EFE8", "#FFFFFF").forEach { value ->
+                                    ColorChoice(value, customForeground == value) { scope.launch { app.preferences.set("reader.customForeground", value) } }
+                                }
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(selected = fontSetting == "serif", onClick = { scope.launch { app.preferences.set("reader.font", "serif") } }, label = { Text("Serif") })
+                                FilterChip(selected = fontSetting == "sans", onClick = { scope.launch { app.preferences.set("reader.font", "sans") } }, label = { Text("Sans") })
+                                FilterChip(selected = fontSetting == "mono", onClick = { scope.launch { app.preferences.set("reader.font", "mono") } }, label = { Text("Mono") })
+                            }
+                            if ((configuration.smallestScreenWidthDp >= 600) || layoutSetting == "facing") {
+                                FilterChip(selected = layoutSetting == "facing", onClick = {
+                                    scope.launch { app.preferences.set("reader.layout", if (layoutSetting == "facing") "scroll" else "facing") }
+                                }, label = { Text(if (layoutSetting == "facing") "Facing pages" else "Pages") })
+                            }
+                        }
                     }
                 }
-                error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(error!!, color = Color(0xFF9B4138), modifier = Modifier.padding(24.dp)) }
-                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Opening book…", color = MaterialTheme.colorScheme.secondary) }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when {
+                        contents != null -> {
+                            if (layoutSetting == "facing") {
+                                FacingTextPages(
+                                    text = contents!!, offset = facingOffset, fontSize = fontSize, font = fontSetting, theme = readerTheme,
+                                    customBackground = customBackground, customForeground = customForeground,
+                                    onPageChanged = { offset -> facingOffset = offset; saveJob?.cancel(); saveJob = scope.launch { app.library.progress(book, (offset.toDouble() / contents!!.length.coerceAtLeast(1)).coerceIn(0.0, 1.0), "txt:$offset:utf16") } },
+                                    onAsk = onAsk,
+                                )
+                            } else {
+                                SingleScrollText(
+                                    text = contents!!, bookId = book.id, fontSize = fontSize, font = fontSetting, theme = readerTheme,
+                                    customBackground = customBackground, customForeground = customForeground,
+                                    initialProgress = book.progress,
+                                    onScroll = { fraction, offset ->
+                                        saveJob?.cancel()
+                                        saveJob = scope.launch { delay(450); app.library.progress(book, fraction, "txt:$offset:utf16") }
+                                    },
+                                    onAsk = onAsk,
+                                )
+                            }
+                        }
+                        error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(error!!, color = Color(0xFF9B4138), modifier = Modifier.padding(24.dp)) }
+                        else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Opening book…", color = MaterialTheme.colorScheme.secondary) }
+                    }
+                }
+            }
+
+            if (!controlsVisible) {
+                Surface(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(readerBackground(readerTheme, customBackground)).copy(alpha = 0.96f),
+                    tonalElevation = 4.dp,
+                ) {
+                    TextButton(onClick = { controlsVisible = true }) { Text("Show controls") }
+                }
             }
         }
     }
