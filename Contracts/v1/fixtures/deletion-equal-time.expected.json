@@ -1,0 +1,1 @@
+{"classification":"characterization only","expected":"Both records parse; no merge result is specified by the wire contract.","currentPlatformNotes":"Both implementations use >=-style tombstone precedence in relevant sync paths, but application order and side effects differ. Do not use this fixture as normative merge policy."}

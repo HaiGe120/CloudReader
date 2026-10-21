@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudreader.invalid/contracts/v1/schema.json",
+  "title": "CloudReader sync manifest v1",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "updatedAt": { "$ref": "#/$defs/timestamp" },
+    "books": { "type": "array", "items": { "$ref": "#/$defs/syncedBook" } },
+    "deletions": { "type": "array", "items": { "$ref": "#/$defs/bookDeletion" } },
+    "conversations": { "type": "array", "items": { "$ref": "#/$defs/conversation" } },
+    "conversationDeletions": { "type": "array", "items": { "$ref": "#/$defs/conversationDeletion" } }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+    "timestamp": { "type": "number", "minimum": -1.7976931348623157e308, "maximum": 1.7976931348623157e308 },
+    "book": {
+      "type": "object",
+      "required": ["id", "title", "fileName", "format", "addedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" }, "title": { "type": "string" },
+        "author": { "type": "string" }, "briefDescription": { "type": "string" },
+        "fileName": { "type": "string" },
+        "format": { "enum": ["epub", "pdf", "txt", "mobi", "azw3", "fb2", "cbz", "cbr"] },
+        "addedAt": { "$ref": "#/$defs/timestamp" }, "lastOpenedAt": { "$ref": "#/$defs/timestamp" },
+        "progress": { "type": "number", "minimum": 0, "maximum": 1 }, "isBookmarked": { "type": "boolean" },
+        "modifiedAt": { "$ref": "#/$defs/timestamp" }
+      },
+      "additionalProperties": true
+    },
+    "syncedBook": {
+      "type": "object", "required": ["book", "sha256"],
+      "properties": {
+        "book": { "$ref": "#/$defs/book" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "additionalProperties": true
+    },
+    "bookDeletion": {
+      "type": "object", "required": ["bookID", "deletedAt"],
+      "properties": { "bookID": { "$ref": "#/$defs/uuid" }, "deletedAt": { "$ref": "#/$defs/timestamp" } },
+      "additionalProperties": true
+    },
+    "conversationDeletion": {
+      "type": "object", "required": ["conversationID", "deletedAt"],
+      "properties": { "conversationID": { "$ref": "#/$defs/uuid" }, "deletedAt": { "$ref": "#/$defs/timestamp" } },
+      "additionalProperties": true
+    },
+    "message": {
+      "type": "object", "required": ["id", "role", "text", "createdAt"],
+      "properties": { "id": { "$ref": "#/$defs/uuid" }, "role": { "type": "string" }, "text": { "type": "string" }, "createdAt": { "$ref": "#/$defs/timestamp" } },
+      "additionalProperties": true
+    },
+    "conversation": {
+      "type": "object", "required": ["id", "title"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" }, "title": { "type": "string" },
+        "messages": { "type": "array", "items": { "$ref": "#/$defs/message" } },
+        "bookID": { "$ref": "#/$defs/uuid" }, "bookTitle": { "type": "string" },
+        "bookDescription": { "type": "string" }, "selectedText": { "type": "string" },
+        "bookContext": { "type": "string" }, "contextDescription": { "type": "string" },
+        "includeBookContext": { "type": "boolean" }, "createdAt": { "$ref": "#/$defs/timestamp" },
+        "modifiedAt": { "$ref": "#/$defs/timestamp" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "contract": "CloudReader v1 merge policy",
+  "status": "integrator-reviewed-target",
+  "classification": "normative target; not a description of current adapters",
+  "vectorFormat": "These are abstract semantic merge records, not schema-valid manifest fixtures. B1/C1 and other symbolic IDs are placeholders. Adapter-level contract tests must substitute valid UUIDs and construct schema-valid v1 manifests/records where the schema requires them.",
+  "canonicalization": {
+    "algorithm": "RFC 8785 JSON Canonicalization Scheme (JCS)",
+    "comparison": "Compare canonical UTF-8 byte strings lexicographically; the smaller byte string is the primary value.",
+    "portableFields": "Use known portable contract fields only. Omit device-local paths, credentials, and provider configuration.",
+    "digest": "A digest may accelerate equality checks, but must not be the sole comparator for distinct candidates."
+  },
+  "policy": {
+    "timestamps": "Decode timestamp JSON numbers as finite IEEE-754 binary64 values, rejecting non-finite values and values that overflow the finite representation; compare the decoded binary64 values numerically. Preserve valid fractional values. These are Foundation-reference-date wall-clock seconds, not causal clocks.",
+    "deletion": "For an entity ID, retain the tombstone with the greatest deletedAt. A tombstone suppresses a record when deletedAt >= modifiedAt. A record strictly newer than the tombstone survives, while the tombstone remains retained. Equal time is deletion-wins.",
+    "bookRecordTie": "For competing book entries with the same ID and modifiedAt, choose the entry whose portable {book, sha256} JCS bytes sort first. Exclude local paths and credentials. Retain every distinct complete candidate in durable local recovery, including candidates with different content identity or metadata.",
+    "conversationRecordTie": "For competing conversations with the same ID and modifiedAt, choose the portable conversation record whose JCS bytes sort first as the metadata base. Merge messages separately by the message rules below.",
+    "messageUnion": "Union messages by canonical UUID ID. Identical complete portable message values with the same ID deduplicate. Order output by createdAt ascending, then canonical uppercase hyphenated UUID ascending.",
+    "messageCollision": "For a repeated message ID with distinct complete portable payloads, select the JCS-first payload as the primary message and retain every distinct alternative in durable local recovery. Do not silently discard alternatives.",
+    "opaqueFields": "Treat each unknown field value as an opaque complete JSON value. Union disjoint field names; coalesce equal values at the same name; for differing values at the same name, select the JCS-first value as primary and retain all distinct alternatives in durable local recovery. Never recursively merge unknown objects or arrays.",
+    "repeatAndPropagation": "Merging the same inputs repeatedly, or applying the same provider snapshot more than once, yields the same semantic primary state and recovery candidate set. For the same provider snapshots, every provider-order permutation and a retry after a failed destination yield the same semantic result.",
+    "concurrentWrites": "This policy does not make unconditional manifest writes transactional. Concurrent writers may overwrite unseen changes; adapters must not claim lossless concurrent multi-device writes without a conditional-write or operation-log protocol.",
+    "clockSkew": "The comparator is deterministic for supplied timestamps but cannot infer real event order. A skewed device timestamp can make an old edit outlive a real deletion or make a deletion suppress a real edit. No causal guarantee is made."
+  },
+  "recoveryScope": {
+    "localDurable": "S03/K02 may persist conflict candidates in a durable local recovery store while preserving the selected v1 primary record.",
+    "crossDevice": "The current v1 manifest has no defined conflict-candidate field. Carrying recovery alternatives across devices/providers cannot be represented safely by this contract and requires a reviewed protocol extension. Unknown fields are not reserved as an ad hoc recovery channel.",
+    "retention": "Tombstone garbage collection and recovery-candidate retention/expiry are outside this v1 policy."
+  },
+  "vectors": [
+    {
+      "id": "delete-before-edit",
+      "classification": "proposed-target",
+      "inputs": {
+        "record": {"id": "B1", "modifiedAt": 12},
+        "tombstone": {"id": "B1", "deletedAt": 11}
+      },
+      "expected": {"recordPresent": true, "tombstonePresent": true}
+    },
+    {
+      "id": "delete-equal-edit",
+      "classification": "proposed-target; current boundary is characterized by deletion-equal-time.json but that fixture is parse-only",
+      "inputs": {
+        "record": {"id": "B1", "modifiedAt": 12},
+        "tombstone": {"id": "B1", "deletedAt": 12}
+      },
+      "expected": {"recordPresent": false, "tombstonePresent": true}
+    },
+    {
+      "id": "delete-after-edit",
+      "classification": "proposed-target",
+      "inputs": {
+        "record": {"id": "B1", "modifiedAt": 12},
+        "tombstone": {"id": "B1", "deletedAt": 13}
+      },
+      "expected": {"recordPresent": false, "tombstonePresent": true}
+    },
+    {
+      "id": "newer-edit-keeps-older-tombstone",
+      "classification": "proposed-target",
+      "inputs": {
+        "records": [{"id": "B1", "modifiedAt": 12}, {"id": "B1", "modifiedAt": 14}],
+        "tombstones": [{"id": "B1", "deletedAt": 13}, {"id": "B1", "deletedAt": 12}]
+      },
+      "expected": {"recordModifiedAt": 14, "recordPresent": true, "tombstoneDeletedAt": 13, "tombstonePresent": true}
+    },
+    {
+      "id": "book-equal-time-portable-tie-and-recovery",
+      "classification": "proposed-target; conflict recovery is local-durable in v1, cross-device recovery requires an extension",
+      "inputs": {
+        "candidates": [
+          {"book": {"id": "B1", "title": "Beta", "fileName": "book.txt", "format": "txt", "addedAt": 1, "modifiedAt": 20}, "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+          {"book": {"id": "B1", "title": "Alpha", "fileName": "book.txt", "format": "txt", "addedAt": 1, "modifiedAt": 20}, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+        ],
+        "deviceLocalPaths": {"first": "/device-a/book.txt", "second": "/device-b/book.txt"}
+      },
+      "expected": {
+        "primaryRule": "JCS-first {book, sha256}; changing deviceLocalPaths cannot change the result",
+        "recoveryCandidates": [
+          {"book": {"id": "B1", "title": "Alpha", "fileName": "book.txt", "format": "txt", "addedAt": 1, "modifiedAt": 20}, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+          {"book": {"id": "B1", "title": "Beta", "fileName": "book.txt", "format": "txt", "addedAt": 1, "modifiedAt": 20}, "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+        ],
+        "inputPermutationInvariant": true
+      }
+    },
+    {
+      "id": "conversation-equal-time-portable-tie",
+      "classification": "proposed-target",
+      "inputs": {
+        "candidates": [
+          {"id": "C1", "title": "Beta", "messages": [], "createdAt": 1, "modifiedAt": 20},
+          {"id": "C1", "title": "Alpha", "messages": [], "createdAt": 1, "modifiedAt": 20}
+        ]
+      },
+      "expected": {"metadataBaseRule": "JCS-first portable conversation", "inputPermutationInvariant": true}
+    },
+    {
+      "id": "message-union-and-order",
+      "classification": "proposed-target",
+      "inputs": {
+        "left": [{"id": "00000000-0000-0000-0000-000000000002", "role": "assistant", "text": "second", "createdAt": 2}, {"id": "00000000-0000-0000-0000-000000000001", "role": "user", "text": "first", "createdAt": 1}],
+        "right": [{"id": "00000000-0000-0000-0000-000000000002", "role": "assistant", "text": "second", "createdAt": 2}]
+      },
+      "expected": {
+        "messageIDsInOrder": ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"],
+        "duplicateIdenticalPayloads": "one message",
+        "repeatMergeUnchanged": true
+      }
+    },
+    {
+      "id": "same-message-id-different-payload",
+      "classification": "proposed-target; local-durable conflict recovery required; portable recovery requires an extension",
+      "inputs": {
+        "candidates": [
+          {"id": "00000000-0000-0000-0000-000000000003", "role": "user", "text": "original", "createdAt": 3},
+          {"id": "00000000-0000-0000-0000-000000000003", "role": "user", "text": "different", "createdAt": 3}
+        ]
+      },
+      "expected": {
+        "primaryRule": "JCS-first complete portable message",
+        "recoveryCandidates": [
+          {"id": "00000000-0000-0000-0000-000000000003", "role": "user", "text": "different", "createdAt": 3},
+          {"id": "00000000-0000-0000-0000-000000000003", "role": "user", "text": "original", "createdAt": 3}
+        ],
+        "messageIDsInManifest": ["00000000-0000-0000-0000-000000000003"]
+      }
+    },
+    {
+      "id": "opaque-unknown-disjoint-and-equal-values",
+      "classification": "proposed-target; lossless round-trip is not current Apple behavior",
+      "inputs": {
+        "left": {"futureA": {"array": [1, {"keep": true}]}, "futureSame": ["x", 2]},
+        "right": {"futureB": false, "futureSame": ["x", 2]}
+      },
+      "expected": {"primaryUnknownFields": {"futureA": {"array": [1, {"keep": true}]}, "futureB": false, "futureSame": ["x", 2]}, "recoveryCandidates": [], "repeatMergeUnchanged": true}
+    },
+    {
+      "id": "opaque-unknown-same-key-conflict",
+      "classification": "proposed-target; local-durable conflict recovery required; portable recovery requires an extension",
+      "inputs": {
+        "left": {"future": {"nested": [1, 2]}},
+        "right": {"future": {"nested": [1, 3]}}
+      },
+      "expected": {
+        "primaryValueRule": "JCS-first complete value for future",
+        "recoveryCandidates": [
+          {"field": "future", "value": {"nested": [1, 2]}},
+          {"field": "future", "value": {"nested": [1, 3]}}
+        ],
+        "recursiveMerge": false
+      }
+    },
+    {
+      "id": "provider-permutations-duplicate-and-retry",
+      "classification": "proposed-target; semantic result only, not transactional-write guarantee",
+      "inputs": {
+        "providers": {
+          "A": {"conversationMessages": [{"id": "00000000-0000-0000-0000-000000000001", "role": "user", "text": "one", "createdAt": 1}]},
+          "B": {"conversationMessages": [{"id": "00000000-0000-0000-0000-000000000002", "role": "assistant", "text": "two", "createdAt": 2}]},
+          "C": {"bookTombstone": {"id": "B1", "deletedAt": 3}}
+        },
+        "providerOrders": [["A", "B", "C"], ["A", "C", "B"], ["B", "A", "C"], ["B", "C", "A"], ["C", "A", "B"], ["C", "B", "A"]],
+        "replay": {"provider": "B", "afterFailure": "C fails once, then retry C"}
+      },
+      "expected": {
+        "allProviderOrdersSameSemanticState": true,
+        "duplicateSnapshotChangesNothing": true,
+        "retryConvergesToSameSemanticState": true,
+        "conversationMessageIDs": ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"],
+        "bookTombstoneDeletedAt": 3,
+        "concurrentUnconditionalManifestWriters": "may lose unseen updates; outside this vector's guarantee"
+      }
+    },
+    {
+      "id": "wall-clock-skew-limitation",
+      "classification": "proposed characterization of v1 limitation; not causal correctness",
+      "inputs": {
+        "deviceA": {"realEvent": "edit happened first", "modifiedAt": 500},
+        "deviceB": {"realEvent": "delete happened later", "deletedAt": 450}
+      },
+      "expected": {
+        "v1TimestampComparison": "record survives because 500 > 450",
+        "actualRealEventOrderInferred": false,
+        "causalGuarantee": false,
+        "resolution": "explicit limitation; a causal protocol requires an extension"
+      }
+    }
+  ]
+}

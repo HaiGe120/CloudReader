@@ -1,14 +1,17 @@
 import SwiftUI
+import CloudReaderCore
 import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @EnvironmentObject private var library: BookLibrary
     @EnvironmentObject private var cloudSync: CloudSyncCoordinator
+    @EnvironmentObject private var imports: BookImportCoordinator
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var searchText = ""
     @State private var isShowingImporter = false
     @State private var isShowingAssistant = false
     @State private var bookToDelete: Book?
+    @State private var navigationPath: [Book] = []
 
     private var visibleBooks: [Book] {
         let ordered = library.books.sorted { $0.addedAt > $1.addedAt }
@@ -17,13 +20,11 @@ struct LibraryView: View {
     }
 
     private var importTypes: [UTType] {
-        let customTypes = ["epub", "mobi", "azw3", "fb2", "cbz", "cbr"]
-            .compactMap { UTType(filenameExtension: $0, conformingTo: .data) }
-        return [.pdf, .plainText] + customTypes
+        SharedBookInbox.contentTypes
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             GeometryReader { geometry in
                 let useExpandedHome = geometry.size.width >= 760 && geometry.size.height >= 480
 
@@ -63,7 +64,7 @@ struct LibraryView: View {
                 allowsMultipleSelection: true,
                 onCompletion: { result in
                     switch result {
-                    case .success(let urls): library.importBooks(from: urls)
+                    case .success(let urls): imports.importFiles(urls, library: library)
                     case .failure(let error): library.alertMessage = error.localizedDescription
                     }
                 }
@@ -84,6 +85,17 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $isShowingAssistant) {
                 AIAssistantView(bookTitle: nil, bookContext: nil)
+            }
+            .overlay {
+                if imports.isImporting {
+                    ProgressView("Importing books…")
+                        .padding(24)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
+            }
+            .onChange(of: imports.bookToOpen) {
+                if let book = imports.bookToOpen { navigationPath = [book] }
             }
         }
     }
@@ -196,6 +208,7 @@ struct LibraryView: View {
             .foregroundStyle(Color.primary)
             .glassEffect(.clear.interactive(), in: Circle())
             .accessibilityLabel("Import books")
+            .disabled(imports.isImporting)
         }
     }
 

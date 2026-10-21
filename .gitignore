@@ -4,6 +4,9 @@
 **/xcuserdata/
 **/DerivedData/
 **/build/
+**/.build/
+__pycache__/
+*.pyc
 /Build/
 *.xcuserstate
 *.moved-aside

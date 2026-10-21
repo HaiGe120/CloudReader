@@ -1,5 +1,4 @@
-import PDFKit
-import QuickLook
+import CloudReaderCore
 import SwiftUI
 import UIKit
 
@@ -14,6 +13,8 @@ struct BookReaderView: View {
     @AppStorage("reader.customForeground") private var customForeground = "292621"
     @State private var textContents = ""
     @State private var loadError: String?
+    @State private var loadedTextURL: URL?
+    @State private var textLoadAttempt = 0
     @State private var isShowingAssistant = false
     @State private var isShowingAppearance = false
     @State private var selectedPassage = ""
@@ -21,7 +22,9 @@ struct BookReaderView: View {
     @State private var assistantSelectedText: String?
     @State private var assistantBookDescription: String?
     @State private var assistantContextDescription: String?
-    @State private var areReaderControlsVisible = false
+    @State private var isChromeVisible = true
+    @State private var navigationRequest: ReaderNavigationRequest?
+    @State private var navigationState: ReaderNavigationState?
 
     let book: Book
 
@@ -29,7 +32,7 @@ struct BookReaderView: View {
         library.books.first(where: { $0.id == book.id }) ?? book
     }
 
-    private var bookURL: URL? { library.fileURL(for: book) }
+    private var bookURL: URL? { library.fileURL(for: currentBook) }
     private var readerPalette: ReaderPalette {
         ReaderPalette.make(
             theme: ReaderTheme(rawValue: themeRaw) ?? .system,
@@ -38,192 +41,204 @@ struct BookReaderView: View {
         )
     }
     private var readerFont: ReaderFont { ReaderFont(rawValue: fontRaw) ?? .systemSerif }
+    private var capabilities: ReaderCapabilities {
+        switch book.format {
+        case .pdf: .pdf
+        case .cbz, .cbr: .comic
+        case .txt: .text
+        case .epub, .fb2: .reflowable
+        case .mobi, .azw3: .comic
+        }
+    }
+    private var currentNavigationState: ReaderNavigationState {
+        navigationState ?? ReaderNavigationState(
+            progress: currentBook.progress,
+            canNavigatePrevious: currentBook.progress > 0,
+            canNavigateNext: currentBook.progress < 1
+        )
+    }
 
     var body: some View {
-        GeometryReader { geometry in
-            let immersiveReader = geometry.size.width >= 700
-            let immersiveTwoPage = pageLayoutRaw == ReaderPageLayout.facingPages.rawValue && immersiveReader
-            Group {
-                if let url = bookURL {
-                    switch book.format {
-                    case .pdf:
-                        ZStack(alignment: .bottom) {
-                            PDFBookReader(
-                                url: url,
-                                progress: currentBook.progress,
-                                twoPage: immersiveTwoPage,
-                                palette: readerPalette,
-                                onProgressChanged: { library.updateProgress(for: book.id, to: $0) },
-                                onSelectionChanged: { selectedPassage = $0 }
-                            )
-                            if !selectedPassage.isEmpty {
-                                HStack(spacing: 8) {
-                                    Button {
-                                        UIPasteboard.general.string = selectedPassage
-                                    } label: {
-                                        Label("Copy", systemImage: "doc.on.doc")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 12)
-                                    }
-                                    .accessibilityHint("Copies the selected passage to the clipboard.")
+        Group {
+            if let url = bookURL {
+                readerContent(url: url)
+            } else {
+                ContentUnavailableView("Book unavailable", systemImage: "book.closed", description: Text("The imported copy could not be found on this device."))
+            }
+        }
+        .background(Color(uiColor: readerPalette.background))
+        .overlay(alignment: .bottom) {
+            if isChromeVisible && capabilities.supportsSelection && !selectedPassage.isEmpty {
+                selectedPassageActions.padding(.bottom, 16)
+            }
+        }
+        .navigationTitle(isChromeVisible ? book.title : "")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(isChromeVisible ? .visible : .hidden, for: .navigationBar)
+        .toolbar(isChromeVisible ? .visible : .hidden, for: .tabBar)
+        .toolbar {
+            if isChromeVisible {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { openAssistant() } label: { Image(systemName: "sparkles") }
+                        .accessibilityLabel("Ask AI about this book")
+                        .accessibilityIdentifier("reader.askAI")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { library.toggleBookmark(currentBook) } label: {
+                        Image(systemName: currentBook.isBookmarked ? "bookmark.fill" : "bookmark")
+                    }
+                    .accessibilityLabel(currentBook.isBookmarked ? "Remove bookmark" : "Bookmark book")
+                    .accessibilityIdentifier("reader.favorite")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { isShowingAppearance = true } label: { Image(systemName: "textformat.size") }
+                        .accessibilityLabel("Reading appearance")
+                        .accessibilityIdentifier("reader.appearance")
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isChromeVisible {
+                ReaderChromeControls(
+                    state: currentNavigationState,
+                    capabilities: capabilities,
+                    onNavigate: sendNavigationRequest
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .statusBarHidden(!isChromeVisible)
+        .onAppear { library.markOpened(book) }
+        .onDisappear { library.flushPendingChanges() }
+        .task(id: "\(bookURL?.absoluteString ?? "")|\(textLoadAttempt)") { await loadTextIfNeeded() }
+        .sheet(isPresented: $isShowingAssistant) {
+            AIAssistantView(
+                bookID: book.id,
+                bookTitle: book.title,
+                bookContext: assistantContext,
+                bookDescription: assistantBookDescription,
+                selectedText: assistantSelectedText,
+                contextDescription: assistantContextDescription
+            )
+        }
+        .sheet(isPresented: $isShowingAppearance) {
+            ReaderAppearanceSheet(capabilities: capabilities)
+        }
+    }
 
-                                    Button {
-                                        openAssistant(about: selectedPassage)
-                                    } label: {
-                                        Label("Ask AI", systemImage: "sparkles")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 12)
-                                    }
-                                    .accessibilityHint("Sends the selected PDF passage as context after you submit a question.")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(Color(uiColor: readerPalette.foreground))
-                                .glassEffect(.regular.interactive(), in: Capsule())
-                                .padding(.bottom, 22)
-                            }
-                        }
-                    case .txt:
-                        TextBookReader(
-                            title: book.title,
-                            text: textContents,
-                            progress: currentBook.progress,
-                            pageLayoutRaw: pageLayoutRaw,
-                            font: readerFont,
-                            fontSize: CGFloat(fontSize),
-                            palette: readerPalette,
-                            readerControlsVisible: $areReaderControlsVisible,
-                            onProgressChanged: { library.updateProgress(for: book.id, to: $0) },
-                            onAskAI: { openAssistant(about: $0) }
-                        )
-                    case .epub:
-                        QuickLookBookReader(url: url)
-                    case .mobi, .azw3, .fb2, .cbz, .cbr:
-                        unsupportedReader
+    @ViewBuilder
+    private func readerContent(url: URL) -> some View {
+        Group {
+            switch book.format {
+            case .pdf:
+                GeometryReader { geometry in
+                    let metrics = ReaderLayoutMetrics.resolve(
+                        viewport: geometry.size,
+                        pageLayout: ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll,
+                        font: readerFont,
+                        fontSize: CGFloat(fontSize)
+                    )
+                    PDFBookReader(
+                        url: url,
+                        progress: currentBook.progress,
+                        twoPage: metrics.effectiveColumnCount == 2,
+                        palette: readerPalette,
+                        onProgressChanged: { library.updateProgress(for: book.id, to: $0) },
+                        isChromeVisible: isChromeVisible,
+                        navigationRequest: navigationRequest,
+                        onNavigationStateChanged: navigationChanged,
+                        onContentTap: toggleChrome,
+                        onSelectedTextChanged: { selectedPassage = $0 }
+                    )
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+            case .txt:
+                if loadedTextURL == url {
+                    TextBookReader(
+                        title: book.title,
+                        text: textContents,
+                        progress: currentBook.progress,
+                        pageLayoutRaw: pageLayoutRaw,
+                        font: readerFont,
+                        fontSize: CGFloat(fontSize),
+                        palette: readerPalette,
+                        onProgressChanged: { library.updateProgress(for: book.id, to: $0) },
+                        onAskAI: { openAssistant(about: $0) },
+                        isChromeVisible: isChromeVisible,
+                        navigationRequest: navigationRequest,
+                        onNavigationStateChanged: navigationChanged,
+                        onContentTap: toggleChrome,
+                        onSelectedTextChanged: { selectedPassage = $0 }
+                    )
+                } else if let loadError {
+                    ContentUnavailableView {
+                        Label("Couldn't open text", systemImage: "doc.text")
+                    } description: { Text(loadError) } actions: {
+                        Button("Try Again") { textLoadAttempt += 1 }
                     }
                 } else {
-                    ContentUnavailableView("Book unavailable", systemImage: "book.closed", description: Text("The imported copy could not be found on this device."))
+                    ProgressView("Opening book…")
                 }
-            }
-            .background(Color(uiColor: readerPalette.background))
-            .navigationTitle(immersiveReader ? "" : book.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(immersiveReader)
-            .toolbar(immersiveReader ? .hidden : .visible, for: .navigationBar)
-            .toolbar {
-                if !immersiveReader {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { openAssistant() } label: {
-                            Image(systemName: "sparkles")
-                        }
-                        .accessibilityLabel("Ask AI about this book")
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            library.toggleBookmark(currentBook)
-                        } label: {
-                            Image(systemName: currentBook.isBookmarked ? "bookmark.fill" : "bookmark")
-                        }
-                        .accessibilityLabel(currentBook.isBookmarked ? "Remove bookmark" : "Bookmark book")
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { isShowingAppearance = true } label: {
-                            Image(systemName: "textformat.size")
-                        }
-                        .accessibilityLabel("Reading appearance")
-                    }
-                }
-            }
-            .overlay(alignment: .trailing) {
-                if immersiveReader {
-                    immersiveReaderRail
-                        // The adaptive iPhone Duo tab strip reserves a trailing
-                        // rail in the root TabView. Center these reader actions
-                        // on that same rail instead of the narrower page area.
-                        // Keep the two control groups visually connected too.
-                        .offset(x: 72, y: geometry.size.height * 0.10)
-                }
-            }
-            .onAppear {
-                library.markOpened(book)
-                loadTextIfNeeded()
-            }
-            .sheet(isPresented: $isShowingAssistant) {
-                AIAssistantView(
+            case .epub, .fb2:
+                EPUBBookReader(
                     bookID: book.id,
-                    bookTitle: book.title,
-                    bookContext: assistantContext,
-                    bookDescription: assistantBookDescription,
-                    selectedText: assistantSelectedText,
-                    contextDescription: assistantContextDescription
+                    url: url,
+                    sourceFormat: book.format,
+                    progress: currentBook.progress,
+                    pageLayout: ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll,
+                    font: readerFont,
+                    fontSize: CGFloat(fontSize),
+                    palette: readerPalette,
+                    isChromeVisible: isChromeVisible,
+                    navigationRequest: navigationRequest,
+                    onNavigationStateChanged: navigationChanged,
+                    onContentTap: toggleChrome,
+                    onSelectedTextChanged: { selectedPassage = $0 },
+                    onAskAI: { openAssistant(about: $0) }
                 )
+            case .cbz:
+                CBZBookReader(
+                    bookID: book.id,
+                    url: url,
+                    progress: currentBook.progress,
+                    pageLayout: ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll,
+                    palette: readerPalette,
+                    isChromeVisible: isChromeVisible,
+                    navigationRequest: navigationRequest,
+                    onNavigationStateChanged: navigationChanged,
+                    onContentTap: toggleChrome
+                )
+            case .mobi, .azw3, .cbr:
+                unsupportedReader
             }
-            .sheet(isPresented: $isShowingAppearance) {
-                ReaderAppearanceSheet()
-            }
-            .alert("Couldn't open book", isPresented: errorIsPresented) {
-                Button("OK", role: .cancel) { loadError = nil }
-            } message: {
-                Text(loadError ?? "")
-            }
+        }
+        .accessibilityIdentifier("reader.content")
+        .accessibilityHint(isChromeVisible ? "Double tap the page to hide reading controls." : "Double tap the page to show reading controls.")
+        .accessibilityAction(named: Text(isChromeVisible ? "Hide reading controls" : "Show reading controls")) {
+            toggleChrome()
         }
     }
 
-    private var immersiveReaderRail: some View {
-        VStack(spacing: 12) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .medium))
-                    .frame(width: 48, height: 48)
-                    .contentShape(Circle())
+    private var selectedPassageActions: some View {
+        HStack(spacing: 8) {
+            Button {
+                UIPasteboard.general.string = selectedPassage
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+                    .font(.system(size: 14, weight: .semibold))
+                    .padding(.horizontal, 16).padding(.vertical, 12)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color(uiColor: readerPalette.foreground))
-            .glassEffect(.clear.interactive(), in: Circle())
-            .accessibilityLabel("Back to library")
-
-            VStack(spacing: 8) {
-                Button { openAssistant() } label: {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 20, weight: .medium))
-                        .frame(width: 48, height: 48)
-                }
-                .glassEffect(.clear.interactive(), in: Circle())
-                .accessibilityLabel("Ask AI about this book")
-
-                Button { library.toggleBookmark(currentBook) } label: {
-                    Image(systemName: currentBook.isBookmarked ? "bookmark.fill" : "bookmark")
-                        .font(.system(size: 20, weight: .medium))
-                        .frame(width: 48, height: 48)
-                }
-                .glassEffect(.clear.interactive(), in: Circle())
-                .accessibilityLabel(currentBook.isBookmarked ? "Remove bookmark" : "Bookmark book")
-
-                Button { isShowingAppearance = true } label: {
-                    Image(systemName: "textformat.size")
-                        .font(.system(size: 20, weight: .medium))
-                        .frame(width: 48, height: 48)
-                }
-                .glassEffect(.clear.interactive(), in: Circle())
-                .accessibilityLabel("Reading appearance")
+            .accessibilityHint("Copies the selected passage to the clipboard.")
+            Button { openAssistant(about: selectedPassage) } label: {
+                Label("Ask AI", systemImage: "sparkles")
+                    .font(.system(size: 14, weight: .semibold))
+                    .padding(.horizontal, 16).padding(.vertical, 12)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color(uiColor: readerPalette.foreground))
+            .accessibilityHint("Sends the selected passage as context after you submit a question.")
         }
-        .padding(.trailing, 12)
-        .padding(.top, 56)
-        .padding(.bottom, 74)
-    }
-
-    private func toggleReaderControls() {
-        withAnimation(.easeInOut(duration: 0.22)) {
-            areReaderControlsVisible.toggle()
-        }
-    }
-
-    private var errorIsPresented: Binding<Bool> {
-        Binding(get: { loadError != nil }, set: { if !$0 { loadError = nil } })
+        .buttonStyle(.plain)
+        .foregroundStyle(Color(uiColor: readerPalette.foreground))
+        .glassEffect(.regular.interactive(), in: Capsule())
     }
 
     private var unsupportedReader: some View {
@@ -232,9 +247,29 @@ struct BookReaderView: View {
         } description: {
             Text("\(book.format.displayName) books can be stored in your library, but the native reader for this format is not part of this first iOS build yet.")
         } actions: {
-            Button("Back to Library") { dismiss() }
-                .buttonStyle(.borderedProminent)
+            Button("Back to Library") { dismiss() }.buttonStyle(.borderedProminent)
         }
+    }
+
+    private func sendNavigationRequest(_ command: ReaderNavigationCommand) {
+        navigationRequest = ReaderNavigationRequest(command: command)
+    }
+
+    private func navigationChanged(_ state: ReaderNavigationState) {
+        guard state != navigationState else { return }
+        navigationState = state
+        if abs(currentBook.progress - state.progress) > 0.0001 {
+            library.updateProgress(for: book.id, to: state.progress)
+        }
+    }
+
+    private func toggleChrome() {
+        setChromeVisible(!isChromeVisible)
+    }
+
+    private func setChromeVisible(_ visible: Bool) {
+        guard visible != isChromeVisible else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { isChromeVisible = visible }
     }
 
     private func openAssistant(about passage: String? = nil) {
@@ -254,416 +289,20 @@ struct BookReaderView: View {
         isShowingAssistant = true
     }
 
-    private func loadTextIfNeeded() {
-        guard book.format == .txt, let bookURL else { return }
-        do {
-            textContents = try String(contentsOf: bookURL, encoding: .utf8)
-        } catch {
-            do {
-                textContents = try String(contentsOf: bookURL, encoding: .utf16)
-            } catch {
-                loadError = "This text file could not be decoded as UTF-8 or UTF-16."
-            }
+    private func loadTextIfNeeded() async {
+        guard book.format == .txt, let bookURL, loadedTextURL != bookURL else { return }
+        loadError = nil
+        let task = Task.detached(priority: .userInitiated) {
+            (try? String(contentsOf: bookURL, encoding: .utf8))
+                ?? (try? String(contentsOf: bookURL, encoding: .utf16))
         }
-    }
-}
-
-private struct TextBookReader: View {
-    let title: String
-    let text: String
-    let progress: Double
-    let pageLayoutRaw: String
-    let font: ReaderFont
-    let fontSize: CGFloat
-    let palette: ReaderPalette
-    @Binding var readerControlsVisible: Bool
-    let onProgressChanged: (Double) -> Void
-    let onAskAI: (String) -> Void
-
-    @State private var spreadIndex = 0
-
-    private var fullText: String { "\(title)\n\n\(text)" }
-
-    var body: some View {
-        GeometryReader { geometry in
-            let layout = ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll
-            let pagesPerSpread = layout == .facingPages && geometry.size.width >= 700 ? 2 : 1
-            if layout != .scroll {
-                pagedReader(size: geometry.size, pagesPerSpread: pagesPerSpread, controlsVisible: readerControlsVisible)
-            } else {
-                let horizontalInset = min(max(geometry.size.width * 0.045, 22), 42)
-                let textColumnWidth = min(max(geometry.size.width - horizontalInset * 2, 0), 780)
-                SelectableBookTextView(
-                    text: fullText,
-                    font: font.uiFont(size: fontSize),
-                    foreground: palette.foreground,
-                    isScrollable: true,
-                    initialProgress: progress,
-                    onProgressChanged: onProgressChanged,
-                    onAskAI: onAskAI
-                )
-                .frame(maxWidth: textColumnWidth, maxHeight: .infinity)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(uiColor: palette.background))
-            }
+        let contents = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        guard !Task.isCancelled else { return }
+        if let contents {
+            textContents = contents
+            loadedTextURL = bookURL
+        } else {
+            loadError = "This text file could not be read as UTF-8 or UTF-16."
         }
-        .background(Color(uiColor: palette.background))
-    }
-
-    private func pagedReader(size: CGSize, pagesPerSpread: Int, controlsVisible: Bool) -> some View {
-        // Fill the reader viewport edge to edge. The glass controls float over
-        // this canvas instead of reserving a blank strip that looks cut out.
-        let pageWidth = pagesPerSpread == 2
-            ? max((size.width - 18) / 2, 280)
-            : min(max(size.width - 32, 280), 900)
-        let pageHeight = max(size.height, 300)
-        let pageText = ReaderPagination.pages(
-            from: fullText,
-            width: pageWidth - 32,
-            height: pageHeight - 32,
-            font: font.uiFont(size: fontSize)
-        )
-        let spreadCount = ReaderPagination.pageGroupCount(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-
-        return TabView(selection: $spreadIndex) {
-            ForEach(0..<spreadCount, id: \.self) { index in
-                Group {
-                    if pagesPerSpread == 2 {
-                        HStack(spacing: 2) {
-                            pageColumn(pageText[index * pagesPerSpread], width: pageWidth, height: pageHeight)
-                            if index * pagesPerSpread + 1 < pageText.count {
-                                pageColumn(pageText[index * pagesPerSpread + 1], width: pageWidth, height: pageHeight)
-                            } else {
-                                Color.clear.frame(width: pageWidth, height: pageHeight)
-                            }
-                        }
-                    } else {
-                        pageColumn(pageText[index], width: pageWidth, height: pageHeight)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .tag(index)
-            }
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-        .accessibilityLabel(pagesPerSpread == 2 ? "Two-page reading layout" : "One-page reading layout")
-        .accessibilityHint("Swipe horizontally to turn pages. Tap once to show or hide reading controls.")
-        .simultaneousGesture(TapGesture().onEnded { toggleReaderControls() })
-        .padding(.horizontal, 8)
-        .overlay(alignment: .bottom) {
-            HStack {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { spreadIndex = max(0, spreadIndex - 1) }
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .frame(width: 38, height: 38)
-                }
-                .disabled(spreadIndex == 0)
-                .accessibilityLabel(pagesPerSpread == 2 ? "Previous spread" : "Previous page")
-
-                Spacer()
-                let firstPage = spreadIndex * pagesPerSpread + 1
-                let lastPage = min(firstPage + pagesPerSpread - 1, pageText.count)
-                let pageLabel = pagesPerSpread == 2
-                    ? "\(firstPage)–\(lastPage) of \(pageText.count)"
-                    : "\(firstPage) of \(pageText.count)"
-                Text(pageLabel)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .accessibilityLabel(pagesPerSpread == 2
-                        ? "Pages \(firstPage) to \(lastPage) of \(pageText.count)"
-                        : "Page \(firstPage) of \(pageText.count)")
-                Spacer()
-
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { spreadIndex = min(spreadCount - 1, spreadIndex + 1) }
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .frame(width: 38, height: 38)
-                }
-                .disabled(spreadIndex >= spreadCount - 1)
-                .accessibilityLabel(pagesPerSpread == 2 ? "Next spread" : "Next page")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color(uiColor: palette.foreground))
-            .glassEffect(.clear.interactive(), in: Capsule())
-            .frame(maxWidth: 270)
-            .padding(.bottom, 4)
-            .opacity(controlsVisible ? 1 : 0)
-            .allowsHitTesting(controlsVisible)
-            .accessibilityHidden(!controlsVisible)
-            .animation(.easeInOut(duration: 0.18), value: controlsVisible)
-        }
-        .background(Color(uiColor: palette.background))
-        .onAppear {
-            restoreProgress(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-        }
-        .onChange(of: text) {
-            restoreProgress(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-        }
-        .onChange(of: pageText.count) {
-            restoreProgress(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-        }
-        .onChange(of: progress) {
-            restoreProgress(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-        }
-        .onChange(of: spreadIndex) {
-            guard spreadCount > 0 else { return }
-            onProgressChanged(ReaderPagination.progress(
-                pageGroupIndex: spreadIndex,
-                pageCount: pageText.count,
-                pagesPerGroup: pagesPerSpread
-            ))
-        }
-        .onChange(of: fontSize) {
-            restoreProgress(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-        }
-        .onChange(of: font.rawValue) {
-            restoreProgress(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-        }
-        .onChange(of: pagesPerSpread) {
-            restoreProgress(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-        }
-        .onChange(of: pageLayoutRaw) {
-            restoreProgress(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-        }
-        .onChange(of: size) {
-            restoreProgress(pageCount: pageText.count, pagesPerGroup: pagesPerSpread)
-        }
-    }
-
-    private func restoreProgress(pageCount: Int, pagesPerGroup: Int) {
-        guard !text.isEmpty else { return }
-        spreadIndex = ReaderPagination.pageGroupIndex(
-            progress: progress,
-            pageCount: pageCount,
-            pagesPerGroup: pagesPerGroup
-        )
-    }
-
-    private func pageColumn(_ text: String, width: CGFloat, height: CGFloat) -> some View {
-        SelectableBookTextView(
-            text: text,
-            font: font.uiFont(size: fontSize),
-            foreground: palette.foreground,
-            isScrollable: false,
-            initialProgress: 0,
-            onProgressChanged: { _ in },
-            onAskAI: onAskAI
-        )
-        .padding(16)
-        .frame(width: width, height: height, alignment: .topLeading)
-    }
-
-    private func toggleReaderControls() {
-        withAnimation(.easeInOut(duration: 0.22)) {
-            readerControlsVisible.toggle()
-        }
-    }
-}
-
-private struct SelectableBookTextView: UIViewRepresentable {
-    let text: String
-    let font: UIFont
-    let foreground: UIColor
-    let isScrollable: Bool
-    let initialProgress: Double
-    let onProgressChanged: (Double) -> Void
-    let onAskAI: (String) -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onProgressChanged: onProgressChanged, onAskAI: onAskAI)
-    }
-
-    func makeUIView(context: Context) -> UITextView {
-        let view = UITextView()
-        view.delegate = context.coordinator
-        view.backgroundColor = .clear
-        view.isEditable = false
-        view.isSelectable = true
-        view.isScrollEnabled = isScrollable
-        view.contentInset = .zero
-        view.textContainerInset = .zero
-        view.textContainer.lineFragmentPadding = 0
-        view.contentInsetAdjustmentBehavior = .never
-        view.alwaysBounceVertical = false
-        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        updateText(view, coordinator: context.coordinator)
-        if isScrollable {
-            DispatchQueue.main.async {
-                view.layoutIfNeeded()
-                let distance = max(view.contentSize.height - view.bounds.height, 0)
-                view.setContentOffset(CGPoint(x: 0, y: distance * initialProgress), animated: false)
-            }
-        }
-        return view
-    }
-
-    func updateUIView(_ view: UITextView, context: Context) {
-        context.coordinator.onProgressChanged = onProgressChanged
-        context.coordinator.onAskAI = onAskAI
-        view.isScrollEnabled = isScrollable
-        let key = "\(text)|\(font.fontName)|\(font.pointSize)|\(foreground)|"
-        if context.coordinator.renderKey != key {
-            context.coordinator.renderKey = key
-            view.attributedText = attributedText
-            view.textColor = foreground
-            if isScrollable {
-                context.coordinator.restoreProgress = initialProgress
-                DispatchQueue.main.async {
-                    view.layoutIfNeeded()
-                    let distance = max(view.contentSize.height - view.bounds.height, 0)
-                    view.setContentOffset(CGPoint(x: 0, y: distance * initialProgress), animated: false)
-                }
-            }
-        }
-    }
-
-    private var attributedText: NSAttributedString {
-        let paragraph = ReaderPagination.paragraphStyle(for: font)
-        return NSAttributedString(
-            string: text,
-            attributes: [
-                .font: font,
-                .foregroundColor: foreground,
-                .paragraphStyle: paragraph
-            ]
-        )
-    }
-
-    private func updateText(_ view: UITextView, coordinator: Coordinator) {
-        let key = "\(text)|\(font.fontName)|\(font.pointSize)|\(foreground)|"
-        coordinator.renderKey = key
-        view.attributedText = attributedText
-        view.textColor = foreground
-    }
-
-    final class Coordinator: NSObject, UITextViewDelegate {
-        var onProgressChanged: (Double) -> Void
-        var onAskAI: (String) -> Void
-        var renderKey = ""
-        var restoreProgress = 0.0
-
-        init(onProgressChanged: @escaping (Double) -> Void, onAskAI: @escaping (String) -> Void) {
-            self.onProgressChanged = onProgressChanged
-            self.onAskAI = onAskAI
-        }
-
-        func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            let distance = max(scrollView.contentSize.height - scrollView.bounds.height, 0)
-            guard distance > 0 else { return }
-            let progress = min(max(scrollView.contentOffset.y / distance, 0), 1)
-            onProgressChanged(progress)
-        }
-
-        func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
-            guard range.length > 0,
-                  let text = textView.text,
-                  NSMaxRange(range) <= (text as NSString).length else { return nil }
-            let passage = (text as NSString).substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !passage.isEmpty else { return nil }
-            let askAI = UIAction(title: "Ask AI", image: UIImage(systemName: "sparkles")) { [weak self] _ in
-                self?.onAskAI(passage)
-            }
-            return UIMenu(children: [askAI] + suggestedActions)
-        }
-    }
-}
-
-private struct PDFBookReader: UIViewRepresentable {
-    let url: URL
-    let progress: Double
-    let twoPage: Bool
-    let palette: ReaderPalette
-    let onProgressChanged: (Double) -> Void
-    let onSelectionChanged: (String) -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onProgressChanged: onProgressChanged, onSelectionChanged: onSelectionChanged)
-    }
-
-    func makeUIView(context: Context) -> PDFView {
-        let view = PDFView()
-        view.autoScales = true
-        view.backgroundColor = palette.background
-        view.document = PDFDocument(url: url)
-        configure(view)
-        if let document = view.document, document.pageCount > 0 {
-            let initialIndex = min(max(Int((progress * Double(document.pageCount)).rounded(.up)) - 1, 0), document.pageCount - 1)
-            if let page = document.page(at: initialIndex) { view.go(to: page) }
-        }
-        context.coordinator.observeChanges(in: view)
-        return view
-    }
-
-    func updateUIView(_ view: PDFView, context: Context) {
-        context.coordinator.onProgressChanged = onProgressChanged
-        context.coordinator.onSelectionChanged = onSelectionChanged
-        if view.document == nil { view.document = PDFDocument(url: url) }
-        view.backgroundColor = palette.background
-        configure(view)
-    }
-
-    private func configure(_ view: PDFView) {
-        view.autoScales = true
-        view.displayMode = twoPage ? .twoUp : .singlePageContinuous
-        view.displayDirection = twoPage ? .horizontal : .vertical
-    }
-
-    final class Coordinator {
-        var onProgressChanged: (Double) -> Void
-        var onSelectionChanged: (String) -> Void
-        private var observers: [NSObjectProtocol] = []
-
-        init(onProgressChanged: @escaping (Double) -> Void, onSelectionChanged: @escaping (String) -> Void) {
-            self.onProgressChanged = onProgressChanged
-            self.onSelectionChanged = onSelectionChanged
-        }
-
-        func observeChanges(in view: PDFView) {
-            observers.append(NotificationCenter.default.addObserver(
-                forName: .PDFViewPageChanged,
-                object: view,
-                queue: .main
-            ) { [weak view, weak self] _ in
-                guard let view,
-                      let self,
-                      let document = view.document,
-                      let page = view.currentPage,
-                      document.pageCount > 0 else { return }
-                let index = document.index(for: page)
-                self.onProgressChanged(Double(index + 1) / Double(document.pageCount))
-            })
-            observers.append(NotificationCenter.default.addObserver(
-                forName: .PDFViewSelectionChanged,
-                object: view,
-                queue: .main
-            ) { [weak view, weak self] _ in
-                guard let view, let self else { return }
-                let passage = view.currentSelection?.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                self.onSelectionChanged(passage)
-            })
-        }
-
-        deinit {
-            observers.forEach(NotificationCenter.default.removeObserver)
-        }
-    }
-}
-
-private struct QuickLookBookReader: View {
-    @State private var previewURL: URL?
-
-    let url: URL
-
-    var body: some View {
-        Color(uiColor: .systemBackground)
-            .overlay {
-                ProgressView("Opening EPUB…")
-                    .tint(.secondary)
-            }
-            .quickLookPreview($previewURL)
-            .onAppear { previewURL = url }
     }
 }

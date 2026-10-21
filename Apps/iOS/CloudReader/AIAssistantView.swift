@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudReaderCore
 
 struct AIAssistantView: View {
     @Environment(\.dismiss) private var dismiss

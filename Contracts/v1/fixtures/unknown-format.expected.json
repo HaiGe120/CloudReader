@@ -1,0 +1,1 @@
+{"classification":"reject","expected":"Reject unsupported format rather than normalize to a different known format.","currentPlatformNotes":"Android rejects unknown formats. Swift BookFormat decoding rejects values outside the eight listed cases."}

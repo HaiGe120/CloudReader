@@ -1,0 +1,1 @@
+{"classification":"reject","expected":"Reject a string where the numeric addedAt timestamp is required; finite fractional timestamps are valid.","currentPlatformNotes":"Both adapters reject a string for addedAt. Android and Apple remote-sync preflight also reject timestamps that are not finite platform numbers."}

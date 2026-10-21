@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudReaderCore
 import UniformTypeIdentifiers
 
 struct SettingsView: View {

@@ -1,0 +1,1 @@
+{"classification":"accept","expected":"Treat UUID strings differing only in hex letter case as the same UUID; canonical output spelling may be normalized.","currentPlatformNotes":"Android canonicalizes to uppercase. Swift UUID decoding parses UUID spelling into UUID identity. This fixture uses a syntactically valid UUID."}

@@ -1,8 +1,11 @@
 import AppKit
+import CloudReaderCore
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct MacLibraryView: View {
+    var isUITestMode = false
+    var initialBookID: UUID? = nil
     @EnvironmentObject private var library: BookLibrary
     @EnvironmentObject private var cloudSync: CloudSyncCoordinator
     @Environment(\.scenePhase) private var scenePhase
@@ -13,6 +16,8 @@ struct MacLibraryView: View {
     @State private var isDropTargeted = false
     @State private var bookToRemove: Book?
     @State private var syncTask: Task<Void, Never>?
+    @StateObject private var imports = BookImportCoordinator()
+    @State private var navigationPath: [Book] = []
 
     private var visibleBooks: [Book] {
         let ordered = library.books.sorted { $0.addedAt > $1.addedAt }
@@ -27,7 +32,7 @@ struct MacLibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             GeometryReader { geometry in
                 ZStack {
                     MacLibraryBackdrop()
@@ -83,11 +88,18 @@ struct MacLibraryView: View {
             presentBookImporter()
         }
         .onAppear(perform: scheduleSync)
+        .onAppear {
+            if let initialBookID, navigationPath.isEmpty,
+               let book = library.books.first(where: { $0.id == initialBookID }) { navigationPath = [book] }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { scheduleSync() }
         }
         .onChange(of: library.books) { _, _ in scheduleSync() }
         .onChange(of: library.aiConversations) { _, _ in scheduleSync() }
+        .onChange(of: imports.bookToOpen) { _, book in
+            if let book { navigationPath = [book] }
+        }
     }
 
     private var alertIsPresented: Binding<Bool> {
@@ -114,7 +126,7 @@ struct MacLibraryView: View {
         let completion: (NSApplication.ModalResponse) -> Void = { response in
             isPresentingBookImporter = false
             guard response == .OK, !panel.urls.isEmpty else { return }
-            library.importBooks(from: panel.urls)
+            imports.importFiles(panel.urls, library: library)
         }
 
         if let window = NSApp.keyWindow ?? NSApp.mainWindow {
@@ -150,7 +162,7 @@ struct MacLibraryView: View {
             let urls = droppedURLs.sorted { $0.0 < $1.0 }.map(\.1)
             lock.unlock()
             guard !urls.isEmpty else { return }
-            Task { @MainActor in library.importBooks(from: urls) }
+            Task { @MainActor in imports.importFiles(urls, library: library) }
         }
         return true
     }
@@ -571,7 +583,7 @@ struct MacLibraryView: View {
     }
 
     private func scheduleSync() {
-        guard cloudSync.canSync else { return }
+        guard !isUITestMode, cloudSync.canSync else { return }
         syncTask?.cancel()
         syncTask = Task {
             try? await Task.sleep(for: .seconds(2))

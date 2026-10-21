@@ -1,0 +1,1 @@
+{"classification":"reject","expected":"Reject schemaVersion 2 as unsupported; do not reinterpret its payload as v1.","currentPlatformNotes":"Both Android and Swift reject any decoded version other than 1. Missing version defaults to 1 for legacy compatibility."}

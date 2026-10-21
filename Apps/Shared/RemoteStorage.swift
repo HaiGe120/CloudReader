@@ -1,6 +1,7 @@
 import AuthenticationServices
 import CryptoKit
 import Citadel
+import CloudReaderCore
 import Foundation
 import NIO
 import NIOSSH
@@ -1003,7 +1004,7 @@ struct SFTPServerCredentials: Codable {
     var pinnedHostKey: String
 }
 
-private actor SFTPStore: RemoteBookStore {
+actor SFTPStore: RemoteBookStore {
     private let credentials: SFTPServerCredentials
     private var sshClient: SSHClient?
     private var sftpClient: SFTPClient?
@@ -1151,46 +1152,6 @@ private func networkErrorSummary(_ error: Error) -> String {
     return "\(error.localizedDescription) (\(value.domain) \(value.code))"
 }
 
-struct SyncedBook: Codable {
-    var book: Book
-    var sha256: String
-}
-
-struct RemoteLibraryManifest: Codable {
-    var schemaVersion = 1
-    var updatedAt = Date()
-    var books: [SyncedBook] = []
-    var deletions: [BookDeletion] = []
-    var conversations: [AIConversationRecord] = []
-    var conversationDeletions: [AIConversationDeletion] = []
-
-    private enum CodingKeys: String, CodingKey {
-        case schemaVersion, updatedAt, books, deletions, conversations, conversationDeletions
-    }
-
-    init() {}
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        schemaVersion = try values.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
-        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt) ?? .now
-        books = try values.decodeIfPresent([SyncedBook].self, forKey: .books) ?? []
-        deletions = try values.decodeIfPresent([BookDeletion].self, forKey: .deletions) ?? []
-        conversations = try values.decodeIfPresent([AIConversationRecord].self, forKey: .conversations) ?? []
-        conversationDeletions = try values.decodeIfPresent([AIConversationDeletion].self, forKey: .conversationDeletions) ?? []
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encode(schemaVersion, forKey: .schemaVersion)
-        try values.encode(updatedAt, forKey: .updatedAt)
-        try values.encode(books, forKey: .books)
-        try values.encode(deletions, forKey: .deletions)
-        try values.encode(conversations, forKey: .conversations)
-        try values.encode(conversationDeletions, forKey: .conversationDeletions)
-    }
-}
-
 @MainActor
 final class CloudSyncCoordinator: ObservableObject {
     @Published private(set) var isSyncing = false
@@ -1200,15 +1161,36 @@ final class CloudSyncCoordinator: ObservableObject {
     @Published private(set) var selectedDestinationsVersion = 0
     private var syncAgainRequested = false
 
+    private let defaults: UserDefaults
     private let selectedProvidersKey = "cloudreader.providers"
+    private let pipeline: AppleSyncPipeline
+    private let clock: () -> Date
+    private let schedule: (@escaping @MainActor () async -> Void) -> Void
+    private let connectionCheck: ((CloudProviderKind) -> Bool)?
+
+    init(defaults: UserDefaults = .standard,
+         storeFactory: @escaping AppleSyncPipeline.StoreFactory = { try RemoteStoreFactory.make($0) },
+         clock: @escaping () -> Date = Date.init,
+         localState: AppleSyncLocalStateStore = AppleSyncLocalStateStore(),
+         schedule: @escaping (@escaping @MainActor () async -> Void) -> Void = { operation in Task { @MainActor in await operation() } },
+         closeStore: @escaping AppleSyncPipeline.StoreCloser = { store in
+             if let sftp = store as? SFTPStore { await sftp.closeConnection() }
+         },
+         connectionCheck: ((CloudProviderKind) -> Bool)? = nil) {
+        self.defaults = defaults
+        self.clock = clock
+        self.schedule = schedule
+        self.connectionCheck = connectionCheck
+        self.pipeline = AppleSyncPipeline(storeFactory: storeFactory, clock: clock, closeStore: closeStore, localState: localState)
+    }
 
     var selectedProviders: [CloudProviderKind] {
         get {
-            if let stored = UserDefaults.standard.stringArray(forKey: selectedProvidersKey) {
+            if let stored = defaults.stringArray(forKey: selectedProvidersKey) {
                 return uniqueProviders(stored.compactMap(CloudProviderKind.init(rawValue:)))
             }
             // Migrate the previous single sync-home choice without losing its connection.
-            if let legacy = UserDefaults.standard.string(forKey: "cloudreader.provider"),
+            if let legacy = defaults.string(forKey: "cloudreader.provider"),
                let provider = CloudProviderKind(rawValue: legacy), isConnected(provider) {
                 return [provider]
             }
@@ -1216,9 +1198,9 @@ final class CloudSyncCoordinator: ObservableObject {
         }
         set {
             let normalized = uniqueProviders(newValue)
-            UserDefaults.standard.set(normalized.map(\.rawValue), forKey: selectedProvidersKey)
+            defaults.set(normalized.map(\.rawValue), forKey: selectedProvidersKey)
             if let first = normalized.first {
-                UserDefaults.standard.set(first.rawValue, forKey: "cloudreader.provider")
+                defaults.set(first.rawValue, forKey: "cloudreader.provider")
             }
             selectedDestinationsVersion += 1
         }
@@ -1251,7 +1233,8 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     func isConnected(_ kind: CloudProviderKind) -> Bool {
-        switch kind {
+        if let connectionCheck { return connectionCheck(kind) }
+        return switch kind {
         case .googleDrive, .dropbox, .pCloud: SecureVault.load(OAuthToken.self, account: kind.rawValue + ".oauth") != nil
         case .webDAV: UserDefaults.standard.bool(forKey: "webdav.verified") && SecureVault.load(WebDAVCredentials.self, account: "webdav") != nil && UserDefaults.standard.string(forKey: "webdav.url") != nil
         case .sftp: UserDefaults.standard.bool(forKey: "sftp.verified") && SecureVault.load(SFTPServerCredentials.self, account: "sftp") != nil
@@ -1381,7 +1364,7 @@ final class CloudSyncCoordinator: ObservableObject {
             isSyncing = false
             if syncAgainRequested {
                 syncAgainRequested = false
-                Task { await sync(library: library) }
+                schedule { [weak self] in await self?.sync(library: library) }
             }
         }
         var failures: [CloudProviderKind: String] = [:]
@@ -1400,7 +1383,7 @@ final class CloudSyncCoordinator: ObservableObject {
         }
 
         let succeeded = destinations.filter { failures[$0] == nil }
-        if !succeeded.isEmpty { lastSync = .now }
+        if !succeeded.isEmpty { lastSync = clock() }
         if failures.isEmpty {
             errorMessage = nil
             statusMessage = "Synced \(finalCounts.books) \(finalCounts.books == 1 ? "book" : "books"), \(finalCounts.conversations) \(finalCounts.conversations == 1 ? "conversation" : "conversations") to \(destinations.count) \(destinations.count == 1 ? "destination" : "destinations")"
@@ -1412,83 +1395,24 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     private func syncOnce(to provider: CloudProviderKind, library: BookLibrary) async throws -> (books: Int, conversations: Int) {
-        let store = try RemoteStoreFactory.make(provider)
-        defer { if let sftp = store as? SFTPStore { Task { await sftp.closeConnection() } } }
-        let remoteData: Data?
-        do {
-            remoteData = try await store.read("manifest.json")
-        } catch {
-            throw CloudSyncError.service("Could not read the sync index: \(error.localizedDescription)")
-        }
-        var remote = try remoteData.map { try JSONDecoder().decode(RemoteLibraryManifest.self, from: $0) } ?? RemoteLibraryManifest()
-        guard remote.schemaVersion == 1 else { throw CloudSyncError.malformedResponse }
+        try await pipeline.run(to: provider, library: library)
+    }
 
-        for deletion in remote.deletions { library.applySyncedDeletion(deletion) }
-        for deletion in remote.conversationDeletions { library.applySyncedAIConversationDeletion(deletion) }
-        var remoteByID: [UUID: SyncedBook] = [:]
-        for item in remote.books { remoteByID[item.book.id] = item }
-        for conversation in remote.conversations { library.applySyncedAIConversation(conversation) }
-
-        for item in remote.books {
-            let local = library.books.first(where: { $0.id == item.book.id })
-            guard local.map({ item.book.modifiedAt > $0.modifiedAt }) ?? true else { continue }
-            if let deletion = library.deletedBooks.first(where: { $0.bookID == item.book.id }), deletion.deletedAt >= item.book.modifiedAt { continue }
-            let contents: Data?
-            do {
-                contents = try await store.read(objectName(for: item.book))
-            } catch {
-                throw CloudSyncError.service("Could not download '\(item.book.title)': \(error.localizedDescription)")
+    static func bookForDownload(remote: Book, local: Book?, localFileAvailable: Bool, deletion: BookDeletion? = nil) -> Book? {
+        let selected: Book
+        if let local {
+            if remote.modifiedAt > local.modifiedAt {
+                selected = remote
+            } else {
+                // Restore bytes without replacing newer local progress, bookmarks, or metadata.
+                guard !localFileAvailable else { return nil }
+                selected = local
             }
-            guard let contents else {
-                throw CloudSyncError.service("\(provider.title) is missing the book file for '\(item.book.title)'. Its index was left unchanged.")
-            }
-            guard digest(contents) == item.sha256 else {
-                throw CloudSyncError.service("\(provider.title) has a damaged copy of '\(item.book.title)'. Its index was left unchanged.")
-            }
-            library.applySyncedBook(item.book, contents: contents)
+        } else {
+            selected = remote
         }
-
-        var merged: [SyncedBook] = []
-        for book in library.books {
-            if let deletion = library.deletedBooks.first(where: { $0.bookID == book.id }), deletion.deletedAt >= book.modifiedAt { continue }
-            guard let contents = library.data(for: book) else { continue }
-            let hash = digest(contents)
-            if remoteByID[book.id]?.sha256 != hash {
-                do {
-                    try await store.write(contents, as: objectName(for: book))
-                } catch {
-                    throw CloudSyncError.service("Could not upload '\(book.title)': \(error.localizedDescription)")
-                }
-            }
-            merged.append(SyncedBook(book: book, sha256: hash))
-        }
-
-        var deletionByID: [UUID: BookDeletion] = [:]
-        for deletion in remote.deletions + library.deletedBooks {
-            if deletionByID[deletion.bookID].map({ $0.deletedAt < deletion.deletedAt }) ?? true { deletionByID[deletion.bookID] = deletion }
-        }
-        remote.books = merged
-        remote.deletions = Array(deletionByID.values)
-        var conversationDeletionByID: [UUID: AIConversationDeletion] = [:]
-        for deletion in remote.conversationDeletions + library.deletedAIConversations {
-            if conversationDeletionByID[deletion.conversationID].map({ $0.deletedAt < deletion.deletedAt }) ?? true {
-                conversationDeletionByID[deletion.conversationID] = deletion
-            }
-        }
-        remote.conversations = library.aiConversations.filter { conversation in
-            guard let deletion = conversationDeletionByID[conversation.id] else { return true }
-            return deletion.deletedAt < conversation.modifiedAt
-        }
-        remote.conversationDeletions = Array(conversationDeletionByID.values)
-        remote.updatedAt = .now
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        do {
-            try await store.write(encoder.encode(remote), as: "manifest.json")
-        } catch {
-            throw CloudSyncError.service("Could not update the sync index: \(error.localizedDescription)")
-        }
-        return (merged.count, remote.conversations.count)
+        guard deletion.map({ $0.deletedAt < selected.modifiedAt }) ?? true else { return nil }
+        return selected
     }
 
     private func objectName(for book: Book) -> String { "book-\(book.id.uuidString).\(book.format.rawValue)" }

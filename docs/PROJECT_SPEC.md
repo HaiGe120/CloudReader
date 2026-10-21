@@ -46,6 +46,8 @@ Annotations and in-book bookmarks should have their own stable IDs, book ID, por
 
 The current Apple-target wire format uses `manifest.json` as the library index and separate content objects named `book-<book UUID>.<extension>`. Each manifest book entry contains the portable `Book` record—including progress and the library bookmark flag—and SHA-256 of the bytes. The manifest also stores AI conversation transcripts and their saved reader context, schema version, index update time, and deletion tombstones. Conversation messages have stable IDs and timestamps so offline additions can merge. Devices validate downloaded book objects against their hashes before installing them. API credentials are kept outside this directory.
 
+The detailed schema-v1 field/default rules, JSON Schema, fixture cases, and current adapter compatibility notes live in the [portable sync contract](../Contracts/v1/README.md). The contract is a draft interoperability target: shared fixtures define expected outcomes without claiming that both current platforms already satisfy unknown-field preservation or every safety check.
+
 In schema v1, `Book.fileName` describes the managed file on the device that last wrote the record. Receivers replace it with a safe local filename after downloading; providers derive the remote object name from the stable book UUID and format. Cross-platform clients must keep local paths separate from remote object paths and must never trust a synced filename as a filesystem path.
 
 Current manifest shape (dates are encoded by Swift's JSONEncoder in the iOS build):
@@ -142,9 +144,9 @@ Conversation history is stored locally and included in library sync. Chats and m
 
 Use native system controls and materials. Book pages prioritize legibility over decorative effects. Layouts adapt to compact and expanded width, portrait/landscape, foldable posture, and desktop windows; wide iPhone layouts should use the added space for a featured book, sync state, and shelf rather than simply stretching a narrow column. Respect Dynamic Type, VoiceOver/TalkBack/Narrator, keyboard navigation, high contrast, reduce motion, and reduce transparency. Status must be readable without color alone.
 
-Wide reading surfaces should offer single-page scrolling and facing-page spreads with horizontal page turns. Text books should provide system, light, sepia, dark, and reader-defined paper/text colors plus multiple fonts and adjustable type size. PDF remains fixed-layout: offer PDFKit two-up pages and a themed reading canvas, while leaving the document's ink and typography intact. Apple EPUB uses the system preview until a native Apple EPUB renderer is introduced; Android uses Readium's EPUB navigator and keeps its precise locator on-device.
+Wide reading surfaces should offer single-page scrolling and facing-page spreads with horizontal page turns. Text books should provide system, light, sepia, dark, and reader-defined paper/text colors plus multiple fonts and adjustable type size. PDF remains fixed-layout: offer PDFKit two-up pages and a themed reading canvas, while leaving the document's ink and typography intact. iOS and macOS EPUB use an in-app chapter reader with cached archive preparation, chapter navigation, adjustable typography/themes, selected-passage AI, and normalized chapter/scroll progress. Android uses Readium's EPUB navigator and keeps its precise locator on-device.
 
-Selecting text in a supported reader should expose an **Ask CloudReader AI** action. The selected passage opens the assistant with a relevant starter question and a clear excerpt-sharing switch; text is not sent until the reader submits. PDF may use a contextual floating action when its native selection menu cannot be extended. EPUB selection-to-AI remains planned for Apple clients, which still use the system preview.
+Selecting text in a supported reader should expose an **Ask CloudReader AI** action. The selected passage opens the assistant with a relevant starter question and a clear excerpt-sharing switch; text is not sent until the reader submits. PDF may use a contextual floating action when its native selection menu cannot be extended. Both iOS and macOS EPUB readers expose selected-passage AI.
 
 ## iOS implementation status
 
@@ -155,9 +157,10 @@ Selecting text in a supported reader should expose an **Ask CloudReader AI** act
 | Wide TXT facing-page reader, adjustable typography and custom themes | Implemented; preferences are device-local |
 | PDF two-up layout and selected-passage AI action | Implemented; PDF content remains fixed-layout |
 | TXT text-selection menu action to ask AI | Implemented |
-| EPUB selected-passage AI, native pagination and typography controls | Planned with native EPUB renderer |
+| EPUB selected-passage AI, chapter navigation and typography controls | Implemented in the iOS in-app EPUB reader; precise CFI positions remain planned |
 | Original CC0 demo book, seeded in the local library | Implemented |
-| EPUB, PDF, TXT reader | Implemented with platform Quick Look for EPUB and native PDF/Text views |
+| EPUB, PDF, TXT reader | Implemented with cached in-app EPUB chapters and native PDF/Text views |
+| Files picker, Open in CloudReader, share-sheet book import | Implemented; the share extension stages copies for automatic import when CloudReader next becomes active |
 | Google Drive, Dropbox, pCloud, HTTPS WebDAV, SFTP sync | Implemented; requires provider app IDs or user server credentials |
 | iCloud Drive, SMB, third-party provider folder | Implemented through iOS Files and macOS Finder folder pickers; depends on provider availability in the OS |
 | MEGA and PikPak direct OAuth/API sync | Planned; use Files folders when exposed by their installed apps |

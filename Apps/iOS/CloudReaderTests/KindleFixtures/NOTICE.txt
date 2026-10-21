@@ -1,0 +1,43 @@
+CloudReader Kindle decoder fixtures
+
+Files
+- reflowable-kf8.azw3 (11 KB): DRM-free, reflowable UTF-8 KF8/AZW3 with
+  PalmDOC-compressed text and two chapters.
+- reflowable-combo.mobi (12 KB): DRM-free MOBI7 + KF8 combo. The MOBI6 prefix
+  has a PalmDOC-compressed text record; the KF8 half has two chapters.
+- rich-kf8-image-links.azw3 (about 12 KB): DRM-free, reflowable KF8/AZW3 with
+  English and Chinese text, two chapters, a same-book internal link, an
+  embedded JPEG, a stylesheet flow, and PalmDOC-compressed text/resources.
+- huffdic-unicode.mobi (473 KB): DRM-free UTF-8 MOBI6 using HUFF/CDIC
+  compression (17480), with 28 text records. It is copied unmodified from
+  libmobi's upstream regression corpus.
+
+Original fixture content
+The short stories, metadata, Chinese/English passages, stylesheet, and PNG
+illustration in the three generated fixtures were created specifically for
+CloudReader tests. They contain no personal books or borrowed literary text.
+
+HUFF/CDIC sample provenance
+Source: bfabiszewski/libmobi, tests/samples/sample-unicode-huffdic.mobi at
+commit f96175459423da4b65543ebbdc1e75a3e76b3fc9. That upstream commit says the
+sample corpus was replaced with smaller self-generated samples. The file's
+metadata credits Bartek Fabiszewski and the Libmobi project. The sample MD5 is
+c19b31e6351f3e2ef7b48795ee980ee7; it matches the upstream test checksum
+basename. libmobi's test harness checks decompressed markup and rawml against
+committed checksums. The project COPYING file is LGPL-3.0-or-later.
+
+- Pinned sample: https://github.com/bfabiszewski/libmobi/blob/f96175459423da4b65543ebbdc1e75a3e76b3fc9/tests/samples/sample-unicode-huffdic.mobi
+- Upstream tests: https://github.com/bfabiszewski/libmobi/blob/f96175459423da4b65543ebbdc1e75a3e76b3fc9/tests/test.sh.in
+- Upstream checksum manifest: https://github.com/bfabiszewski/libmobi/blob/f96175459423da4b65543ebbdc1e75a3e76b3fc9/tests/md5/c19b31e6351f3e2ef7b48795ee980ee7_rawml.md5
+- Upstream license: https://github.com/bfabiszewski/libmobi/blob/f96175459423da4b65543ebbdc1e75a3e76b3fc9/COPYING
+
+Generated KF8 provenance and reproduction
+The two generated KF8 files were written with github.com/behringer24/azw3
+v0.5.2, an MIT-licensed writer built on github.com/leotaku/mobi v0.9.0.
+`generate.go` recreates rich-kf8-image-links.azw3; run `go run .` from this
+directory. It fixes the generated PalmDB timestamps and unique ID so the output
+is byte-for-byte repeatable. No writer source is included in the KF8 binaries.
+
+- Writer: https://github.com/behringer24/azw3/tree/v0.5.2
+- Writer license: https://github.com/behringer24/azw3/blob/v0.5.2/LICENSE
+- Underlying MOBI writer: https://github.com/leotaku/mobi/tree/v0.9.0

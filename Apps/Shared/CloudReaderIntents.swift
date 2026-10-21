@@ -1,4 +1,5 @@
 import AppIntents
+import CloudReaderCore
 import Foundation
 
 struct AskCloudReaderIntent: AppIntent {

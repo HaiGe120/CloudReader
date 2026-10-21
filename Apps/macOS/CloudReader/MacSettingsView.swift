@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudReaderCore
 import UniformTypeIdentifiers
 
 struct MacSettingsView: View {
@@ -250,7 +251,7 @@ struct MacSettingsView: View {
             }
 
             Section("Readers") {
-                LabeledContent("EPUB", value: "Quick Look")
+                LabeledContent("EPUB", value: "Built-in reader")
                 LabeledContent("PDF", value: "PDFKit")
                 LabeledContent("TXT", value: "Adjustable text")
             }

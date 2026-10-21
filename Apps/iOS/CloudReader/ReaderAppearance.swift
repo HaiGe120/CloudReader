@@ -1,13 +1,8 @@
 import SwiftUI
 import UIKit
+import CloudReaderCore
 
-enum ReaderPageLayout: String, CaseIterable, Identifiable, Equatable {
-    case scroll
-    case singlePage
-    case facingPages
-
-    var id: String { rawValue }
-
+extension ReaderPageLayout {
     var title: String {
         switch self {
         case .scroll: "Scrolling"
@@ -17,15 +12,7 @@ enum ReaderPageLayout: String, CaseIterable, Identifiable, Equatable {
     }
 }
 
-enum ReaderTheme: String, CaseIterable, Identifiable {
-    case system
-    case light
-    case sepia
-    case dark
-    case custom
-
-    var id: String { rawValue }
-
+extension ReaderTheme {
     var title: String {
         switch self {
         case .system: "System"
@@ -37,17 +24,7 @@ enum ReaderTheme: String, CaseIterable, Identifiable {
     }
 }
 
-enum ReaderFont: String, CaseIterable, Identifiable {
-    case systemSerif
-    case systemSans
-    case rounded
-    case georgia
-    case palatino
-    case avenir
-    case monospaced
-
-    var id: String { rawValue }
-
+extension ReaderFont {
     var title: String {
         switch self {
         case .systemSerif: "New York"
@@ -126,91 +103,27 @@ enum ReaderColor {
 
 enum ReaderPagination {
     static func pages(from text: String, maximumCharacters: Int) -> [String] {
-        let limit = max(1, maximumCharacters)
-        var remainder = text
-        var result: [String] = []
-
-        while remainder.count > limit {
-            let limitIndex = remainder.index(remainder.startIndex, offsetBy: limit)
-            let whitespaceBoundary = remainder[..<limitIndex].lastIndex(where: \.isWhitespace)
-            let boundary = whitespaceBoundary ?? limitIndex
-            let page = String(remainder[..<boundary]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !page.isEmpty { result.append(page) }
-            let next = whitespaceBoundary.map { remainder.index(after: $0) } ?? boundary
-            remainder = String(remainder[next...]).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        if !remainder.isEmpty { result.append(remainder) }
-        return result.isEmpty ? [""] : result
+        ReaderPaginationPolicy.pages(from: text, maximumCharacters: maximumCharacters)
     }
 
     static func pages(from text: String, width: CGFloat, height: CGFloat, font: UIFont) -> [String] {
-        guard !text.isEmpty else { return [""] }
         let safeWidth = max(width, 40)
         let safeHeight = max(height, font.lineHeight)
-        var remainder = text
-        var result: [String] = []
-
-        while !remainder.isEmpty {
-            let upperBound = min(remainder.count, 4_000)
-            var lower = 1
-            var upper = upperBound
-            var fittingCount = 1
-
-            while lower <= upper {
-                let candidateCount = (lower + upper) / 2
-                let end = remainder.index(remainder.startIndex, offsetBy: candidateCount)
-                let candidate = String(remainder[..<end])
-                if measuredHeight(of: candidate, width: safeWidth, font: font) <= safeHeight {
-                    fittingCount = candidateCount
-                    lower = candidateCount + 1
-                } else {
-                    upper = candidateCount - 1
-                }
-            }
-
-            if fittingCount >= remainder.count {
-                result.append(remainder.trimmingCharacters(in: .whitespacesAndNewlines))
-                break
-            }
-
-            let fittingEnd = remainder.index(remainder.startIndex, offsetBy: min(fittingCount, remainder.count))
-            var boundary = remainder[..<fittingEnd].lastIndex(where: \.isWhitespace)
-            if let candidate = boundary {
-                let distance = remainder.distance(from: remainder.startIndex, to: candidate)
-                if distance < fittingCount * 4 / 5 { boundary = nil }
-            }
-
-            let pageEnd = boundary ?? fittingEnd
-            let page = String(remainder[..<pageEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !page.isEmpty { result.append(page) }
-            let nextStart = boundary.map { remainder.index(after: $0) } ?? pageEnd
-            remainder = String(remainder[nextStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        return result.isEmpty ? [""] : result
+        return ReaderPaginationPolicy.pages(from: text, fits: { candidate in
+            measuredHeight(of: candidate, width: safeWidth, font: font) <= safeHeight
+        }, shouldCancel: { Task.isCancelled })
     }
 
     static func pageGroupCount(pageCount: Int, pagesPerGroup: Int) -> Int {
-        let count = max(pageCount, 1)
-        let groupSize = max(pagesPerGroup, 1)
-        return max((count + groupSize - 1) / groupSize, 1)
+        ReaderPaginationPolicy.pageGroupCount(pageCount: pageCount, pagesPerGroup: pagesPerGroup)
     }
 
     static func pageGroupIndex(progress: Double, pageCount: Int, pagesPerGroup: Int) -> Int {
-        let count = max(pageCount, 1)
-        let groupSize = max(pagesPerGroup, 1)
-        let boundedProgress = min(max(progress, 0), 1)
-        let pageIndex = min(Int(boundedProgress * Double(count)), count - 1)
-        return pageIndex / groupSize
+        ReaderPaginationPolicy.pageGroupIndex(progress: progress, pageCount: pageCount, pagesPerGroup: pagesPerGroup)
     }
 
     static func progress(pageGroupIndex: Int, pageCount: Int, pagesPerGroup: Int) -> Double {
-        let count = max(pageCount, 1)
-        let groupSize = max(pagesPerGroup, 1)
-        let groupCount = pageGroupCount(pageCount: count, pagesPerGroup: groupSize)
-        let boundedGroup = min(max(pageGroupIndex, 0), groupCount - 1)
-        return Double(min(boundedGroup * groupSize, count - 1)) / Double(count)
+        ReaderPaginationPolicy.progress(pageGroupIndex: pageGroupIndex, pageCount: pageCount, pagesPerGroup: pagesPerGroup)
     }
 
     static func measuredHeight(of text: String, width: CGFloat, font: UIFont) -> CGFloat {
@@ -241,6 +154,8 @@ struct ReaderAppearanceSheet: View {
     @AppStorage("reader.customBackground") private var customBackground = "F8F4EB"
     @AppStorage("reader.customForeground") private var customForeground = "292621"
 
+    let capabilities: ReaderCapabilities
+
     private var backgroundColor: Binding<Color> {
         Binding(
             get: { Color(uiColor: ReaderColor.uiColor(hex: customBackground)) },
@@ -258,17 +173,21 @@ struct ReaderAppearanceSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Page layout") {
-                    HStack(spacing: 4) {
-                        layoutButton(.scroll)
-                        layoutButton(.singlePage)
-                        layoutButton(.facingPages)
+                if capabilities.supportsPaging {
+                    Section("Page layout") {
+                        HStack(spacing: 4) {
+                            layoutButton(.scroll, title: capabilities == .pdf ? "Continuous" : "Scrolling")
+                            if capabilities != .pdf { layoutButton(.singlePage) }
+                            if capabilities.supportsSpreads { layoutButton(.facingPages) }
+                        }
+                        .padding(4)
+                        .background(.quaternary, in: Capsule())
+                        Text(capabilities == .pdf
+                             ? "PDF pages keep their original artwork. Choose continuous flow or a two-page spread."
+                             : "Scrolling flows vertically. One-page mode turns horizontally. Two-page spreads use wide screens and fall back to one page on compact screens.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(4)
-                    .background(.quaternary, in: Capsule())
-                    Text("Scrolling flows vertically. One-page mode turns horizontally. Two-page spreads use wide screens and fall back to one page on compact screens.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
 
                 Section("Page color") {
@@ -283,24 +202,26 @@ struct ReaderAppearanceSheet: View {
                     }
                 }
 
-                Section("Typography") {
-                    Picker("Font", selection: $fontRaw) {
-                        ForEach(ReaderFont.allCases) { font in
-                            Text(font.title).tag(font.rawValue)
+                if capabilities.supportsTypography {
+                    Section("Typography") {
+                        Picker("Font", selection: $fontRaw) {
+                            ForEach(ReaderFont.allCases) { font in
+                                Text(font.title).tag(font.rawValue)
+                            }
                         }
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Text size")
-                            Spacer()
-                            Text("\(Int(fontSize)) pt").monospacedDigit().foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Text size")
+                                Spacer()
+                                Text("\(Int(fontSize)) pt").monospacedDigit().foregroundStyle(.secondary)
+                            }
+                            Slider(value: $fontSize, in: 15...30, step: 1)
+                                .accessibilityLabel("Text size")
                         }
-                        Slider(value: $fontSize, in: 15...30, step: 1)
-                            .accessibilityLabel("Text size")
+                        Text("These typography settings apply to text and EPUB books.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                    Text("PDF pages and EPUB appearance are controlled by their document reader. These typography settings apply to text books.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Reading Appearance")
@@ -314,12 +235,12 @@ struct ReaderAppearanceSheet: View {
         .presentationDetents([.medium, .large])
     }
 
-    private func layoutButton(_ layout: ReaderPageLayout) -> some View {
-        let selected = pageLayoutRaw == layout.rawValue
+    private func layoutButton(_ layout: ReaderPageLayout, title: String? = nil) -> some View {
+        let selected = pageLayoutRaw == layout.rawValue || (capabilities == .pdf && layout == .scroll && pageLayoutRaw == ReaderPageLayout.singlePage.rawValue)
         return Button {
             pageLayoutRaw = layout.rawValue
         } label: {
-            Text(layout.title)
+            Text(title ?? layout.title)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(selected ? Color.primary : Color.secondary)
                 .frame(maxWidth: .infinity)
@@ -332,7 +253,7 @@ struct ReaderAppearanceSheet: View {
                 }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(layout.title)
+        .accessibilityLabel(title ?? layout.title)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

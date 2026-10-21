@@ -1,4 +1,5 @@
 import SwiftUI
+import CloudReaderCore
 
 struct MacAIAssistantView: View {
     @Environment(\.dismiss) private var dismiss

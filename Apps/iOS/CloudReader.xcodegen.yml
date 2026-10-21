@@ -8,6 +8,9 @@ settings:
   base:
     PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader
     PRODUCT_NAME: CloudReader
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "2"
+    DEVELOPMENT_TEAM: W6DM8CHQA7
     SWIFT_VERSION: "5.0"
     IPHONEOS_DEPLOYMENT_TARGET: "26.0"
     TARGETED_DEVICE_FAMILY: "1,2"
@@ -22,6 +25,8 @@ targets:
     info:
       path: CloudReader/Info.plist
       properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -33,12 +38,87 @@ targets:
             CFBundleURLSchemes:
               - io.github.haige120.cloudreader
               - cloudreader
+        LSSupportsOpeningDocumentsInPlace: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: EPUB book
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [org.idpf.epub-container]
+          - CFBundleTypeName: PDF book
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.adobe.pdf]
+          - CFBundleTypeName: Text book
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.plain-text]
+          - CFBundleTypeName: Other book formats
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - io.github.haige120.cloudreader.mobi
+              - io.github.haige120.cloudreader.azw3
+              - io.github.haige120.cloudreader.fb2
+              - io.github.haige120.cloudreader.cbz
+              - io.github.haige120.cloudreader.cbr
+        UTImportedTypeDeclarations: &bookTypeDeclarations
+          - UTTypeIdentifier: io.github.haige120.cloudreader.mobi
+            UTTypeDescription: Mobipocket book
+            UTTypeConformsTo: [public.data, public.content]
+            UTTypeTagSpecification:
+              public.filename-extension: [mobi]
+              public.mime-type: [application/x-mobipocket-ebook]
+          - UTTypeIdentifier: io.github.haige120.cloudreader.azw3
+            UTTypeDescription: Kindle book
+            UTTypeConformsTo: [public.data, public.content]
+            UTTypeTagSpecification:
+              public.filename-extension: [azw3]
+              public.mime-type: [application/vnd.amazon.mobi8-ebook]
+          - UTTypeIdentifier: io.github.haige120.cloudreader.fb2
+            UTTypeDescription: FictionBook book
+            UTTypeConformsTo: [public.data, public.content]
+            UTTypeTagSpecification:
+              public.filename-extension: [fb2]
+              public.mime-type: [application/x-fictionbook+xml]
+          - UTTypeIdentifier: io.github.haige120.cloudreader.cbz
+            UTTypeDescription: Comic ZIP book
+            UTTypeConformsTo: [public.data, public.content]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbz]
+              public.mime-type: [application/vnd.comicbook+zip]
+          - UTTypeIdentifier: io.github.haige120.cloudreader.cbr
+            UTTypeDescription: Comic RAR book
+            UTTypeConformsTo: [public.data, public.content]
+            UTTypeTagSpecification:
+              public.filename-extension: [cbr]
+              public.mime-type: [application/vnd.comicbook-rar]
     sources:
       - path: CloudReader
+        excludes:
+          - Info 2.plist
       - path: ../Shared
+        excludes:
+          - AppleSyncPipeline 2.swift
+          - BookImportCoordinator 2.swift
+          - KindleDecoder
+      - path: ../Shared/KindleDecoder
+        buildPhase: resources
+      - path: Sharing
+    entitlements:
+      path: CloudReader/CloudReader.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.io.github.haige120.cloudreader
     resources:
       - path: CloudReader/Resources/CloudReader_Field_Guide.txt
     dependencies:
+      - target: CloudReaderShare
+      - package: CloudReaderKit
+        product: CloudReaderCore
+      - package: ZIPFoundation
+        product: ZIPFoundation
+      - package: Unrar
+        product: Unrar
       - package: Citadel
         product: Citadel
       - package: swift-nio-ssh
@@ -48,20 +128,99 @@ targets:
     settings:
       base:
         CODE_SIGN_STYLE: Automatic
+        REGISTER_APP_GROUPS: YES
         SUPPORTS_MACCATALYST: NO
         SWIFT_EMIT_LOC_STRINGS: YES
+  CloudReaderShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: Sharing
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: CloudReader
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UTImportedTypeDeclarations: *bookTypeDeclarations
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule: >-
+              SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $attachment,
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "org.idpf.epub-container" OR
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.adobe.pdf" OR
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text" OR
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.file-url" OR
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "io.github.haige120.cloudreader.mobi" OR
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "io.github.haige120.cloudreader.azw3" OR
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "io.github.haige120.cloudreader.fb2" OR
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "io.github.haige120.cloudreader.cbz" OR
+              ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "io.github.haige120.cloudreader.cbr"
+              ).@count > 0).@count > 0
+    entitlements:
+      path: ShareExtension/ShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.io.github.haige120.cloudreader
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader.share
+        PRODUCT_NAME: CloudReaderShare
+        INFOPLIST_KEY_CFBundleDisplayName: CloudReader
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: NO
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGN_STYLE: Automatic
+        REGISTER_APP_GROUPS: YES
+        SKIP_INSTALL: YES
+        SUPPORTS_MACCATALYST: NO
   CloudReaderTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: CloudReaderTests
+        excludes:
+          - CBRFixtures
+          - KindleFixtures
+      - path: CloudReaderTests/CBRFixtures
+        buildPhase: resources
+        excludes:
+          - NOTICE.txt
+      - path: CloudReaderTests/KindleFixtures
+        buildPhase: resources
+        excludes:
+          - NOTICE.txt
+          - '*.go'
+          - go.mod
+          - go.sum
     dependencies:
       - target: CloudReader
+      - package: CloudReaderKit
+        product: CloudReaderCore
+      - package: ZIPFoundation
+        product: ZIPFoundation
+      - package: Unrar
+        product: Unrar
     settings:
       base:
         PRODUCT_NAME: CloudReaderTests
         PRODUCT_MODULE_NAME: CloudReaderTests
         PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader.tests
+        GENERATE_INFOPLIST_FILE: YES
+  CloudReaderUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: CloudReaderUITests
+    dependencies:
+      - target: CloudReader
+    settings:
+      base:
+        PRODUCT_NAME: CloudReaderUITests
+        PRODUCT_MODULE_NAME: CloudReaderUITests
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader.uitests
         GENERATE_INFOPLIST_FILE: YES
 schemes:
   CloudReader:
@@ -73,7 +232,18 @@ schemes:
     test:
       targets:
         - CloudReaderTests
+        - CloudReaderUITests
+      environmentVariables:
+        CLOUDREADER_TEST_HOST: "1"
 packages:
+  CloudReaderKit:
+    path: ../../Packages/CloudReaderKit
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: 0.9.20
+  Unrar:
+    url: https://github.com/mtgto/Unrar.swift.git
+    revision: 7216007a38ac122dbdeae26cfdaf7f10775c868f
   Citadel:
     url: https://github.com/orlandos-nl/Citadel.git
     from: 0.12.1

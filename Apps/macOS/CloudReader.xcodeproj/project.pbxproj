@@ -7,40 +7,175 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		3326F8330E3F37B7C697D477 /* NIO in Frameworks */ = {isa = PBXBuildFile; productRef = 376BFD98C38CF59B7F0A530D /* NIO */; };
-		395C7364D59B74B9D76CE42D /* Book.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E3C8223719392BEFF5FDEFD /* Book.swift */; };
+		002F119693E96786681530BC /* reflowable-combo.mobi in Resources */ = {isa = PBXBuildFile; fileRef = 89039820BF307FFEC3951372 /* reflowable-combo.mobi */; };
+		0091ED66151EF12B1B8192BC /* rar4-pages.rar in Resources */ = {isa = PBXBuildFile; fileRef = 90E9C721C5C7B6637354DFD1 /* rar4-pages.rar */; };
+		00B23FAAD65549113EC48422 /* LICENSE-libarchive.txt in Resources */ = {isa = PBXBuildFile; fileRef = 1BDE335A70395253A4E68920 /* LICENSE-libarchive.txt */; };
+		0216FB04E8A105046B0AD725 /* LICENSE-libmobi.txt in Resources */ = {isa = PBXBuildFile; fileRef = 21C22EECA854133B8A31C9C6 /* LICENSE-libmobi.txt */; };
+		11864210B17BE9F0CBC318EF /* MacReaderShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE6D536E86C9488AD3A92BA /* MacReaderShellTests.swift */; };
+		11BC0157045EF36718157E86 /* rar5-symlink.rar in Resources */ = {isa = PBXBuildFile; fileRef = 4F3D59FD30AAE8357D93B899 /* rar5-symlink.rar */; };
+		153C64881A21D82102050D93 /* MacReaderUITestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDBBEF86334BA5C013D70C04 /* MacReaderUITestFixtures.swift */; };
+		16103416D5CA7E03ED84BD1A /* rar4-no-image.rar in Resources */ = {isa = PBXBuildFile; fileRef = 1D42CECA92C856A6040348AF /* rar4-no-image.rar */; };
+		166C6B7825322719E6C155EA /* converter.js in Resources */ = {isa = PBXBuildFile; fileRef = BB080187BED32497049CB7D4 /* converter.js */; };
+		1A7954C7D5EDDBF1120D1872 /* FB2PublicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246D52D1C81D57D48C5D46C2 /* FB2PublicationTests.swift */; };
+		1D629DA2CC2F9272308091F1 /* rar4-solid-pages.rar in Resources */ = {isa = PBXBuildFile; fileRef = 3002E678F95023EDE97C3493 /* rar4-solid-pages.rar */; };
+		21BA8D88932D788144173979 /* BookImportCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0812C7147DFF4DC00FB5D2D6 /* BookImportCoordinator.swift */; };
+		286142D27B0EEDB56E7F49AD /* KindlePublication.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD8599997B86965F22676717 /* KindlePublication.swift */; };
+		29D549F4D82987F37C829477 /* CBRPublicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020DB972268B53D34D4A6669 /* CBRPublicationTests.swift */; };
+		2E70D45356CDF7E239E696CD /* MacReaderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E652A00501A350DB98046362 /* MacReaderUITests.swift */; };
+		320722E46C9DBDDE97959E76 /* rar5-pages.rar in Resources */ = {isa = PBXBuildFile; fileRef = C2DF204387B3D19A414B2959 /* rar5-pages.rar */; };
+		3326F8330E3F37B7C697D477 /* Unrar in Frameworks */ = {isa = PBXBuildFile; productRef = 4A0C4A4F454ED0F4912E30A2 /* Unrar */; };
+		3BC859614A702BB651566482 /* AppleSyncLocalStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D9BB58A4A0DDAF6F46ED9D2 /* AppleSyncLocalStateStore.swift */; };
+		3E5FF4AB4A9DBC9DB484840A /* NIO in Frameworks */ = {isa = PBXBuildFile; productRef = 376BFD98C38CF59B7F0A530D /* NIO */; };
+		43E2A38AD15736F6B96B1B85 /* reflowable-kf8.azw3 in Resources */ = {isa = PBXBuildFile; fileRef = 0825D4CF5DFE70ED9A08D3FD /* reflowable-kf8.azw3 */; };
+		451A0657616AB9FFECDAA20E /* rar4-absolute-directory.rar in Resources */ = {isa = PBXBuildFile; fileRef = 27B2F8F87F69266A5EA1A873 /* rar4-absolute-directory.rar */; };
+		4E4C2BCC334EB678F8654D02 /* AIConversationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC744D826CF7624E0253089 /* AIConversationHistoryView.swift */; };
 		4F99DEF662A7AB8988CA9F78 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B3166AC9A4B254F8AF9F1BCD /* Assets.xcassets */; };
+		5981A19E07963C92DA784764 /* MacReaderAppearanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5835CB4FA6FA8C5D1A2D767B /* MacReaderAppearanceView.swift */; };
 		60CC7A1ACDE0886D32A7CE46 /* CloudReaderIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FC9A5FFC547BB5D5D74BAE5 /* CloudReaderIntents.swift */; };
+		642C7C61E1B9F99EA3D0A57B /* CBRPublication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59391F4DB7A25BB56682E618 /* CBRPublication.swift */; };
 		6A946F88A989A61B411BDD2D /* CloudReader_Field_Guide.txt in Resources */ = {isa = PBXBuildFile; fileRef = E630AA62BDCE2B5F9FF8F7E3 /* CloudReader_Field_Guide.txt */; };
+		6AFCAE458EFB4521E87EEE7B /* EPUBNavigationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43316BB0CE099C95D82B8B1E /* EPUBNavigationPolicy.swift */; };
+		6BCACC7E750605467BB07542 /* KindlePublicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0132DE243B614336FA1152F6 /* KindlePublicationTests.swift */; };
+		6CA5C7CD9F8BD31591282C64 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 010CD113096700810F04442F /* ZIPFoundation */; };
+		6D0070137682FC9B9D6A484A /* EPUBResourcePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43208CB29ADF0D5D6E3F05E5 /* EPUBResourcePolicy.swift */; };
+		6D0931B97C86FDC384C5886B /* MacEPUBBookReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE13497E1BE5A894C5C98F6 /* MacEPUBBookReader.swift */; };
+		7072F2013CFC50B034D07F64 /* NOTICE.txt in Resources */ = {isa = PBXBuildFile; fileRef = DAB6559F409B1161D90E27A4 /* NOTICE.txt */; };
+		708ED7B9FE62AC4B77AF6B28 /* FB2Publication.swift in Sources */ = {isa = PBXBuildFile; fileRef = D665E49C3264476590EA822A /* FB2Publication.swift */; };
+		7B4C589CC6442C992D8C182B /* ComicPublication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 056A90C7ABFA4BAC69A05836 /* ComicPublication.swift */; };
+		7CAE59C87560CBA3C933088A /* MacNativeBookReaders.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD381370C082C7E58DB23E81 /* MacNativeBookReaders.swift */; };
 		8025ECB6775D468033DCA448 /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECD0D88D22D5C35C85035416 /* AIService.swift */; };
 		80A2E37FB8D4432914E0C9BB /* MacLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65AE13C05DD8A0B56EB0A6BC /* MacLibraryView.swift */; };
+		833B060795E8BED1A6F96A97 /* CBZPublicationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46DBF2DEA9FD4BA8BD14A677 /* CBZPublicationTests.swift */; };
+		83767D97E6B4A02777C51054 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = 973593FDC4572E8A8894D03A /* index.html */; };
 		86B806EFD00C9DF996794A6A /* MacAIAssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54A23888C930E327D3B4D62E /* MacAIAssistantView.swift */; };
+		893C0A5CFFABFFE3BF71EBF0 /* rar5-solid-pages.rar in Resources */ = {isa = PBXBuildFile; fileRef = EE0B91CA81C1572552DCAAE4 /* rar5-solid-pages.rar */; };
+		89B2042C5459705CF48D6E92 /* NIOSSH in Frameworks */ = {isa = PBXBuildFile; productRef = DAE18DE0736CBEC4341583B0 /* NIOSSH */; };
+		8AB81C037CB74B61C5CEA356 /* MacReflowReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892C5E28E8147E58A12ED90B /* MacReflowReaderTests.swift */; };
+		90B068470C2BD1C261BCA710 /* AppleSyncPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 692ECFF924D5F1F09B0614D3 /* AppleSyncPipeline.swift */; };
+		937F39B02AE161225F3431B5 /* LICENSE-CC-BY-SA-4.0.txt in Resources */ = {isa = PBXBuildFile; fileRef = AC2CB1151E1DFB684B11B9C6 /* LICENSE-CC-BY-SA-4.0.txt */; };
+		970A2F2F2AAB521A8ECDF0CB /* BookLibraryRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12026F87D2B625A97EF8256 /* BookLibraryRepositories.swift */; };
 		99CB916CE3C005B1AC13181D /* RemoteStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95B6BEA01928C3EF7170BA1 /* RemoteStorage.swift */; };
+		9A47AB142FBEE93CC82511CC /* MacNativeReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B8CCCAED6C02B3B2A455D4 /* MacNativeReaderTests.swift */; };
+		9B2F04151C5343BBFAEEA64A /* Info 2.plist in Resources */ = {isa = PBXBuildFile; fileRef = B57E0E1CCA7718387680F472 /* Info 2.plist */; };
 		9B7D49A545BDA1EE0A3FF0E4 /* CloudReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C4D8636AB0409D34771BB02 /* CloudReaderApp.swift */; };
-		9C118FCCDD28480AE99EB9DD /* NIOSSH in Frameworks */ = {isa = PBXBuildFile; productRef = DAE18DE0736CBEC4341583B0 /* NIOSSH */; };
+		9C118FCCDD28480AE99EB9DD /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 4A74AF56DB37FF912B6E8246 /* ZIPFoundation */; };
+		9C70491198EFB93541F7DECD /* rar5-no-image.rar in Resources */ = {isa = PBXBuildFile; fileRef = D32D774E064247B39318585F /* rar5-no-image.rar */; };
+		AA460B322F1033CFEAA0A725 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 9D0EB27AD51B8F6AA8121ADA /* Citadel */; };
+		B1A002057A8E7258071B2AD2 /* ReaderChromeControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F590D3D844F038611930F07 /* ReaderChromeControls.swift */; };
+		B8B0A12FCD183B7042AE0FCF /* huffdic-unicode.mobi in Resources */ = {isa = PBXBuildFile; fileRef = 765FE39AB689DC0847884989 /* huffdic-unicode.mobi */; };
+		B8E211282BA42845A6C6FE4C /* rar4-solid-skip-unrelated.rar in Resources */ = {isa = PBXBuildFile; fileRef = 2EFCDDF37034871A317B16D6 /* rar4-solid-skip-unrelated.rar */; };
+		BDF85B42BCDF8A7EFE4C9FE9 /* encrypted-rar4.rar in Resources */ = {isa = PBXBuildFile; fileRef = 1F5A0C31E987EDCE9E79876D /* encrypted-rar4.rar */; };
+		BFC0F1CB81561ACFD11200A7 /* split-volume-rar5.rar in Resources */ = {isa = PBXBuildFile; fileRef = F8596EA4150DAB268321AA86 /* split-volume-rar5.rar */; };
+		C59F1EE734BB6B998D3FD310 /* mobi.js in Resources */ = {isa = PBXBuildFile; fileRef = C6E3FC138CFF92F29C5DD159 /* mobi.js */; };
+		C6524123F6A0F93F0B91CBF5 /* ReaderContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81F5A57A1E9F441891274038 /* ReaderContractTests.swift */; };
 		C849290A8B7F5A8609CD7CFD /* MacBookReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7BDF8C507725FD9FBB58E03 /* MacBookReaderView.swift */; };
+		C8BFB55FECC3158B874E6A7D /* ReaderContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B73ECD4FC4C6FC35FA653ED /* ReaderContracts.swift */; };
+		CC637B52BF43DCDF5BB41930 /* rich-kf8-image-links.azw3 in Resources */ = {isa = PBXBuildFile; fileRef = CE219312E78D0F7CEE29F3AE /* rich-kf8-image-links.azw3 */; };
+		CCCEB9CE90DFBFD5CE40DDD5 /* fflate.js in Resources */ = {isa = PBXBuildFile; fileRef = E264B428FD223BBB312DCD86 /* fflate.js */; };
+		CD06533130AFA9FF27E41FB4 /* EPUBPublication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD742A47BC3BE7EF01690DA /* EPUBPublication.swift */; };
+		D26639DDD01F554F30E1A30D /* MacComicReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32901C0A05277E2648AD1C7F /* MacComicReaderTests.swift */; };
+		D8B01E70C8C4E3C47ADC202B /* CloudReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7D02968A49EE39FFCE58ED9C /* CloudReaderCore */; };
+		DB8BF86AFDF8A89165B5EE22 /* THIRD_PARTY_NOTICES.txt in Resources */ = {isa = PBXBuildFile; fileRef = CC76CE58CDE278F0D647B600 /* THIRD_PARTY_NOTICES.txt */; };
 		E08DF97AC74207C9AA71FDFA /* MacSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7CA28063DD4E2FF966023A7 /* MacSettingsView.swift */; };
 		E1CC8C905EE05DC71FD3B171 /* DemoBookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F65A35A7021FBB234F3C736 /* DemoBookInstaller.swift */; };
+		F1386405779472E892A56DC5 /* CloudReaderMacContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 534BB988669FBAB04B8E9822 /* CloudReaderMacContractTests.swift */; };
 		F1F98EE555DBF6FA0F8145D8 /* BookLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83516A4AACD60F021DE79E9D /* BookLibrary.swift */; };
-		F74A3DEDDC8B955BE5786DD1 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 9D0EB27AD51B8F6AA8121ADA /* Citadel */; };
+		F331BD660C1D13EFFE1586E5 /* encrypted-headers-rar5.rar in Resources */ = {isa = PBXBuildFile; fileRef = A8DC7D09DAD1FB0BFA2C94F0 /* encrypted-headers-rar5.rar */; };
+		F74A3DEDDC8B955BE5786DD1 /* CloudReaderCore in Frameworks */ = {isa = PBXBuildFile; productRef = 9A515E7BC52F9E7BF21A6944 /* CloudReaderCore */; };
+		F79A7EFE3F9C65C8E9AB71D3 /* MacComicBookReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1987E3C2BDE9B4997504BB7 /* MacComicBookReader.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		A4A8F5E8EAC374A857889E11 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FF03DDF1E8BE4AD459432DFC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 455FC2035DD95B1EB6ADF6D5;
+			remoteInfo = CloudReader;
+		};
+		F271270B5D18B02DEA6FBF4C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FF03DDF1E8BE4AD459432DFC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 455FC2035DD95B1EB6ADF6D5;
+			remoteInfo = CloudReader;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		0132DE243B614336FA1152F6 /* KindlePublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KindlePublicationTests.swift; sourceTree = "<group>"; };
+		020DB972268B53D34D4A6669 /* CBRPublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CBRPublicationTests.swift; sourceTree = "<group>"; };
+		056A90C7ABFA4BAC69A05836 /* ComicPublication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComicPublication.swift; sourceTree = "<group>"; };
+		0812C7147DFF4DC00FB5D2D6 /* BookImportCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookImportCoordinator.swift; sourceTree = "<group>"; };
+		0825D4CF5DFE70ED9A08D3FD /* reflowable-kf8.azw3 */ = {isa = PBXFileReference; path = "reflowable-kf8.azw3"; sourceTree = "<group>"; };
+		0FD742A47BC3BE7EF01690DA /* EPUBPublication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBPublication.swift; sourceTree = "<group>"; };
+		1BDE335A70395253A4E68920 /* LICENSE-libarchive.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE-libarchive.txt"; sourceTree = "<group>"; };
+		1D42CECA92C856A6040348AF /* rar4-no-image.rar */ = {isa = PBXFileReference; path = "rar4-no-image.rar"; sourceTree = "<group>"; };
+		1F5A0C31E987EDCE9E79876D /* encrypted-rar4.rar */ = {isa = PBXFileReference; path = "encrypted-rar4.rar"; sourceTree = "<group>"; };
 		1F65A35A7021FBB234F3C736 /* DemoBookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoBookInstaller.swift; sourceTree = "<group>"; };
+		21C22EECA854133B8A31C9C6 /* LICENSE-libmobi.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE-libmobi.txt"; sourceTree = "<group>"; };
+		246D52D1C81D57D48C5D46C2 /* FB2PublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FB2PublicationTests.swift; sourceTree = "<group>"; };
+		27B2F8F87F69266A5EA1A873 /* rar4-absolute-directory.rar */ = {isa = PBXFileReference; path = "rar4-absolute-directory.rar"; sourceTree = "<group>"; };
+		2EFCDDF37034871A317B16D6 /* rar4-solid-skip-unrelated.rar */ = {isa = PBXFileReference; path = "rar4-solid-skip-unrelated.rar"; sourceTree = "<group>"; };
+		3002E678F95023EDE97C3493 /* rar4-solid-pages.rar */ = {isa = PBXFileReference; path = "rar4-solid-pages.rar"; sourceTree = "<group>"; };
+		32901C0A05277E2648AD1C7F /* MacComicReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacComicReaderTests.swift; sourceTree = "<group>"; };
+		3AE6D536E86C9488AD3A92BA /* MacReaderShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReaderShellTests.swift; sourceTree = "<group>"; };
 		3C4D8636AB0409D34771BB02 /* CloudReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudReaderApp.swift; sourceTree = "<group>"; };
-		4E3C8223719392BEFF5FDEFD /* Book.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Book.swift; sourceTree = "<group>"; };
+		3EC744D826CF7624E0253089 /* AIConversationHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConversationHistoryView.swift; sourceTree = "<group>"; };
+		43208CB29ADF0D5D6E3F05E5 /* EPUBResourcePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBResourcePolicy.swift; sourceTree = "<group>"; };
+		43316BB0CE099C95D82B8B1E /* EPUBNavigationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPUBNavigationPolicy.swift; sourceTree = "<group>"; };
+		46DBF2DEA9FD4BA8BD14A677 /* CBZPublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CBZPublicationTests.swift; sourceTree = "<group>"; };
+		4EE13497E1BE5A894C5C98F6 /* MacEPUBBookReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacEPUBBookReader.swift; sourceTree = "<group>"; };
+		4F3D59FD30AAE8357D93B899 /* rar5-symlink.rar */ = {isa = PBXFileReference; path = "rar5-symlink.rar"; sourceTree = "<group>"; };
 		506FD00B3CDC9899A6DFE954 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		534BB988669FBAB04B8E9822 /* CloudReaderMacContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudReaderMacContractTests.swift; sourceTree = "<group>"; };
 		54A23888C930E327D3B4D62E /* MacAIAssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAIAssistantView.swift; sourceTree = "<group>"; };
+		55B8CCCAED6C02B3B2A455D4 /* MacNativeReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacNativeReaderTests.swift; sourceTree = "<group>"; };
+		5835CB4FA6FA8C5D1A2D767B /* MacReaderAppearanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReaderAppearanceView.swift; sourceTree = "<group>"; };
+		59391F4DB7A25BB56682E618 /* CBRPublication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CBRPublication.swift; sourceTree = "<group>"; };
+		5D9BB58A4A0DDAF6F46ED9D2 /* AppleSyncLocalStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSyncLocalStateStore.swift; sourceTree = "<group>"; };
 		65AE13C05DD8A0B56EB0A6BC /* MacLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLibraryView.swift; sourceTree = "<group>"; };
+		692ECFF924D5F1F09B0614D3 /* AppleSyncPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSyncPipeline.swift; sourceTree = "<group>"; };
+		765FE39AB689DC0847884989 /* huffdic-unicode.mobi */ = {isa = PBXFileReference; path = "huffdic-unicode.mobi"; sourceTree = "<group>"; };
+		7B73ECD4FC4C6FC35FA653ED /* ReaderContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContracts.swift; sourceTree = "<group>"; };
 		7FC9A5FFC547BB5D5D74BAE5 /* CloudReaderIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudReaderIntents.swift; sourceTree = "<group>"; };
+		81F5A57A1E9F441891274038 /* ReaderContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContractTests.swift; sourceTree = "<group>"; };
 		83516A4AACD60F021DE79E9D /* BookLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookLibrary.swift; sourceTree = "<group>"; };
+		89039820BF307FFEC3951372 /* reflowable-combo.mobi */ = {isa = PBXFileReference; path = "reflowable-combo.mobi"; sourceTree = "<group>"; };
+		892C5E28E8147E58A12ED90B /* MacReflowReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReflowReaderTests.swift; sourceTree = "<group>"; };
+		90E9C721C5C7B6637354DFD1 /* rar4-pages.rar */ = {isa = PBXFileReference; path = "rar4-pages.rar"; sourceTree = "<group>"; };
+		973593FDC4572E8A8894D03A /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
+		97FD5BFA2F12F79361D98432 /* CloudReaderMacUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CloudReaderMacUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9F590D3D844F038611930F07 /* ReaderChromeControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderChromeControls.swift; sourceTree = "<group>"; };
+		A12026F87D2B625A97EF8256 /* BookLibraryRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookLibraryRepositories.swift; sourceTree = "<group>"; };
 		A7BDF8C507725FD9FBB58E03 /* MacBookReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacBookReaderView.swift; sourceTree = "<group>"; };
+		A8DC7D09DAD1FB0BFA2C94F0 /* encrypted-headers-rar5.rar */ = {isa = PBXFileReference; path = "encrypted-headers-rar5.rar"; sourceTree = "<group>"; };
+		AC2CB1151E1DFB684B11B9C6 /* LICENSE-CC-BY-SA-4.0.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE-CC-BY-SA-4.0.txt"; sourceTree = "<group>"; };
 		B3166AC9A4B254F8AF9F1BCD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B57E0E1CCA7718387680F472 /* Info 2.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "Info 2.plist"; sourceTree = "<group>"; };
+		BB080187BED32497049CB7D4 /* converter.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = converter.js; sourceTree = "<group>"; };
 		BE1AF131DBC43D0317272604 /* CloudReader.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CloudReader.entitlements; sourceTree = "<group>"; };
+		C2DF204387B3D19A414B2959 /* rar5-pages.rar */ = {isa = PBXFileReference; path = "rar5-pages.rar"; sourceTree = "<group>"; };
 		C4A24988001CCB5F1B9D2E9C /* CloudReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CloudReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C6E3FC138CFF92F29C5DD159 /* mobi.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = mobi.js; sourceTree = "<group>"; };
+		CC76CE58CDE278F0D647B600 /* THIRD_PARTY_NOTICES.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = THIRD_PARTY_NOTICES.txt; sourceTree = "<group>"; };
+		CD8599997B86965F22676717 /* KindlePublication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KindlePublication.swift; sourceTree = "<group>"; };
+		CE219312E78D0F7CEE29F3AE /* rich-kf8-image-links.azw3 */ = {isa = PBXFileReference; path = "rich-kf8-image-links.azw3"; sourceTree = "<group>"; };
+		D32D774E064247B39318585F /* rar5-no-image.rar */ = {isa = PBXFileReference; path = "rar5-no-image.rar"; sourceTree = "<group>"; };
+		D665E49C3264476590EA822A /* FB2Publication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FB2Publication.swift; sourceTree = "<group>"; };
+		DAB6559F409B1161D90E27A4 /* NOTICE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = NOTICE.txt; sourceTree = "<group>"; };
+		DD381370C082C7E58DB23E81 /* MacNativeBookReaders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacNativeBookReaders.swift; sourceTree = "<group>"; };
+		E1987E3C2BDE9B4997504BB7 /* MacComicBookReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacComicBookReader.swift; sourceTree = "<group>"; };
+		E264B428FD223BBB312DCD86 /* fflate.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = fflate.js; sourceTree = "<group>"; };
 		E630AA62BDCE2B5F9FF8F7E3 /* CloudReader_Field_Guide.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = CloudReader_Field_Guide.txt; sourceTree = "<group>"; };
+		E652A00501A350DB98046362 /* MacReaderUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReaderUITests.swift; sourceTree = "<group>"; };
+		EB0536F2C3C9BB2D8AEFC1F2 /* CloudReaderKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CloudReaderKit; path = ../../Packages/CloudReaderKit; sourceTree = SOURCE_ROOT; };
 		ECD0D88D22D5C35C85035416 /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
+		EDBBEF86334BA5C013D70C04 /* MacReaderUITestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReaderUITestFixtures.swift; sourceTree = "<group>"; };
+		EE0B91CA81C1572552DCAAE4 /* rar5-solid-pages.rar */ = {isa = PBXFileReference; path = "rar5-solid-pages.rar"; sourceTree = "<group>"; };
+		EF9081E23951497E839FD6BB /* CloudReaderMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CloudReaderMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7CA28063DD4E2FF966023A7 /* MacSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSettingsView.swift; sourceTree = "<group>"; };
+		F8596EA4150DAB268321AA86 /* split-volume-rar5.rar */ = {isa = PBXFileReference; path = "split-volume-rar5.rar"; sourceTree = "<group>"; };
 		F95B6BEA01928C3EF7170BA1 /* RemoteStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteStorage.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -49,9 +184,21 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F74A3DEDDC8B955BE5786DD1 /* Citadel in Frameworks */,
-				9C118FCCDD28480AE99EB9DD /* NIOSSH in Frameworks */,
-				3326F8330E3F37B7C697D477 /* NIO in Frameworks */,
+				F74A3DEDDC8B955BE5786DD1 /* CloudReaderCore in Frameworks */,
+				9C118FCCDD28480AE99EB9DD /* ZIPFoundation in Frameworks */,
+				3326F8330E3F37B7C697D477 /* Unrar in Frameworks */,
+				AA460B322F1033CFEAA0A725 /* Citadel in Frameworks */,
+				89B2042C5459705CF48D6E92 /* NIOSSH in Frameworks */,
+				3E5FF4AB4A9DBC9DB484840A /* NIO in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C67D689CF0676D31EE045FBB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6CA5C7CD9F8BD31591282C64 /* ZIPFoundation in Frameworks */,
+				D8B01E70C8C4E3C47ADC202B /* CloudReaderCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -61,10 +208,24 @@
 		108DEC0F2182DBC20D44270F /* Apps */ = {
 			isa = PBXGroup;
 			children = (
+				988ABF68559E73FAD6B95400 /* iOS */,
 				73AF7C6AD49555EE4AB9D413 /* Shared */,
 			);
 			name = Apps;
 			path = ..;
+			sourceTree = "<group>";
+		};
+		11F5AC1424469AFA3EC67568 /* KindleDecoder */ = {
+			isa = PBXGroup;
+			children = (
+				BB080187BED32497049CB7D4 /* converter.js */,
+				E264B428FD223BBB312DCD86 /* fflate.js */,
+				973593FDC4572E8A8894D03A /* index.html */,
+				C6E3FC138CFF92F29C5DD159 /* mobi.js */,
+				DAB6559F409B1161D90E27A4 /* NOTICE.txt */,
+				CC76CE58CDE278F0D647B600 /* THIRD_PARTY_NOTICES.txt */,
+			);
+			path = KindleDecoder;
 			sourceTree = "<group>";
 		};
 		137AF0E9D349F6ED7E5FACA3 = {
@@ -72,8 +233,19 @@
 			children = (
 				108DEC0F2182DBC20D44270F /* Apps */,
 				3E54A30DB1C4A1FBE37D5946 /* CloudReader */,
+				91C38069D03454BF00E3A19D /* CloudReaderTests */,
+				8B5A2DC40667C03C08481D08 /* CloudReaderUITests */,
+				1BDC2EF58C8E74DEA41B4C1D /* Packages */,
 				9412D0C39EFF5769027873D9 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		1BDC2EF58C8E74DEA41B4C1D /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				EB0536F2C3C9BB2D8AEFC1F2 /* CloudReaderKit */,
+			);
+			name = Packages;
 			sourceTree = "<group>";
 		};
 		31A6B8BCC2D743B2A3496A9D /* Resources */ = {
@@ -90,40 +262,155 @@
 				B3166AC9A4B254F8AF9F1BCD /* Assets.xcassets */,
 				BE1AF131DBC43D0317272604 /* CloudReader.entitlements */,
 				3C4D8636AB0409D34771BB02 /* CloudReaderApp.swift */,
+				B57E0E1CCA7718387680F472 /* Info 2.plist */,
 				506FD00B3CDC9899A6DFE954 /* Info.plist */,
 				54A23888C930E327D3B4D62E /* MacAIAssistantView.swift */,
 				A7BDF8C507725FD9FBB58E03 /* MacBookReaderView.swift */,
+				E1987E3C2BDE9B4997504BB7 /* MacComicBookReader.swift */,
+				4EE13497E1BE5A894C5C98F6 /* MacEPUBBookReader.swift */,
 				65AE13C05DD8A0B56EB0A6BC /* MacLibraryView.swift */,
+				DD381370C082C7E58DB23E81 /* MacNativeBookReaders.swift */,
+				5835CB4FA6FA8C5D1A2D767B /* MacReaderAppearanceView.swift */,
+				EDBBEF86334BA5C013D70C04 /* MacReaderUITestFixtures.swift */,
 				F7CA28063DD4E2FF966023A7 /* MacSettingsView.swift */,
 				31A6B8BCC2D743B2A3496A9D /* Resources */,
 			);
 			path = CloudReader;
 			sourceTree = "<group>";
 		};
+		6B78FFEAAE9D516DD40C9520 /* KindleFixtures */ = {
+			isa = PBXGroup;
+			children = (
+				765FE39AB689DC0847884989 /* huffdic-unicode.mobi */,
+				21C22EECA854133B8A31C9C6 /* LICENSE-libmobi.txt */,
+				89039820BF307FFEC3951372 /* reflowable-combo.mobi */,
+				0825D4CF5DFE70ED9A08D3FD /* reflowable-kf8.azw3 */,
+				CE219312E78D0F7CEE29F3AE /* rich-kf8-image-links.azw3 */,
+			);
+			path = KindleFixtures;
+			sourceTree = "<group>";
+		};
 		73AF7C6AD49555EE4AB9D413 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				3EC744D826CF7624E0253089 /* AIConversationHistoryView.swift */,
 				ECD0D88D22D5C35C85035416 /* AIService.swift */,
-				4E3C8223719392BEFF5FDEFD /* Book.swift */,
+				5D9BB58A4A0DDAF6F46ED9D2 /* AppleSyncLocalStateStore.swift */,
+				692ECFF924D5F1F09B0614D3 /* AppleSyncPipeline.swift */,
+				0812C7147DFF4DC00FB5D2D6 /* BookImportCoordinator.swift */,
 				83516A4AACD60F021DE79E9D /* BookLibrary.swift */,
+				A12026F87D2B625A97EF8256 /* BookLibraryRepositories.swift */,
+				59391F4DB7A25BB56682E618 /* CBRPublication.swift */,
 				7FC9A5FFC547BB5D5D74BAE5 /* CloudReaderIntents.swift */,
+				056A90C7ABFA4BAC69A05836 /* ComicPublication.swift */,
 				1F65A35A7021FBB234F3C736 /* DemoBookInstaller.swift */,
+				43316BB0CE099C95D82B8B1E /* EPUBNavigationPolicy.swift */,
+				0FD742A47BC3BE7EF01690DA /* EPUBPublication.swift */,
+				43208CB29ADF0D5D6E3F05E5 /* EPUBResourcePolicy.swift */,
+				D665E49C3264476590EA822A /* FB2Publication.swift */,
+				CD8599997B86965F22676717 /* KindlePublication.swift */,
+				9F590D3D844F038611930F07 /* ReaderChromeControls.swift */,
+				7B73ECD4FC4C6FC35FA653ED /* ReaderContracts.swift */,
 				F95B6BEA01928C3EF7170BA1 /* RemoteStorage.swift */,
+				11F5AC1424469AFA3EC67568 /* KindleDecoder */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		8B5A2DC40667C03C08481D08 /* CloudReaderUITests */ = {
+			isa = PBXGroup;
+			children = (
+				E652A00501A350DB98046362 /* MacReaderUITests.swift */,
+			);
+			path = CloudReaderUITests;
+			sourceTree = "<group>";
+		};
+		90DFE414EE41731C52CCB35C /* CBRFixtures */ = {
+			isa = PBXGroup;
+			children = (
+				A8DC7D09DAD1FB0BFA2C94F0 /* encrypted-headers-rar5.rar */,
+				1F5A0C31E987EDCE9E79876D /* encrypted-rar4.rar */,
+				AC2CB1151E1DFB684B11B9C6 /* LICENSE-CC-BY-SA-4.0.txt */,
+				1BDE335A70395253A4E68920 /* LICENSE-libarchive.txt */,
+				27B2F8F87F69266A5EA1A873 /* rar4-absolute-directory.rar */,
+				1D42CECA92C856A6040348AF /* rar4-no-image.rar */,
+				90E9C721C5C7B6637354DFD1 /* rar4-pages.rar */,
+				3002E678F95023EDE97C3493 /* rar4-solid-pages.rar */,
+				2EFCDDF37034871A317B16D6 /* rar4-solid-skip-unrelated.rar */,
+				D32D774E064247B39318585F /* rar5-no-image.rar */,
+				C2DF204387B3D19A414B2959 /* rar5-pages.rar */,
+				EE0B91CA81C1572552DCAAE4 /* rar5-solid-pages.rar */,
+				4F3D59FD30AAE8357D93B899 /* rar5-symlink.rar */,
+				F8596EA4150DAB268321AA86 /* split-volume-rar5.rar */,
+			);
+			path = CBRFixtures;
+			sourceTree = "<group>";
+		};
+		91C38069D03454BF00E3A19D /* CloudReaderTests */ = {
+			isa = PBXGroup;
+			children = (
+				534BB988669FBAB04B8E9822 /* CloudReaderMacContractTests.swift */,
+				32901C0A05277E2648AD1C7F /* MacComicReaderTests.swift */,
+				55B8CCCAED6C02B3B2A455D4 /* MacNativeReaderTests.swift */,
+				3AE6D536E86C9488AD3A92BA /* MacReaderShellTests.swift */,
+				892C5E28E8147E58A12ED90B /* MacReflowReaderTests.swift */,
+			);
+			path = CloudReaderTests;
+			sourceTree = "<group>";
+		};
+		920B9EF5D40151ACA7DAE971 /* CloudReaderTests */ = {
+			isa = PBXGroup;
+			children = (
+				020DB972268B53D34D4A6669 /* CBRPublicationTests.swift */,
+				46DBF2DEA9FD4BA8BD14A677 /* CBZPublicationTests.swift */,
+				246D52D1C81D57D48C5D46C2 /* FB2PublicationTests.swift */,
+				0132DE243B614336FA1152F6 /* KindlePublicationTests.swift */,
+				81F5A57A1E9F441891274038 /* ReaderContractTests.swift */,
+				90DFE414EE41731C52CCB35C /* CBRFixtures */,
+				6B78FFEAAE9D516DD40C9520 /* KindleFixtures */,
+			);
+			path = CloudReaderTests;
 			sourceTree = "<group>";
 		};
 		9412D0C39EFF5769027873D9 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				C4A24988001CCB5F1B9D2E9C /* CloudReader.app */,
+				EF9081E23951497E839FD6BB /* CloudReaderMacTests.xctest */,
+				97FD5BFA2F12F79361D98432 /* CloudReaderMacUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		988ABF68559E73FAD6B95400 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				920B9EF5D40151ACA7DAE971 /* CloudReaderTests */,
+			);
+			path = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0CBE6D831C6480304B5BB660 /* CloudReaderMacUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E4687DA57FE36D20302461ED /* Build configuration list for PBXNativeTarget "CloudReaderMacUITests" */;
+			buildPhases = (
+				4BB7F8422EC417F9F3D587A7 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8306743498BD01002AD05175 /* PBXTargetDependency */,
+			);
+			name = CloudReaderMacUITests;
+			packageProductDependencies = (
+			);
+			productName = CloudReaderMacUITests;
+			productReference = 97FD5BFA2F12F79361D98432 /* CloudReaderMacUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		455FC2035DD95B1EB6ADF6D5 /* CloudReader */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B391C5D595CBEBE0D4CEDD06 /* Build configuration list for PBXNativeTarget "CloudReader" */;
@@ -138,6 +425,9 @@
 			);
 			name = CloudReader;
 			packageProductDependencies = (
+				9A515E7BC52F9E7BF21A6944 /* CloudReaderCore */,
+				4A74AF56DB37FF912B6E8246 /* ZIPFoundation */,
+				4A0C4A4F454ED0F4912E30A2 /* Unrar */,
 				9D0EB27AD51B8F6AA8121ADA /* Citadel */,
 				DAE18DE0736CBEC4341583B0 /* NIOSSH */,
 				376BFD98C38CF59B7F0A530D /* NIO */,
@@ -145,6 +435,28 @@
 			productName = CloudReader;
 			productReference = C4A24988001CCB5F1B9D2E9C /* CloudReader.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B283FDBD14E194ADB9DC5CE9 /* CloudReaderMacTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B3A1F7F85D35FFE00998D1C9 /* Build configuration list for PBXNativeTarget "CloudReaderMacTests" */;
+			buildPhases = (
+				3B3291C101A44D2C2FFED68B /* Sources */,
+				CACC63A95521BAB05CAB9F7E /* Resources */,
+				C67D689CF0676D31EE045FBB /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1B60A8D2002C97FE96BF31FB /* PBXTargetDependency */,
+			);
+			name = CloudReaderMacTests;
+			packageProductDependencies = (
+				010CD113096700810F04442F /* ZIPFoundation */,
+				7D02968A49EE39FFCE58ED9C /* CloudReaderCore */,
+			);
+			productName = CloudReaderMacTests;
+			productReference = EF9081E23951497E839FD6BB /* CloudReaderMacTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -155,6 +467,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					0CBE6D831C6480304B5BB660 = {
+						TestTargetID = 455FC2035DD95B1EB6ADF6D5;
+					};
 					455FC2035DD95B1EB6ADF6D5 = {
 						ProvisioningStyle = Automatic;
 					};
@@ -171,8 +486,11 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D411FDF4D399B65DFD57B9C5 /* XCRemoteSwiftPackageReference "Citadel" */,
+				53F3F31F8BE3AFD5BB851538 /* XCRemoteSwiftPackageReference "Unrar.swift" */,
+				3FF1C3F06059F3A70811784F /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				BECF11616E041EDC8CA48234 /* XCRemoteSwiftPackageReference "swift-nio" */,
 				DADACB682E525A687587AA2C /* XCRemoteSwiftPackageReference "swift-nio-ssh" */,
+				21F72FC6393E9E95D632B519 /* XCLocalSwiftPackageReference "../../Packages/CloudReaderKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 9412D0C39EFF5769027873D9 /* Products */;
@@ -180,6 +498,8 @@
 			projectRoot = "";
 			targets = (
 				455FC2035DD95B1EB6ADF6D5 /* CloudReader */,
+				B283FDBD14E194ADB9DC5CE9 /* CloudReaderMacTests */,
+				0CBE6D831C6480304B5BB660 /* CloudReaderMacUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -191,6 +511,39 @@
 			files = (
 				4F99DEF662A7AB8988CA9F78 /* Assets.xcassets in Resources */,
 				6A946F88A989A61B411BDD2D /* CloudReader_Field_Guide.txt in Resources */,
+				9B2F04151C5343BBFAEEA64A /* Info 2.plist in Resources */,
+				7072F2013CFC50B034D07F64 /* NOTICE.txt in Resources */,
+				DB8BF86AFDF8A89165B5EE22 /* THIRD_PARTY_NOTICES.txt in Resources */,
+				166C6B7825322719E6C155EA /* converter.js in Resources */,
+				CCCEB9CE90DFBFD5CE40DDD5 /* fflate.js in Resources */,
+				83767D97E6B4A02777C51054 /* index.html in Resources */,
+				C59F1EE734BB6B998D3FD310 /* mobi.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CACC63A95521BAB05CAB9F7E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				937F39B02AE161225F3431B5 /* LICENSE-CC-BY-SA-4.0.txt in Resources */,
+				00B23FAAD65549113EC48422 /* LICENSE-libarchive.txt in Resources */,
+				0216FB04E8A105046B0AD725 /* LICENSE-libmobi.txt in Resources */,
+				F331BD660C1D13EFFE1586E5 /* encrypted-headers-rar5.rar in Resources */,
+				BDF85B42BCDF8A7EFE4C9FE9 /* encrypted-rar4.rar in Resources */,
+				B8B0A12FCD183B7042AE0FCF /* huffdic-unicode.mobi in Resources */,
+				451A0657616AB9FFECDAA20E /* rar4-absolute-directory.rar in Resources */,
+				16103416D5CA7E03ED84BD1A /* rar4-no-image.rar in Resources */,
+				0091ED66151EF12B1B8192BC /* rar4-pages.rar in Resources */,
+				1D629DA2CC2F9272308091F1 /* rar4-solid-pages.rar in Resources */,
+				B8E211282BA42845A6C6FE4C /* rar4-solid-skip-unrelated.rar in Resources */,
+				9C70491198EFB93541F7DECD /* rar5-no-image.rar in Resources */,
+				320722E46C9DBDDE97959E76 /* rar5-pages.rar in Resources */,
+				893C0A5CFFABFFE3BF71EBF0 /* rar5-solid-pages.rar in Resources */,
+				11BC0157045EF36718157E86 /* rar5-symlink.rar in Resources */,
+				002F119693E96786681530BC /* reflowable-combo.mobi in Resources */,
+				43E2A38AD15736F6B96B1B85 /* reflowable-kf8.azw3 in Resources */,
+				CC637B52BF43DCDF5BB41930 /* rich-kf8-image-links.azw3 in Resources */,
+				BFC0F1CB81561ACFD11200A7 /* split-volume-rar5.rar in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -201,23 +554,155 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4E4C2BCC334EB678F8654D02 /* AIConversationHistoryView.swift in Sources */,
 				8025ECB6775D468033DCA448 /* AIService.swift in Sources */,
-				395C7364D59B74B9D76CE42D /* Book.swift in Sources */,
+				3BC859614A702BB651566482 /* AppleSyncLocalStateStore.swift in Sources */,
+				90B068470C2BD1C261BCA710 /* AppleSyncPipeline.swift in Sources */,
+				21BA8D88932D788144173979 /* BookImportCoordinator.swift in Sources */,
 				F1F98EE555DBF6FA0F8145D8 /* BookLibrary.swift in Sources */,
+				970A2F2F2AAB521A8ECDF0CB /* BookLibraryRepositories.swift in Sources */,
+				642C7C61E1B9F99EA3D0A57B /* CBRPublication.swift in Sources */,
 				9B7D49A545BDA1EE0A3FF0E4 /* CloudReaderApp.swift in Sources */,
 				60CC7A1ACDE0886D32A7CE46 /* CloudReaderIntents.swift in Sources */,
+				7B4C589CC6442C992D8C182B /* ComicPublication.swift in Sources */,
 				E1CC8C905EE05DC71FD3B171 /* DemoBookInstaller.swift in Sources */,
+				6AFCAE458EFB4521E87EEE7B /* EPUBNavigationPolicy.swift in Sources */,
+				CD06533130AFA9FF27E41FB4 /* EPUBPublication.swift in Sources */,
+				6D0070137682FC9B9D6A484A /* EPUBResourcePolicy.swift in Sources */,
+				708ED7B9FE62AC4B77AF6B28 /* FB2Publication.swift in Sources */,
+				286142D27B0EEDB56E7F49AD /* KindlePublication.swift in Sources */,
 				86B806EFD00C9DF996794A6A /* MacAIAssistantView.swift in Sources */,
 				C849290A8B7F5A8609CD7CFD /* MacBookReaderView.swift in Sources */,
+				F79A7EFE3F9C65C8E9AB71D3 /* MacComicBookReader.swift in Sources */,
+				6D0931B97C86FDC384C5886B /* MacEPUBBookReader.swift in Sources */,
 				80A2E37FB8D4432914E0C9BB /* MacLibraryView.swift in Sources */,
+				7CAE59C87560CBA3C933088A /* MacNativeBookReaders.swift in Sources */,
+				5981A19E07963C92DA784764 /* MacReaderAppearanceView.swift in Sources */,
+				153C64881A21D82102050D93 /* MacReaderUITestFixtures.swift in Sources */,
 				E08DF97AC74207C9AA71FDFA /* MacSettingsView.swift in Sources */,
+				B1A002057A8E7258071B2AD2 /* ReaderChromeControls.swift in Sources */,
+				C8BFB55FECC3158B874E6A7D /* ReaderContracts.swift in Sources */,
 				99CB916CE3C005B1AC13181D /* RemoteStorage.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3B3291C101A44D2C2FFED68B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29D549F4D82987F37C829477 /* CBRPublicationTests.swift in Sources */,
+				833B060795E8BED1A6F96A97 /* CBZPublicationTests.swift in Sources */,
+				F1386405779472E892A56DC5 /* CloudReaderMacContractTests.swift in Sources */,
+				1A7954C7D5EDDBF1120D1872 /* FB2PublicationTests.swift in Sources */,
+				6BCACC7E750605467BB07542 /* KindlePublicationTests.swift in Sources */,
+				D26639DDD01F554F30E1A30D /* MacComicReaderTests.swift in Sources */,
+				9A47AB142FBEE93CC82511CC /* MacNativeReaderTests.swift in Sources */,
+				11864210B17BE9F0CBC318EF /* MacReaderShellTests.swift in Sources */,
+				8AB81C037CB74B61C5CEA356 /* MacReflowReaderTests.swift in Sources */,
+				C6524123F6A0F93F0B91CBF5 /* ReaderContractTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4BB7F8422EC417F9F3D587A7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2E70D45356CDF7E239E696CD /* MacReaderUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		1B60A8D2002C97FE96BF31FB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 455FC2035DD95B1EB6ADF6D5 /* CloudReader */;
+			targetProxy = F271270B5D18B02DEA6FBF4C /* PBXContainerItemProxy */;
+		};
+		8306743498BD01002AD05175 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 455FC2035DD95B1EB6ADF6D5 /* CloudReader */;
+			targetProxy = A4A8F5E8EAC374A857889E11 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		155DFDBC07C9D4DA006A80FD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.haige120.cloudreader.macos.uitests;
+				PRODUCT_MODULE_NAME = CloudReaderMacUITests;
+				PRODUCT_NAME = CloudReaderMacUITests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = CloudReader;
+			};
+			name = Release;
+		};
+		1747C0612A6870155CE974F0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.haige120.cloudreader.macos.uitests;
+				PRODUCT_MODULE_NAME = CloudReaderMacUITests;
+				PRODUCT_NAME = CloudReaderMacUITests;
+				SDKROOT = macosx;
+				TEST_TARGET_NAME = CloudReader;
+			};
+			name = Debug;
+		};
+		1A58601A27AC97351F9BA96B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.haige120.cloudreader.macos.tests;
+				PRODUCT_MODULE_NAME = CloudReaderMacTests;
+				PRODUCT_NAME = CloudReaderMacTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CloudReader.app/Contents/MacOS/CloudReader";
+			};
+			name = Debug;
+		};
+		4A52D3D96E1E8384CD90E426 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.haige120.cloudreader.macos.tests;
+				PRODUCT_MODULE_NAME = CloudReaderMacTests;
+				PRODUCT_NAME = CloudReaderMacTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CloudReader.app/Contents/MacOS/CloudReader";
+			};
+			name = Release;
+		};
 		74275F0C9D3EBE38DA1B5902 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -251,8 +736,10 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CLOUDREADER_APP_BUNDLE_IDENTIFIER = io.github.haige120.cloudreader.macos;
 				CODE_SIGN_ENTITLEMENTS = CloudReader/CloudReader.entitlements;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -275,6 +762,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = CloudReader;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -320,8 +808,10 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CLOUDREADER_APP_BUNDLE_IDENTIFIER = io.github.haige120.cloudreader.macos;
 				CODE_SIGN_ENTITLEMENTS = CloudReader/CloudReader.entitlements;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -338,6 +828,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = CloudReader;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.haige120.cloudreader.macos;
@@ -360,6 +851,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CLOUDREADER_APP_BUNDLE_IDENTIFIER)";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
@@ -376,6 +868,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CLOUDREADER_APP_BUNDLE_IDENTIFIER)";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 			};
@@ -402,9 +895,50 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		B3A1F7F85D35FFE00998D1C9 /* Build configuration list for PBXNativeTarget "CloudReaderMacTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A58601A27AC97351F9BA96B /* Debug */,
+				4A52D3D96E1E8384CD90E426 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E4687DA57FE36D20302461ED /* Build configuration list for PBXNativeTarget "CloudReaderMacUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1747C0612A6870155CE974F0 /* Debug */,
+				155DFDBC07C9D4DA006A80FD /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		21F72FC6393E9E95D632B519 /* XCLocalSwiftPackageReference "../../Packages/CloudReaderKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../Packages/CloudReaderKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
+		3FF1C3F06059F3A70811784F /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.20;
+			};
+		};
+		53F3F31F8BE3AFD5BB851538 /* XCRemoteSwiftPackageReference "Unrar.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mtgto/Unrar.swift.git";
+			requirement = {
+				kind = revision;
+				revision = 7216007a38ac122dbdeae26cfdaf7f10775c868f;
+			};
+		};
 		BECF11616E041EDC8CA48234 /* XCRemoteSwiftPackageReference "swift-nio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-nio.git";
@@ -432,10 +966,33 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		010CD113096700810F04442F /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3FF1C3F06059F3A70811784F /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
+		};
 		376BFD98C38CF59B7F0A530D /* NIO */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BECF11616E041EDC8CA48234 /* XCRemoteSwiftPackageReference "swift-nio" */;
 			productName = NIO;
+		};
+		4A0C4A4F454ED0F4912E30A2 /* Unrar */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 53F3F31F8BE3AFD5BB851538 /* XCRemoteSwiftPackageReference "Unrar.swift" */;
+			productName = Unrar;
+		};
+		4A74AF56DB37FF912B6E8246 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3FF1C3F06059F3A70811784F /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
+		};
+		7D02968A49EE39FFCE58ED9C /* CloudReaderCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CloudReaderCore;
+		};
+		9A515E7BC52F9E7BF21A6944 /* CloudReaderCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = CloudReaderCore;
 		};
 		9D0EB27AD51B8F6AA8121ADA /* Citadel */ = {
 			isa = XCSwiftPackageProductDependency;

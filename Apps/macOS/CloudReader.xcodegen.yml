@@ -7,7 +7,10 @@ options:
 settings:
   base:
     PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader.macos
+    CLOUDREADER_APP_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader.macos
     PRODUCT_NAME: CloudReader
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "2"
     SWIFT_VERSION: "5.0"
     MACOSX_DEPLOYMENT_TARGET: "15.0"
     GENERATE_INFOPLIST_FILE: YES
@@ -22,6 +25,8 @@ targets:
     info:
       path: CloudReader/Info.plist
       properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleURLTypes:
           - CFBundleURLName: io.github.haige120.cloudreader
             CFBundleURLSchemes:
@@ -30,9 +35,21 @@ targets:
     sources:
       - path: CloudReader
       - path: ../Shared
+        excludes:
+          - AppleSyncPipeline 2.swift
+          - BookImportCoordinator 2.swift
+          - KindleDecoder
+      - path: ../Shared/KindleDecoder
+        buildPhase: resources
     resources:
       - path: CloudReader/Resources/CloudReader_Field_Guide.txt
     dependencies:
+      - package: CloudReaderKit
+        product: CloudReaderCore
+      - package: ZIPFoundation
+        product: ZIPFoundation
+      - package: Unrar
+        product: Unrar
       - package: Citadel
         product: Citadel
       - package: swift-nio-ssh
@@ -42,7 +59,55 @@ targets:
     settings:
       base:
         CODE_SIGN_STYLE: Automatic
+        PRODUCT_BUNDLE_IDENTIFIER: $(CLOUDREADER_APP_BUNDLE_IDENTIFIER)
         SWIFT_EMIT_LOC_STRINGS: YES
+  CloudReaderMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: CloudReaderTests
+      - path: ../iOS/CloudReaderTests/CBZPublicationTests.swift
+      - path: ../iOS/CloudReaderTests/CBRPublicationTests.swift
+      - path: ../iOS/CloudReaderTests/KindlePublicationTests.swift
+      - path: ../iOS/CloudReaderTests/FB2PublicationTests.swift
+      - path: ../iOS/CloudReaderTests/ReaderContractTests.swift
+      - path: ../iOS/CloudReaderTests/CBRFixtures
+        buildPhase: resources
+        excludes:
+          - NOTICE.txt
+      - path: ../iOS/CloudReaderTests/KindleFixtures
+        buildPhase: resources
+        excludes:
+          - NOTICE.txt
+          - '*.go'
+          - go.mod
+          - go.sum
+    dependencies:
+      - target: CloudReader
+      - package: ZIPFoundation
+        product: ZIPFoundation
+      - package: CloudReaderKit
+        product: CloudReaderCore
+    settings:
+      base:
+        PRODUCT_NAME: CloudReaderMacTests
+        PRODUCT_MODULE_NAME: CloudReaderMacTests
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader.macos.tests
+        GENERATE_INFOPLIST_FILE: YES
+  CloudReaderMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: CloudReaderUITests
+    dependencies:
+      - target: CloudReader
+    settings:
+      base:
+        PRODUCT_NAME: CloudReaderMacUITests
+        PRODUCT_MODULE_NAME: CloudReaderMacUITests
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader.macos.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: CloudReader
 schemes:
   CloudReader:
     build:
@@ -50,7 +115,21 @@ schemes:
         CloudReader: all
     run:
       config: Debug
+    test:
+      targets:
+        - CloudReaderMacTests
+        - CloudReaderMacUITests
+      environmentVariables:
+        CLOUDREADER_TEST_HOST: "1"
 packages:
+  Unrar:
+    url: https://github.com/mtgto/Unrar.swift.git
+    revision: 7216007a38ac122dbdeae26cfdaf7f10775c868f
+  CloudReaderKit:
+    path: ../../Packages/CloudReaderKit
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: 0.9.20
   Citadel:
     url: https://github.com/orlandos-nl/Citadel.git
     from: 0.12.1

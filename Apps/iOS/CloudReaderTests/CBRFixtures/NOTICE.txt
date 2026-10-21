@@ -1,0 +1,48 @@
+Parser and safety archives copied unchanged from the Unrar.swift 0.5.4 test suite:
+https://github.com/mtgto/Unrar.swift/tree/7216007a38ac122dbdeae26cfdaf7f10775c868f/Tests/UnrarTests/fixture
+
+`split-volume-rar5.rar` is an exact copy of upstream `volumes.part1.rar` from
+that pinned fixture directory (SHA-256:
+5c3c1bd2b8413850e43a018c9222613512eb1bb63cf801194ff950ac4a8b7c8a). It contains
+the photo credited below. The photo's separate license applies to the photo,
+not to the RAR container or other fixture archives.
+
+The included UnRAR implementation and notices are retained under
+`ThirdPartyLicenses/UnrarSwift/`. The other Unrar.swift fixtures are parser and
+safety cases; they do not establish image-page or solid-compression coverage.
+
+Image-bearing RAR fixtures (RAR4/RAR5, solid and nonsolid) copied unchanged
+from the CC0 test corpus at:
+https://github.com/ssokolow/rar-test-files/tree/16b785c2b1b504e99fc307676e5369a26d3ce060/build
+Files: testfile.rar3.cbr, testfile.rar3.solid.cbr, testfile.rar5.cbr, testfile.rar5.solid.cbr.
+The archived testfile.jpg and testfile.png images were created from scratch by
+the corpus author and are dedicated to the public domain under CC0 1.0.
+
+rar4-absolute-directory.rar is derived from the Unrar.swift 0.5.4
+multibyte.v4.rar fixture above. Its zero-length directory header was changed to
+the absolute path /evil/ and its RAR4 header checksum was recalculated.
+
+rar4-solid-skip-unrelated.rar is derived from the CC0 RAR4 image fixture above.
+The first member was renamed from testfile.jpg to testfile.txt, the following
+PNG member's solid flag was set, and both RAR4 header checksums were recalculated.
+This lets the test verify that skipping a non-page member leaves solid extraction
+state usable for the next image.
+
+rar5-symlink.rar is decoded unchanged from libarchive's
+test_read_format_rar5_symlink.rar.uu fixture at:
+https://github.com/libarchive/libarchive/tree/03b426003adf12c1eb4c34e72bedb4c2bf1ba8d3/libarchive/test
+The fixture is covered by the libarchive distribution's BSD-style terms in
+COPYING.
+
+Photo embedded in split-volume-rar5.rar
+----------------------------------------
+Title: “1000 years Old Thanjavur Brihadeeshwara Temple View at Sunrise”
+Author: KARTY JazZ
+Source: https://commons.wikimedia.org/wiki/File:1000_years_Old_Thanjavur_Brihadeeshwara_Temple_View_at_Sunrise.jpg
+License: Creative Commons Attribution-ShareAlike 4.0 International
+License URL: https://creativecommons.org/licenses/by-sa/4.0/
+Full license text: LICENSE-CC-BY-SA-4.0.txt
+
+The archive member is a 1024 × 683 resized rendition of the photographer's
+5184 × 3456 image, stored as a JPEG test member. It is provided under CC
+BY-SA 4.0. See the linked source page for the original file and author record.

@@ -1,9 +1,46 @@
 import Foundation
+import CloudReaderCore
 import XCTest
 @testable import CloudReader
 
 @MainActor
 final class BookLibraryTests: XCTestCase {
+    private final class SelectiveFailingRepository: LibraryRepository {
+        let base: JSONLibraryRepository
+        var failNextBooksSave = false
+
+        init(root: URL) { base = JSONLibraryRepository(root: root) }
+        func load() -> LibrarySnapshot { base.load() }
+        func save(_ snapshot: LibrarySnapshot, collections: Set<LibraryCollection>) throws {
+            if failNextBooksSave && collections.contains(.books) {
+                failNextBooksSave = false
+                throw CocoaError(.fileWriteOutOfSpace)
+            }
+            try base.save(snapshot, collections: collections)
+        }
+    }
+
+    private func makeIsolatedLibrary() -> (library: BookLibrary, storageDirectory: URL, defaults: UserDefaults) {
+        let identifier = UUID().uuidString
+        let storageDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CloudReaderTests-\(identifier)", isDirectory: true)
+        let suiteName = "CloudReaderTests.\(identifier)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: storageDirectory)
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        return (BookLibrary(storageDirectory: storageDirectory, defaults: defaults), storageDirectory, defaults)
+    }
+
+    private func nestedUnknownManifest() throws -> RemoteLibraryManifest {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("../../../Contracts/v1/fixtures/nested-unknown.json")
+            .standardizedFileURL
+        return try JSONDecoder().decode(RemoteLibraryManifest.self, from: Data(contentsOf: fixtureURL))
+    }
+
     func testImportPreservesOriginalAndSavesLocalReadingState() throws {
         let source = FileManager.default.temporaryDirectory
             .appendingPathComponent("CloudReader-\(UUID().uuidString).txt")
@@ -11,7 +48,8 @@ final class BookLibraryTests: XCTestCase {
         try original.write(to: source)
         defer { try? FileManager.default.removeItem(at: source) }
 
-        let library = BookLibrary()
+        let isolated = makeIsolatedLibrary()
+        let library = isolated.library
         library.importBooks(from: [source])
 
         let book = try XCTUnwrap(library.books.first)
@@ -22,13 +60,77 @@ final class BookLibraryTests: XCTestCase {
         library.updateProgress(for: book.id, to: 0.6)
         library.toggleBookmark(book)
 
-        let reloadedLibrary = BookLibrary()
+        let reloadedLibrary = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults)
         let reloadedBook = try XCTUnwrap(reloadedLibrary.books.first(where: { $0.id == book.id }))
         XCTAssertEqual(reloadedBook.progress, 0.6, accuracy: 0.001)
         XCTAssertTrue(reloadedBook.isBookmarked)
         XCTAssertNotNil(reloadedBook.briefDescription)
 
         library.remove(book)
+    }
+
+    func testInjectedRepositoryFailureRollsBackImportAndDelete() throws {
+        let isolated = makeIsolatedLibrary()
+        try FileManager.default.createDirectory(at: isolated.storageDirectory, withIntermediateDirectories: true)
+        let source = isolated.storageDirectory.appendingPathComponent("source.txt")
+        try Data("A safely imported book.".utf8).write(to: source)
+        let repository = SelectiveFailingRepository(root: isolated.storageDirectory)
+        let library = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults, repository: repository)
+
+        repository.failNextBooksSave = true
+        library.importBooks(from: [source])
+        XCTAssertTrue(library.books.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertTrue((try? FileManager.default.contentsOfDirectory(atPath: isolated.storageDirectory.appendingPathComponent("Books").path).isEmpty) ?? true)
+
+        let seeded = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults)
+        seeded.importBooks(from: [source])
+        let book = try XCTUnwrap(seeded.books.first)
+        let deleteRepository = SelectiveFailingRepository(root: isolated.storageDirectory)
+        let deleteLibrary = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults, repository: deleteRepository)
+        deleteRepository.failNextBooksSave = true
+
+        deleteLibrary.remove(book)
+
+        XCTAssertEqual(deleteLibrary.books.map(\.id), [book.id])
+        XCTAssertTrue(deleteLibrary.deletedBooks.isEmpty)
+        XCTAssertNotNil(deleteLibrary.fileURL(for: book))
+    }
+
+    func testFailedSyncedDeletionKeepsBookRecordAndManagedBytes() throws {
+        let isolated = makeIsolatedLibrary()
+        try FileManager.default.createDirectory(at: isolated.storageDirectory, withIntermediateDirectories: true)
+        let repository = SelectiveFailingRepository(root: isolated.storageDirectory)
+        let library = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults, repository: repository)
+        let source = isolated.storageDirectory.appendingPathComponent("source.txt")
+        try Data("keep until deletion is durable".utf8).write(to: source)
+        library.importBooks(from: [source])
+        let book = try XCTUnwrap(library.books.first)
+        let managedURL = try XCTUnwrap(library.fileURL(for: book))
+
+        repository.failNextBooksSave = true
+        library.applySyncedDeletion(BookDeletion(bookID: book.id, deletedAt: .distantFuture))
+
+        XCTAssertEqual(library.books.first?.id, book.id)
+        XCTAssertTrue(library.deletedBooks.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: managedURL.path))
+        let reopened = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults)
+        XCTAssertEqual(reopened.books.first?.id, book.id)
+    }
+
+    func testMissingManagedCopyCanBeRestoredBySyncedContent() throws {
+        let isolated = makeIsolatedLibrary()
+        try FileManager.default.createDirectory(at: isolated.storageDirectory, withIntermediateDirectories: true)
+        let source = isolated.storageDirectory.appendingPathComponent("source.txt")
+        try Data("Original contents".utf8).write(to: source)
+        let library = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults)
+        library.importBooks(from: [source])
+        let book = try XCTUnwrap(library.books.first)
+        try FileManager.default.removeItem(at: XCTUnwrap(library.fileURL(for: book)))
+
+        XCTAssertNil(library.fileURL(for: book))
+        XCTAssertTrue(library.applySyncedBook(book, contents: Data("Restored contents".utf8)))
+        XCTAssertEqual(library.data(for: try XCTUnwrap(library.books.first)), Data("Restored contents".utf8))
     }
 
     func testSupportedFileExtensionsAreCaseInsensitive() {
@@ -59,13 +161,14 @@ final class BookLibraryTests: XCTestCase {
     }
 
     func testManagedLibraryRejectsRemotePathTraversal() {
-        let library = BookLibrary()
+        let library = makeIsolatedLibrary().library
         let hostileRecord = Book(title: "Outside", fileName: "../outside.pdf", format: .pdf)
         XCTAssertNil(library.fileURL(for: hostileRecord))
     }
 
     func testAIConversationIsSavedLocallyAndRestoredFromHistory() throws {
-        let library = BookLibrary()
+        let isolated = makeIsolatedLibrary()
+        let library = isolated.library
         let id = UUID()
         let record = AIConversationRecord(
             id: id,
@@ -78,7 +181,7 @@ final class BookLibraryTests: XCTestCase {
 
         library.saveAIConversation(record)
 
-        let reloaded = BookLibrary()
+        let reloaded = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults)
         let restored = try XCTUnwrap(reloaded.aiConversations.first(where: { $0.id == id }))
         XCTAssertEqual(restored.messages.map(\.text), ["What does this passage mean?", "It explains the central idea."])
         XCTAssertEqual(restored.bookTitle, "The Open Shelf")
@@ -106,6 +209,21 @@ final class BookLibraryTests: XCTestCase {
         XCTAssertEqual(merged.modifiedAt, remote.modifiedAt)
     }
 
+    func testEqualTimeConversationAndMessageCollisionsArePermutationStable() {
+        let conversationID = UUID(uuidString: "00000000-0000-0000-0000-000000000010")!
+        let messageID = UUID(uuidString: "00000000-0000-0000-0000-000000000011")!
+        let timestamp = Date(timeIntervalSinceReferenceDate: 20)
+        let a = AIConversationRecord(id: conversationID, title: "Alpha", messages: [
+            AIConversationMessage(id: messageID, role: .user, text: "original", createdAt: timestamp)
+        ], createdAt: timestamp, modifiedAt: timestamp)
+        let b = AIConversationRecord(id: conversationID, title: "Beta", messages: [
+            AIConversationMessage(id: messageID, role: .user, text: "different", createdAt: timestamp)
+        ], createdAt: timestamp, modifiedAt: timestamp)
+
+        XCTAssertEqual(a.merging(b), b.merging(a))
+        XCTAssertEqual(a.merging(b).merging(a), a.merging(b))
+    }
+
     func testOldSyncManifestDecodesWithoutConversationFields() throws {
         let legacy = Data(#"{"schemaVersion":1,"updatedAt":0,"books":[],"deletions":[]}"#.utf8)
 
@@ -114,6 +232,46 @@ final class BookLibraryTests: XCTestCase {
         XCTAssertEqual(manifest.schemaVersion, 1)
         XCTAssertTrue(manifest.conversations.isEmpty)
         XCTAssertTrue(manifest.conversationDeletions.isEmpty)
+    }
+
+    func testUnknownFieldsSurviveLocalSaveReloadAndKnownFieldReplacement() throws {
+        let manifest = try nestedUnknownManifest()
+        let isolated = makeIsolatedLibrary()
+        let library = isolated.library
+        var book = try XCTUnwrap(manifest.books.first?.book)
+        let originalBookID = book.id
+        XCTAssertTrue(library.applySyncedBook(book, contents: Data("fixture book".utf8)))
+        book.title = "Edited locally"
+        XCTAssertTrue(library.applySyncedBook(book, contents: Data("replacement book".utf8)))
+        library.updateProgress(for: book.id, to: 0.4)
+        library.flushPendingChanges()
+        if let deletion = manifest.deletions.first { library.applySyncedDeletion(deletion) }
+
+        var conversation = try XCTUnwrap(manifest.conversations.first)
+        library.applySyncedAIConversation(conversation)
+        conversation.messages[0].text = "Edited question"
+        library.saveAIConversation(conversation)
+
+        let reloaded = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults)
+        let restoredBook = try XCTUnwrap(reloaded.books.first(where: { $0.id == originalBookID }))
+        XCTAssertEqual(restoredBook.title, "Edited locally")
+        XCTAssertEqual(restoredBook.progress, 0.4, accuracy: 0.001)
+        let restoredConversation = try XCTUnwrap(reloaded.aiConversations.first)
+        XCTAssertEqual(restoredConversation.messages.first?.text, "Edited question")
+        XCTAssertEqual(restoredConversation.messages.first?.role, .unknown("futureRole"))
+
+        func encodedObject<T: Encodable>(_ value: T) throws -> [String: Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(value)) as? [String: Any])
+        }
+        let bookObject = try encodedObject(restoredBook)
+        XCTAssertNotNil(bookObject["futureBook"])
+        let restoredDeletion = try XCTUnwrap(reloaded.deletedBooks.first)
+        let deletionObject = try encodedObject(restoredDeletion)
+        XCTAssertNotNil(deletionObject["futureTombstone"])
+        let conversationObject = try encodedObject(restoredConversation)
+        XCTAssertNotNil(conversationObject["futureConversation"])
+        let messageObject = try XCTUnwrap((conversationObject["messages"] as? [[String: Any]])?.first)
+        XCTAssertNotNil(messageObject["futureMessage"])
     }
 
     func testSyncManifestRoundTripsConversationMessagesAndReaderContext() throws {
@@ -136,23 +294,9 @@ final class BookLibraryTests: XCTestCase {
     }
 
     func testMultipleCloudDestinationsPersistWithoutDuplicates() {
-        let defaults = UserDefaults.standard
-        let previousDestinations = defaults.object(forKey: "cloudreader.providers")
-        let previousLegacyDestination = defaults.object(forKey: "cloudreader.provider")
-        defer {
-            if let previousDestinations {
-                defaults.set(previousDestinations, forKey: "cloudreader.providers")
-            } else {
-                defaults.removeObject(forKey: "cloudreader.providers")
-            }
-            if let previousLegacyDestination {
-                defaults.set(previousLegacyDestination, forKey: "cloudreader.provider")
-            } else {
-                defaults.removeObject(forKey: "cloudreader.provider")
-            }
-        }
-
-        let sync = CloudSyncCoordinator()
+        let isolated = makeIsolatedLibrary()
+        let defaults = isolated.defaults
+        let sync = CloudSyncCoordinator(defaults: defaults)
         sync.selectedProviders = [.googleDrive, .dropbox, .googleDrive]
 
         XCTAssertEqual(sync.selectedProviders, [.googleDrive, .dropbox])

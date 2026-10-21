@@ -1,0 +1,1 @@
+{"classification":"reject","expected":"Reject before using a digest that is not exactly 64 lowercase hexadecimal characters.","currentPlatformNotes":"Android and Apple reject malformed digests during remote-manifest validation, before reading a referenced book object."}

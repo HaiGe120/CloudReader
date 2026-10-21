@@ -1,0 +1,6 @@
+github.com/behringer24/azw3 v0.5.2 h1:/UP6lCNear6Njq0Lm62m6rU6lrqL4rFltgiFhgIm81c=
+github.com/behringer24/azw3 v0.5.2/go.mod h1:ho++iaoxs6pvhRBgajJsqEkSmDMBhggFykMAkEWkvcc=
+github.com/behringer24/mobi v0.9.0 h1:/11L1Glxt9Pth3xaeH1bb2WE8TOMOL7qtV9QHtJyObQ=
+github.com/behringer24/mobi v0.9.0/go.mod h1:0Bmhx7vwgsKJZkj3IxbqKaSGuHxCKrQfPzlVFlIrKkM=
+golang.org/x/text v0.21.0 h1:zyQAAkrwaneQ066sspRyJaG9VNi/YJ1NfzcGB3hZ/qo=
+golang.org/x/text v0.21.0/go.mod h1:4IBbMaMmOPCJ8SecivzSH54+73PCFmPWxNTLm+vZkEQ=
