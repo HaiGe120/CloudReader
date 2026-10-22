@@ -1,6 +1,27 @@
 package io.github.haige120.cloudreader
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.Typeface
+import android.view.GestureDetector
+import android.view.MotionEvent
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
@@ -12,15 +33,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -31,7 +48,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,11 +65,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -70,11 +86,10 @@ import kotlinx.coroutines.withContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
-private class ReaderViewState(var textSize: Float, var font: String, var theme: String, var fraction: Float, var restoring: Boolean = true)
+private class ReaderViewState(var textSize: Float, var font: String, var theme: String, var fraction: Float, var restoring: Boolean = true, var content: String? = null)
 
 @Composable
 fun TextBookScreen(app: CloudReaderApp, book: BookRecord, onClose: () -> Unit, onAsk: (String) -> Unit) {
-    val configuration = LocalConfiguration.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
     var contents by remember(book.id) { mutableStateOf<String?>(null) }
@@ -93,9 +108,8 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRecord, onClose: () -> Unit, o
         })
     }
     fun flushProgress() { app.applicationScope.launch { readerSession.flush() } }
-    var controlsVisible by rememberSaveable(book.id) { mutableStateOf(true) }
+    var currentProgress by rememberSaveable(book.id) { mutableStateOf(book.progress) }
     var facingOffset by rememberSaveable(book.id) { mutableIntStateOf(book.localLocation?.substringAfter("txt:")?.substringBefore(':')?.toIntOrNull() ?: 0) }
-    val readerTheme = if (themeSetting == "system" && isSystemInDarkTheme()) "dark" else themeSetting
 
     DisposableEffect(lifecycleOwner, book.id) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) flushProgress() }
@@ -124,95 +138,163 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRecord, onClose: () -> Unit, o
         app.library.opened(book)
     }
 
-    Surface(Modifier.fillMaxSize(), color = Color(readerBackground(readerTheme, customBackground))) {
-        Box(Modifier.fillMaxSize()) {
+    TextReaderContent(
+        bookId = book.id,
+        title = book.title,
+        contents = contents,
+        error = error,
+        progress = currentProgress,
+        initialProgress = book.progress,
+        initialOffset = restoredTextOffset ?: 0,
+        facingOffset = facingOffset,
+        appearance = TextReaderAppearance(fontSize, fontSetting, themeSetting, customBackground, customForeground, layoutSetting),
+        onSettingChanged = { key, value -> scope.launch { app.preferences.set(key, value) } },
+        onProgress = { fraction, offset ->
+            currentProgress = fraction
+            facingOffset = offset
+            readerSession.checkpoint(fraction, "txt:$offset:utf16")
+        },
+        onClose = { flushProgress(); onClose() },
+        onAsk = onAsk,
+    )
+}
+
+internal data class TextReaderAppearance(
+    val fontSize: Float = 20f,
+    val font: String = "serif",
+    val theme: String = "system",
+    val customBackground: String = "#F8F4EB",
+    val customForeground: String = "#292621",
+    val layout: String = "scroll",
+)
+
+// This content boundary also lets reader interactions be verified without opening a real library.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun TextReaderContent(
+    bookId: String,
+    title: String,
+    contents: String?,
+    error: String? = null,
+    progress: Double = 0.0,
+    initialProgress: Double = 0.0,
+    initialOffset: Int = 0,
+    facingOffset: Int = 0,
+    appearance: TextReaderAppearance = TextReaderAppearance(),
+    onSettingChanged: (String, String) -> Unit,
+    onProgress: (Double, Int) -> Unit,
+    onClose: () -> Unit,
+    onAsk: (String) -> Unit,
+) {
+    var controlsVisible by rememberSaveable(bookId) { mutableStateOf(true) }
+    var appearanceVisible by rememberSaveable(bookId) { mutableStateOf(false) }
+    val readerTheme = if (appearance.theme == "system" && isSystemInDarkTheme()) "dark" else appearance.theme
+    val paper = Color(readerBackground(readerTheme, appearance.customBackground))
+    val ink = Color(readerForeground(readerTheme, appearance.customForeground))
+    val currentToggle by rememberUpdatedState { controlsVisible = !controlsVisible }
+    val currentAsk by rememberUpdatedState(onAsk)
+    BackHandler { onClose() }
+    ReaderSystemBars(controlsVisible)
+
+    Surface(Modifier.fillMaxSize(), color = paper, contentColor = ink) {
+        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Column(Modifier.fillMaxSize()) {
                 if (controlsVisible) {
-                    Column {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { flushProgress(); onClose() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close book") }
-                            Column(Modifier.weight(1f)) {
-                                Text(book.title, fontFamily = FontFamily.Serif, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                                Text("${(book.progress * 100).toInt()}% read", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                            }
-                            IconButton(onClick = { scope.launch { app.preferences.set("reader.fontSize", (fontSize - 1f).coerceAtLeast(14f).toInt().toString()) } }, content = { Icon(Icons.Filled.Remove, "Smaller text") })
-                            Text("${fontSize.toInt()}", style = MaterialTheme.typography.labelMedium)
-                            IconButton(onClick = { scope.launch { app.preferences.set("reader.fontSize", (fontSize + 1f).coerceAtMost(38f).toInt().toString()) } }, content = { Icon(Icons.Filled.Add, "Larger text") })
-                            IconButton(onClick = { controlsVisible = false }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Hide reading controls")
-                            }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close book") }
+                        Column(Modifier.weight(1f)) {
+                            Text(title, fontFamily = FontFamily.Serif, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${(progress * 100).toInt()}% read", style = MaterialTheme.typography.labelSmall, color = ink.copy(alpha = 0.7f))
                         }
-                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                            listOf("system", "light", "sepia", "dark", "custom").forEach { theme ->
-                                FilterChip(selected = themeSetting == theme, onClick = { scope.launch { app.preferences.set("reader.theme", theme) } }, label = { Text(theme.replaceFirstChar(Char::uppercase)) })
-                            }
+                        IconButton(onClick = { onAsk("") }) { Icon(Icons.Filled.AutoAwesome, "Ask AI about this book") }
+                        IconButton(onClick = { appearanceVisible = true }, modifier = Modifier.semantics { contentDescription = "Reading appearance" }) {
+                            Text("Aa", fontSize = 18.sp, fontWeight = FontWeight.Medium)
                         }
-                        if (themeSetting == "custom") {
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                                Text("Paper", style = MaterialTheme.typography.labelSmall)
-                                listOf("#F8F4EB", "#FFFEF8", "#E6E8D8", "#F2DEC2", "#232322").forEach { value ->
-                                    ColorChoice(value, customBackground == value) { scope.launch { app.preferences.set("reader.customBackground", value) } }
-                                }
-                                Text("Ink", style = MaterialTheme.typography.labelSmall)
-                                listOf("#292621", "#3C332A", "#1D3A2A", "#F2EFE8", "#FFFFFF").forEach { value ->
-                                    ColorChoice(value, customForeground == value) { scope.launch { app.preferences.set("reader.customForeground", value) } }
-                                }
-                            }
-                        }
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(selected = fontSetting == "serif", onClick = { scope.launch { app.preferences.set("reader.font", "serif") } }, label = { Text("Serif") })
-                                FilterChip(selected = fontSetting == "sans", onClick = { scope.launch { app.preferences.set("reader.font", "sans") } }, label = { Text("Sans") })
-                                FilterChip(selected = fontSetting == "mono", onClick = { scope.launch { app.preferences.set("reader.font", "mono") } }, label = { Text("Mono") })
-                            }
-                            if ((configuration.smallestScreenWidthDp >= 600) || layoutSetting == "facing") {
-                                FilterChip(selected = layoutSetting == "facing", onClick = {
-                                    scope.launch { app.preferences.set("reader.layout", if (layoutSetting == "facing") "scroll" else "facing") }
-                                }, label = { Text(if (layoutSetting == "facing") "Facing pages" else "Pages") })
-                            }
-                        }
+                        IconButton(onClick = { controlsVisible = false }) { Icon(Icons.Filled.Close, "Hide reading controls") }
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when {
-                        contents != null -> {
-                            if (layoutSetting == "facing") {
-                                FacingTextPages(
-                                    text = contents!!, offset = facingOffset, fontSize = fontSize, font = fontSetting, theme = readerTheme,
-                                    customBackground = customBackground, customForeground = customForeground,
-                                    onPageChanged = { offset ->
-                                        facingOffset = offset
-                                        val fraction = (offset.toDouble() / contents!!.length.coerceAtLeast(1)).coerceIn(0.0, 1.0)
-                                        readerSession.checkpoint(fraction, "txt:$offset:utf16")
-                                    },
-                                    onAsk = onAsk,
-                                )
-                            } else {
-                                SingleScrollText(
-                                    text = contents!!, bookId = book.id, initialOffset = restoredTextOffset ?: 0, fontSize = fontSize, font = fontSetting, theme = readerTheme,
-                                    customBackground = customBackground, customForeground = customForeground,
-                                    initialProgress = book.progress,
-                                    onScroll = { fraction, offset ->
-                                        readerSession.checkpoint(fraction, "txt:$offset:utf16")
-                                    },
-                                    onAsk = onAsk,
-                                )
-                            }
-                        }
-                        error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(error!!, color = Color(0xFF9B4138), modifier = Modifier.padding(24.dp)) }
-                        else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Opening book…", color = MaterialTheme.colorScheme.secondary) }
+                        contents != null && appearance.layout == "facing" -> FacingTextPages(
+                            text = contents, offset = facingOffset, fontSize = appearance.fontSize, font = appearance.font, theme = readerTheme,
+                            customBackground = appearance.customBackground, customForeground = appearance.customForeground,
+                            controlsVisible = controlsVisible,
+                            onPageChanged = { offset -> onProgress((offset.toDouble() / contents.length.coerceAtLeast(1)).coerceIn(0.0, 1.0), offset) },
+                            onAsk = { currentAsk(it) },
+                            onContentTap = { currentToggle() },
+                        )
+                        contents != null -> SingleScrollText(
+                            text = contents, initialOffset = initialOffset, fontSize = appearance.fontSize, font = appearance.font, theme = readerTheme,
+                            customBackground = appearance.customBackground, customForeground = appearance.customForeground,
+                            initialProgress = initialProgress,
+                            onScroll = onProgress,
+                            onAsk = { currentAsk(it) },
+                            onContentTap = { currentToggle() },
+                        )
+                        error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(error, color = Color(0xFF9B4138), modifier = Modifier.padding(24.dp)) }
+                        else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Opening book…", color = ink.copy(alpha = 0.7f)) }
                     }
                 }
             }
-
             if (!controlsVisible) {
                 Surface(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
                     shape = RoundedCornerShape(24.dp),
-                    color = Color(readerBackground(readerTheme, customBackground)).copy(alpha = 0.96f),
-                    tonalElevation = 4.dp,
+                    color = paper.copy(alpha = 0.94f),
+                    contentColor = ink,
+                    tonalElevation = 2.dp,
                 ) {
                     TextButton(onClick = { controlsVisible = true }) { Text("Show controls") }
+                }
+            }
+        }
+    }
+    if (appearanceVisible) {
+        ModalBottomSheet(onDismissRequest = { appearanceVisible = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Reading appearance", style = MaterialTheme.typography.titleLarge)
+                    TextButton(onClick = { appearanceVisible = false }) { Text("Done") }
+                }
+                Text("Page layout", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = appearance.layout != "facing", onClick = { onSettingChanged("reader.layout", "scroll") }, label = { Text("Scrolling") })
+                    FilterChip(selected = appearance.layout == "facing", onClick = { onSettingChanged("reader.layout", "facing") }, label = { Text("Facing pages") })
+                }
+                Text("Pages turn horizontally, with two pages on wide screens.", style = MaterialTheme.typography.bodySmall)
+                Text("Page color", style = MaterialTheme.typography.titleSmall)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    listOf("system", "light", "sepia", "dark", "custom").forEach { theme ->
+                        FilterChip(selected = appearance.theme == theme, onClick = { onSettingChanged("reader.theme", theme) }, label = { Text(theme.replaceFirstChar(Char::uppercase)) })
+                    }
+                }
+                if (appearance.theme == "custom") {
+                    Text("Paper", style = MaterialTheme.typography.labelMedium)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        listOf("#F8F4EB", "#FFFEF8", "#E6E8D8", "#F2DEC2", "#232322").forEach { value ->
+                            ColorChoice(value, appearance.customBackground == value) { onSettingChanged("reader.customBackground", value) }
+                        }
+                    }
+                    Text("Ink", style = MaterialTheme.typography.labelMedium)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        listOf("#292621", "#3C332A", "#1D3A2A", "#F2EFE8", "#FFFFFF").forEach { value ->
+                            ColorChoice(value, appearance.customForeground == value) { onSettingChanged("reader.customForeground", value) }
+                        }
+                    }
+                }
+                Text("Typography", style = MaterialTheme.typography.titleSmall)
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("serif" to "Serif", "sans" to "Sans", "mono" to "Mono").forEach { (value, label) ->
+                        FilterChip(selected = appearance.font == value, onClick = { onSettingChanged("reader.font", value) }, label = { Text(label) })
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Text size", style = MaterialTheme.typography.bodyMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { onSettingChanged("reader.fontSize", (appearance.fontSize - 1f).coerceAtLeast(14f).toInt().toString()) }) { Icon(Icons.Filled.Remove, "Smaller text") }
+                        Text("${appearance.fontSize.toInt()} pt")
+                        IconButton(onClick = { onSettingChanged("reader.fontSize", (appearance.fontSize + 1f).coerceAtMost(38f).toInt().toString()) }) { Icon(Icons.Filled.Add, "Larger text") }
+                    }
                 }
             }
         }
@@ -220,13 +302,43 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRecord, onClose: () -> Unit, o
 }
 
 @Composable
-private fun SingleScrollText(text: String, bookId: String, initialOffset: Int, fontSize: Float, font: String, theme: String, customBackground: String, customForeground: String, initialProgress: Double, onScroll: (Double, Int) -> Unit, onAsk: (String) -> Unit) {
+private fun ReaderSystemBars(controlsVisible: Boolean) {
     val context = LocalContext.current
+    val activity = remember(context) {
+        var candidate: Context = context
+        while (candidate is ContextWrapper && candidate !is Activity) candidate = candidate.baseContext
+        candidate as? Activity
+    }
+    val window = activity?.window ?: return
+    DisposableEffect(window) {
+        val insets = ViewCompat.getRootWindowInsets(window.decorView)
+        val statusVisible = insets?.isVisible(WindowInsetsCompat.Type.statusBars()) ?: true
+        val navigationVisible = insets?.isVisible(WindowInsetsCompat.Type.navigationBars()) ?: true
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        val behavior = controller.systemBarsBehavior
+        onDispose {
+            controller.systemBarsBehavior = behavior
+            if (statusVisible) controller.show(WindowInsetsCompat.Type.statusBars()) else controller.hide(WindowInsetsCompat.Type.statusBars())
+            if (navigationVisible) controller.show(WindowInsetsCompat.Type.navigationBars()) else controller.hide(WindowInsetsCompat.Type.navigationBars())
+        }
+    }
+    LaunchedEffect(window, controlsVisible) {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        if (controlsVisible) controller.show(WindowInsetsCompat.Type.systemBars())
+        else {
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+}
+
+@Composable
+private fun SingleScrollText(text: String, initialOffset: Int, fontSize: Float, font: String, theme: String, customBackground: String, customForeground: String, initialProgress: Double, onScroll: (Double, Int) -> Unit, onAsk: (String) -> Unit, onContentTap: () -> Unit) {
     AndroidView(
         modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 8.dp),
         factory = { ctx ->
             val scroll = ScrollView(ctx).apply { isFillViewport = true; overScrollMode = ScrollView.OVER_SCROLL_NEVER }
-            val view = selectableText(ctx, onAsk).apply { setPadding(8.dpInt(ctx), 8.dpInt(ctx), 8.dpInt(ctx), 28.dpInt(ctx)) }
+            val view = selectableText(ctx, onAsk, onContentTap).apply { setPadding(8.dpInt(ctx), 8.dpInt(ctx), 8.dpInt(ctx), 28.dpInt(ctx)) }
             scroll.addView(view)
             scroll.tag = ReaderViewState(fontSize, font, theme, initialProgress.toFloat())
             scroll.setOnScrollChangeListener { viewScroll, _, scrollY, _, _ ->
@@ -249,13 +361,14 @@ private fun SingleScrollText(text: String, bookId: String, initialOffset: Int, f
             val textView = scroll.getChildAt(0) as TextView
             val state = scroll.tag as? ReaderViewState
             val oldFraction = state?.fraction ?: initialProgress.toFloat()
-            textView.text = text
+            val needsRestore = state == null || state.restoring || state.content !== text || state.textSize != fontSize || state.font != font
+            if (state?.content !== text) textView.text = text
             textView.textSize = fontSize
             textView.typeface = typeface(font)
             textView.setTextColor(readerForeground(theme, customForeground))
             textView.setBackgroundColor(readerBackground(theme, customBackground))
             scroll.setBackgroundColor(readerBackground(theme, customBackground))
-            scroll.post {
+            if (needsRestore) scroll.post {
                 val total = (scroll.getChildAt(0)?.height ?: 0) - scroll.height
                 if (total > 0) {
                     val layout = textView.layout
@@ -267,15 +380,16 @@ private fun SingleScrollText(text: String, bookId: String, initialOffset: Int, f
                 state?.restoring = false
             }
             if (state == null) scroll.tag = ReaderViewState(fontSize, font, theme, oldFraction)
-            else { state.textSize = fontSize; state.font = font; state.theme = theme }
+            else { state.textSize = fontSize; state.font = font; state.theme = theme; state.content = text }
         },
     )
 }
 
 @Composable
-private fun FacingTextPages(text: String, offset: Int, fontSize: Float, font: String, theme: String, customBackground: String, customForeground: String, onPageChanged: (Int) -> Unit, onAsk: (String) -> Unit) {
+private fun FacingTextPages(text: String, offset: Int, fontSize: Float, font: String, theme: String, customBackground: String, customForeground: String, controlsVisible: Boolean, onPageChanged: (Int) -> Unit, onAsk: (String) -> Unit, onContentTap: () -> Unit) {
     val wide = androidx.compose.ui.platform.LocalConfiguration.current.smallestScreenWidthDp >= 600
     val scope = rememberCoroutineScope()
+    val reportPageChanged by rememberUpdatedState(onPageChanged)
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val columns = if (wide) 2 else 1
         val sample = text.take(4000)
@@ -294,10 +408,16 @@ private fun FacingTextPages(text: String, offset: Int, fontSize: Float, font: St
             return (if (wide) index / 2 else index).coerceIn(0, (spreadCount - 1).coerceAtLeast(0))
         }
         val pager = rememberPagerState(initialPage = spreadForOffset(offset), pageCount = { spreadCount })
-        LaunchedEffect(pageChars, wide) { pager.scrollToPage(spreadForOffset(offset)) }
-        LaunchedEffect(pager.currentPage, pageStarts) {
-            val first = if (wide) pager.currentPage * 2 else pager.currentPage
-            onPageChanged(pageStarts.getOrElse(first) { 0 })
+        LaunchedEffect(pager, pageStarts, wide) {
+            // BoxWithConstraints can start this effect inside its parent's measure pass.
+            // Schedule the new position for the next measure instead of forcing a nested one.
+            pager.requestScrollToPage(spreadForOffset(offset))
+            // Start observing only after remapping the saved text anchor. A separate effect
+            // could publish the old page index against new page boundaries during a resize.
+            snapshotFlow { pager.currentPage }.collect { page ->
+                val first = if (wide) page * 2 else page
+                reportPageChanged(pageStarts.getOrElse(first) { 0 })
+            }
         }
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             HorizontalPager(state = pager, modifier = Modifier.weight(1f).fillMaxWidth()) { spread ->
@@ -310,13 +430,13 @@ private fun FacingTextPages(text: String, offset: Int, fontSize: Float, font: St
                         val passage = text.substring(start.coerceAtMost(text.length), end.coerceAtMost(text.length))
                         AndroidView(
                             modifier = Modifier.weight(1f).fillMaxSize().background(Color(readerBackground(theme, customBackground)), RoundedCornerShape(8.dp)).padding(12.dp),
-                            factory = { ctx -> selectableText(ctx, onAsk) },
-                            update = { tv -> tv.text = passage; tv.textSize = fontSize; tv.typeface = typeface(font); tv.setTextColor(readerForeground(theme, customForeground)); tv.setBackgroundColor(readerBackground(theme, customBackground)) },
+                            factory = { ctx -> selectableText(ctx, onAsk, onContentTap) },
+                            update = { tv -> if (tv.text.toString() != passage) tv.text = passage; tv.textSize = fontSize; tv.typeface = typeface(font); tv.setTextColor(readerForeground(theme, customForeground)); tv.setBackgroundColor(readerBackground(theme, customBackground)) },
                         )
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            if (controlsVisible) Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { if (pager.currentPage > 0) scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }, enabled = pager.currentPage > 0) { Text("Previous") }
                 Text("Spread ${pager.currentPage + 1} of $spreadCount", style = MaterialTheme.typography.labelMedium)
                 TextButton(onClick = { if (pager.currentPage < spreadCount - 1) scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } }, enabled = pager.currentPage < spreadCount - 1) { Text("Next") }
@@ -355,7 +475,22 @@ private fun ColorChoice(value: String, selected: Boolean, onClick: () -> Unit) {
     })
 }
 
-private fun selectableText(context: android.content.Context, onAsk: (String) -> Unit): TextView = TextView(context).apply {
+private fun selectableText(context: android.content.Context, onAsk: (String) -> Unit, onContentTap: () -> Unit): TextView = TextView(context).apply {
+    // Observe taps without consuming events: TextView keeps native long-press selection,
+    // ScrollView keeps vertical drags, and the pager keeps horizontal swipes.
+    var selectionAtDown = false
+    var selecting = false
+    val detector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(event: MotionEvent): Boolean {
+            selectionAtDown = hasSelection() || selecting
+            return true
+        }
+        override fun onSingleTapConfirmed(event: MotionEvent): Boolean {
+            if (!selectionAtDown && !hasSelection() && !selecting) onContentTap()
+            return false
+        }
+    })
+    setOnTouchListener { _, event -> detector.onTouchEvent(event); false }
     setTextIsSelectable(true)
     textSize = 20f
     setTextColor(Color(0xFF292621).toArgbCompat())
@@ -363,6 +498,7 @@ private fun selectableText(context: android.content.Context, onAsk: (String) -> 
     setPadding(10.dpInt(context), 10.dpInt(context), 10.dpInt(context), 10.dpInt(context))
     customSelectionActionModeCallback = object : ActionMode.Callback {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+            selecting = true
             menu.add(0, 1901, 0, "Ask CloudReader").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
             return true
         }
@@ -375,7 +511,7 @@ private fun selectableText(context: android.content.Context, onAsk: (String) -> 
             mode.finish()
             return true
         }
-        override fun onDestroyActionMode(mode: ActionMode) = Unit
+        override fun onDestroyActionMode(mode: ActionMode) { selecting = false }
     }
 }
 

@@ -8,4 +8,11 @@
         <item name="android:colorAccent">#536D59</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
+    <!-- AndroidX PDF inflates Material 3 widgets inside its fragment. -->
+    <style name="Theme.CloudReader.PdfViewer" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">#536D59</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSurface">#F7F3E9</item>
+        <item name="colorOnSurface">#272922</item>
+    </style>
 </resources>

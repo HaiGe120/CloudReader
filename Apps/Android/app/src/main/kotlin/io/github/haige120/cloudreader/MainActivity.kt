@@ -153,7 +153,7 @@ private fun CloudReaderRoot(activity: FragmentActivity, app: CloudReaderApp) {
         }
     }
     val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        googleConnection.complete(
+        googleConnection.completeAsync(
             cancelled = result.resultCode == Activity.RESULT_CANCELED,
             hasData = result.data != null,
         ) {
@@ -192,97 +192,103 @@ private fun CloudReaderRoot(activity: FragmentActivity, app: CloudReaderApp) {
         Surface(Modifier.fillMaxSize(), color = Cream) {
             BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { rootWindowOffset = it.positionInWindow() }) {
                 val expanded = maxWidth >= 840.dp
-                Scaffold(
-                    containerColor = Cream,
-                    contentWindowInsets = WindowInsets.safeDrawing,
-                    snackbarHost = { SnackbarHost(snackbarHostState) },
-                    bottomBar = {
-                        if (!expanded) {
-                            NavigationBar(containerColor = Paper) {
-                                MainDestination.entries.forEach { item ->
-                                    NavigationBarItem(
-                                        selected = destination == item,
-                                        onClick = { destination = item },
-                                        icon = { DestinationIcon(item) },
-                                        label = { androidx.compose.material3.Text(item.label()) },
-                                    )
+                val textBook = readerContext?.book?.takeIf { it.format == "txt" && destination != MainDestination.ASSISTANT }
+                if (textBook != null) {
+                    TextBookScreen(
+                        app = app,
+                        book = textBook,
+                        onClose = { readerContext = null },
+                        onAsk = { excerpt ->
+                            readerContext = ReaderContext(textBook, excerpt, null)
+                            destination = MainDestination.ASSISTANT
+                        },
+                    )
+                } else {
+                    Scaffold(
+                        containerColor = Cream,
+                        contentWindowInsets = WindowInsets.safeDrawing,
+                        snackbarHost = { SnackbarHost(snackbarHostState) },
+                        bottomBar = {
+                            if (!expanded) {
+                                NavigationBar(containerColor = Paper) {
+                                    MainDestination.entries.forEach { item ->
+                                        NavigationBarItem(
+                                            selected = destination == item,
+                                            onClick = { destination = item },
+                                            icon = { DestinationIcon(item) },
+                                            label = { androidx.compose.material3.Text(item.label()) },
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    },
-                ) { insets ->
-                    Row(Modifier.fillMaxSize().padding(insets)) {
-                        if (expanded) {
-                            NavigationRail(containerColor = Cream) {
-                                MainDestination.entries.forEach { item ->
-                                    NavigationRailItem(
-                                        selected = destination == item,
-                                        onClick = { destination = item },
-                                        icon = { DestinationIcon(item) },
-                                        label = { androidx.compose.material3.Text(item.label()) },
-                                        alwaysShowLabel = true,
-                                    )
+                        },
+                    ) { insets ->
+                        Row(Modifier.fillMaxSize().padding(insets)) {
+                            if (expanded) {
+                                NavigationRail(containerColor = Cream) {
+                                    MainDestination.entries.forEach { item ->
+                                        NavigationRailItem(
+                                            selected = destination == item,
+                                            onClick = { destination = item },
+                                            icon = { DestinationIcon(item) },
+                                            label = { androidx.compose.material3.Text(item.label()) },
+                                            alwaysShowLabel = true,
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        Column(Modifier.fillMaxSize().weight(1f)) {
-                            when (destination) {
-                                MainDestination.LIBRARY -> LibraryScreen(
-                                    app = app,
-                                    actions = LibraryScreenActions(
-                                      onSync = { scope.launch { app.requestSync(SyncTrigger.MANUAL) } },
-                                      onImport = { importLauncher.launch(arrayOf("text/plain", "application/pdf", "application/epub+zip", "application/octet-stream")) },
-                                      onOpen = { book ->
-                                        when (book.format.lowercase()) {
-                                            "txt" -> destination = MainDestination.LIBRARY.also { readerContext = ReaderContext(book, null, null) }
-                                            "pdf" -> pdfLauncher.launch(Intent(activity, PdfReaderActivity::class.java).apply {
-                                                putExtra(PdfReaderActivity.EXTRA_BOOK_ID, book.id)
-                                            })
-                                            "epub" -> activity.startActivity(Intent(activity, EpubReaderActivity::class.java).apply {
-                                                putExtra(EpubReaderActivity.EXTRA_BOOK_ID, book.id)
-                                            })
-                                            else -> Toast.makeText(context, "Reader coming later for ${book.format.uppercase()}", Toast.LENGTH_SHORT).show()
-                                        }
-                                      },
-                                      onAsk = { book, excerpt ->
-                                        readerContext = ReaderContext(book, excerpt, null)
-                                        destination = MainDestination.ASSISTANT
-                                      },
-                                      onRemove = { book -> scope.launch { app.library.remove(book) } },
-                                      onToggleFavorite = { book -> scope.launch { app.library.bookmark(book) } },
-                                    ),
-                                )
-                                MainDestination.ASSISTANT -> AssistantScreen(
-                                    app = app, context = readerContext,
-                                    onContextConsumed = { readerContext = null },
-                                    onMessage = { message = it },
-                                )
-                                MainDestination.SETTINGS -> SettingsScreen(
-                                    activity = activity,
-                                    app = app,
-                                    onPickFolder = { folderLauncher.launch(null) },
-                                    googleConnection = googleState,
-                                    onConnectGoogle = {
-                                        googleConnection.connect { onToken, onError ->
-                                            googleConnector.authorizeGoogle(
-                                                { sender -> googleLauncher.launch(IntentSenderRequest.Builder(sender).build()) },
-                                                onToken, onError,
-                                            )
-                                        }
-                                    },
-                                    onMessage = { message = it },
-                                )
+                            Column(Modifier.fillMaxSize().weight(1f)) {
+                                when (destination) {
+                                    MainDestination.LIBRARY -> LibraryScreen(
+                                        app = app,
+                                        actions = LibraryScreenActions(
+                                          onSync = { scope.launch { app.requestSync(SyncTrigger.MANUAL) } },
+                                          onImport = { importLauncher.launch(arrayOf("text/plain", "application/pdf", "application/epub+zip", "application/octet-stream")) },
+                                          onOpen = { book ->
+                                            when (book.format.lowercase()) {
+                                                "txt" -> destination = MainDestination.LIBRARY.also { readerContext = ReaderContext(book, null, null) }
+                                                "pdf" -> pdfLauncher.launch(Intent(activity, PdfReaderActivity::class.java).apply {
+                                                    putExtra(PdfReaderActivity.EXTRA_BOOK_ID, book.id)
+                                                })
+                                                "epub" -> activity.startActivity(Intent(activity, EpubReaderActivity::class.java).apply {
+                                                    putExtra(EpubReaderActivity.EXTRA_BOOK_ID, book.id)
+                                                })
+                                                else -> Toast.makeText(context, "Reader coming later for ${book.format.uppercase()}", Toast.LENGTH_SHORT).show()
+                                            }
+                                          },
+                                          onAsk = { book, excerpt ->
+                                            readerContext = ReaderContext(book, excerpt, null)
+                                            destination = MainDestination.ASSISTANT
+                                          },
+                                          onRemove = { book -> scope.launch { app.library.remove(book) } },
+                                          onToggleFavorite = { book -> scope.launch { app.library.bookmark(book) } },
+                                        ),
+                                    )
+                                    MainDestination.ASSISTANT -> AssistantScreen(
+                                        app = app, context = readerContext,
+                                        onContextConsumed = { readerContext = null },
+                                        onMessage = { message = it },
+                                    )
+                                    MainDestination.SETTINGS -> SettingsScreen(
+                                        activity = activity,
+                                        app = app,
+                                        onPickFolder = { folderLauncher.launch(null) },
+                                        googleConnection = googleState,
+                                        onConnectGoogle = {
+                                            googleConnection.connectAsync { onToken, onError ->
+                                                googleConnector.authorizeGoogle(
+                                                    { sender -> googleLauncher.launch(IntentSenderRequest.Builder(sender).build()) },
+                                                    onToken, onError,
+                                                )
+                                            }
+                                        },
+                                        onGoogleCredentialsSaved = { googleConnection.consumeMessage() },
+                                        onMessage = { message = it },
+                                    )
+                                }
                             }
                         }
                     }
-                }
-                if (readerContext?.let { it.book?.format == "txt" } == true) {
-                    TextBookScreen(
-                        app = app,
-                        book = readerContext!!.book!!,
-                        onClose = { readerContext = null },
-                        onAsk = { excerpt -> readerContext = readerContext!!.copy(selectedText = excerpt); destination = MainDestination.ASSISTANT },
-                    )
                 }
                 separatingHinge?.let { hinge ->
                     val density = androidx.compose.ui.platform.LocalDensity.current

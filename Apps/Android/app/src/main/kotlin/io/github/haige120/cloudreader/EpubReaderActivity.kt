@@ -1,13 +1,7 @@
 package io.github.haige120.cloudreader
 
 import android.os.Bundle
-import android.view.Gravity
-import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import androidx.fragment.app.commitNow
 import io.github.haige120.cloudreader.domain.BookRecord
@@ -17,19 +11,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.input.InputListener
+import org.readium.r2.navigator.input.TapEvent
+import org.readium.r2.navigator.util.DirectionalNavigationAdapter
+import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
-import java.io.File
 
 class EpubReaderActivity : AppCompatActivity() {
     companion object { const val EXTRA_BOOK_ID = "book_id" }
 
     private val app get() = application as CloudReaderApp
-    private lateinit var status: TextView
-    private lateinit var titleView: TextView
+    private lateinit var chrome: NativeReaderChrome
     private var book: BookRecord? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,47 +40,25 @@ class EpubReaderActivity : AppCompatActivity() {
         }
         super.onCreate(savedInstanceState)
         val bookId = intent.getStringExtra(EXTRA_BOOK_ID)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val toolbar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(12)
-        }
-        val close = TextView(this).apply {
-            text = "‹  Library"
-            textSize = 16f
-            contentDescription = "Close book"
-            setOnClickListener { finish() }
-        }
-        titleView = TextView(this).apply {
-            textSize = 18f
-            setPadding(20, 0, 0, 0)
-        }
-        status = TextView(this).apply {
-            textSize = 13f
-            gravity = Gravity.END
-            setPadding(12, 0, 0, 0)
-        }
-        toolbar.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        toolbar.addView(titleView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        toolbar.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        root.addView(toolbar)
         val containerId = R.id.epub_viewer_container
-        root.addView(FrameLayout(this).apply { setId(containerId) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        setContentView(root)
+        chrome = NativeReaderChrome(this, containerId)
+        chrome.setTitle("EPUB")
+        setContentView(chrome.root)
 
-        if (bookId == null) { status.text = "Book not found"; return }
+        if (bookId == null) { chrome.showError("Book not found."); return }
         lifecycleScope.launch {
             runCatching {
                 val result = app.database.libraryDao().book(bookId)?.toDomain() ?: error("Book not found.")
                 book = result
-                titleView.text = result.title
+                chrome.setTitle(result.title)
+                chrome.setProgress("${(result.progress * 100).toInt().coerceIn(0, 100)}%")
                 app.library.opened(result)
                 openPublication(result, containerId)
-            }.onFailure { status.text = it.localizedMessage ?: "This EPUB could not be opened." }
+            }.onFailure { chrome.showError(it.localizedMessage ?: "This EPUB could not be opened.") }
         }
     }
 
+    @OptIn(ExperimentalReadiumApi::class)
     private suspend fun openPublication(book: BookRecord, containerId: Int) = withContext(Dispatchers.IO) {
         val file = app.library.fileFor(book) ?: error("The local book file is missing.")
         val httpClient = DefaultHttpClient()
@@ -106,10 +80,20 @@ class EpubReaderActivity : AppCompatActivity() {
                 replace(containerId, EpubNavigatorFragment::class.java, Bundle(), "epub-navigator")
             }
             val navigator = supportFragmentManager.findFragmentByTag("epub-navigator") as EpubNavigatorFragment
+            // Readium emits these taps after internal links/selection handling. Keep its edge
+            // taps and keyboard navigation separate from the center tap used by reader chrome.
+            navigator.addInputListener(object : InputListener {
+                override fun onTap(event: TapEvent): Boolean {
+                    if (!isReaderChromeCenterTap(event.point.x, navigator.publicationView.width)) return false
+                    chrome.toggleControls()
+                    return true
+                }
+            })
+            navigator.addInputListener(DirectionalNavigationAdapter(navigator))
             lifecycleScope.launch {
                 navigator.currentLocator.collect { locator ->
                     val fraction = locator.locations.totalProgression ?: locator.locations.progression ?: book.progress
-                    status.text = "${(fraction * 100).toInt().coerceIn(0, 100)}%"
+                    chrome.setProgress("${(fraction * 100).toInt().coerceIn(0, 100)}%")
                     app.library.progress(book, fraction, "readium:${locator.toJSON()}")
                 }
             }

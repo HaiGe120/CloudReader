@@ -13,6 +13,34 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GoogleDriveConnectionViewModelTest {
+    @Test fun asynchronousCodeExchangeStaysPendingAndSavesOnlyTheResultingAccessToken() = runTest {
+        val exchange = CompletableDeferred<String>()
+        val saved = mutableListOf<String>()
+        val model = GoogleDriveConnectionViewModel({ saved += it }, backgroundScope)
+        model.completeAsync(cancelled = false, hasData = true) { exchange.await() }
+        runCurrent()
+        assertTrue(model.state.value.busy)
+        assertTrue(saved.isEmpty())
+        exchange.complete("exchanged-access-token")
+        runCurrent()
+        assertEquals(listOf("exchanged-access-token"), saved)
+        assertEquals("Google Drive connected", model.state.value.message)
+    }
+
+    @Test fun asynchronousSetupAndExchangeFailuresAllowRetryWithoutSavingCredentials() = runTest {
+        val saved = mutableListOf<String>()
+        val model = GoogleDriveConnectionViewModel({ saved += it }, backgroundScope)
+        model.connectAsync { _, _ -> throw IllegalStateException("Add a client secret") }
+        runCurrent()
+        assertEquals("Add a client secret", model.state.value.message)
+        assertFalse(model.state.value.busy)
+        model.completeAsync(cancelled = true, hasData = true) { throw IllegalStateException("Google rejected the authorization code") }
+        runCurrent()
+        assertEquals("Google rejected the authorization code", model.state.value.message)
+        assertFalse(model.state.value.busy)
+        assertTrue(saved.isEmpty())
+    }
+
     @Test fun pendingInteractiveFlowStaysBusyUntilItsTokenIsSaved() = runTest {
         val savedTokens = mutableListOf<String>()
         val saving = CompletableDeferred<Unit>()

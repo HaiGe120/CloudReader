@@ -34,6 +34,27 @@ class GoogleDriveConnectionViewModel(
         }
     }
 
+    fun connectAsync(start: suspend (onToken: (String) -> Unit, onError: (Throwable) -> Unit) -> Unit) {
+        connect { onToken, onError ->
+            scope.launch {
+                try { start(onToken, onError) }
+                catch (error: Exception) { fail(error) }
+            }
+        }
+    }
+
+    fun completeAsync(cancelled: Boolean, hasData: Boolean, readToken: suspend () -> String) {
+        if (!hasData) {
+            complete(cancelled, hasData = false) { error("No returned authorization intent") }
+            return
+        }
+        mutableState.value = GoogleDriveConnectionState(busy = true)
+        scope.launch {
+            try { acceptToken(readToken()) }
+            catch (error: Exception) { fail(error) }
+        }
+    }
+
     fun complete(cancelled: Boolean, hasData: Boolean, readToken: () -> String) {
         // Google can return a detailed provider error in a non-OK result intent.
         // Activity-result delivery may also follow process or Activity recreation.

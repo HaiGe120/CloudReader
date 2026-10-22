@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import io.github.haige120.cloudreader.data.CloudReaderPreferences
 import io.github.haige120.cloudreader.data.SecureVault
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +18,10 @@ import kotlinx.coroutines.launch
 data class SettingsUiState(
     val selectedProviders: Set<String> = emptySet(),
     val folderName: String = "",
+    val googleClientId: String = "",
+    val googleClientSecret: String = "",
+    val googleCredentialsSaving: Boolean = false,
+    val googleCredentialsSavedRevision: Int = 0,
     val dropboxKey: String = "",
     val pcloudKey: String = "",
     val webdavUrl: String = "",
@@ -37,7 +42,7 @@ data class SettingsUiState(
 )
 
 enum class SettingsField {
-    DROPBOX_KEY, PCLOUD_KEY, WEBDAV_URL, WEBDAV_USER, WEBDAV_PASSWORD,
+    GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, DROPBOX_KEY, PCLOUD_KEY, WEBDAV_URL, WEBDAV_USER, WEBDAV_PASSWORD,
     SFTP_HOST, SFTP_PORT, SFTP_USER, SFTP_PASSWORD, SFTP_DIRECTORY, SFTP_KEY,
     AI_NAME, AI_PROTOCOL, AI_MODEL, AI_ENDPOINT, AI_KEY,
 }
@@ -49,6 +54,7 @@ interface SettingsStore {
     fun getSecret(key: String): String?
     suspend fun set(key: String, value: String)
     fun setSecret(key: String, value: String)
+    fun removeSecret(key: String)
     suspend fun selectProvider(id: String, selected: Boolean)
 }
 
@@ -69,6 +75,7 @@ class SettingsViewModel(
         }
         scope.launch {
             mutableState.value = mutableState.value.copy(
+                googleClientId = store.get("googleDrive.clientID").orEmpty(),
                 dropboxKey = store.get("dropbox.appKey").orEmpty(),
                 pcloudKey = store.get("pcloud.appKey").orEmpty(),
                 webdavUrl = store.get("webdav.url").orEmpty(),
@@ -88,6 +95,8 @@ class SettingsViewModel(
 
     fun update(field: SettingsField, value: String) {
         mutableState.value = when (field) {
+            SettingsField.GOOGLE_CLIENT_ID -> mutableState.value.copy(googleClientId = value)
+            SettingsField.GOOGLE_CLIENT_SECRET -> mutableState.value.copy(googleClientSecret = value)
             SettingsField.DROPBOX_KEY -> mutableState.value.copy(dropboxKey = value)
             SettingsField.PCLOUD_KEY -> mutableState.value.copy(pcloudKey = value)
             SettingsField.WEBDAV_URL -> mutableState.value.copy(webdavUrl = value)
@@ -108,6 +117,61 @@ class SettingsViewModel(
     }
 
     fun selectProvider(id: String, selected: Boolean) = scope.launch { store.selectProvider(id, selected) }
+
+    fun saveGoogleCredentials() {
+        val submitted = state.value
+        if (submitted.googleCredentialsSaving) return
+        mutableState.value = submitted.copy(googleCredentialsSaving = true)
+        scope.launch {
+            try {
+                val clientId = submitted.googleClientId.trim()
+                val enteredSecret = submitted.googleClientSecret.trim()
+                val previousClientId = store.get("googleDrive.clientID").orEmpty().trim()
+                val savedSecret = store.getSecret("googleDrive.clientSecret")
+                if (clientId.isBlank()) {
+                    require(enteredSecret.isBlank()) { "Enter a Google OAuth client ID with the secret, or clear both fields to use built-in Google sign-in." }
+                } else {
+                    require(clientId.length > ".apps.googleusercontent.com".length && clientId.endsWith(".apps.googleusercontent.com") && clientId.none(Char::isWhitespace)) {
+                        "Enter a Google OAuth client ID ending in .apps.googleusercontent.com."
+                    }
+                    require(enteredSecret.isNotBlank() || (clientId == previousClientId && !savedSecret.isNullOrBlank())) {
+                        "Enter the matching Web application client secret for this Google client ID."
+                    }
+                }
+                val secret = if (clientId.isBlank()) null else enteredSecret.ifBlank { savedSecret }
+                val changed = clientId != previousClientId || secret != savedSecret
+                if (secret == null) store.removeSecret("googleDrive.clientSecret")
+                else if (enteredSecret.isNotBlank()) store.setSecret("googleDrive.clientSecret", secret)
+                try {
+                    store.set("googleDrive.clientID", clientId)
+                } catch (error: Exception) {
+                    // The vault and preferences are separate stores; keep the previous pair usable if the ID write fails.
+                    if (secret != savedSecret) {
+                        if (savedSecret == null) store.removeSecret("googleDrive.clientSecret")
+                        else store.setSecret("googleDrive.clientSecret", savedSecret)
+                    }
+                    throw error
+                }
+                if (changed) {
+                    listOf("googleDrive.accessToken", "googleDrive.expiresAt", "googleDrive.refreshToken", "googleDrive.refreshTokenClientID", "googleDrive.accessTokenGrant").forEach(store::removeSecret)
+                    store.selectProvider("googleDrive", false)
+                }
+                val current = mutableState.value
+                mutableState.value = current.copy(
+                    googleClientId = if (current.googleClientId == submitted.googleClientId) clientId else current.googleClientId,
+                    googleClientSecret = if (current.googleClientSecret == submitted.googleClientSecret) "" else current.googleClientSecret,
+                    googleCredentialsSavedRevision = current.googleCredentialsSavedRevision + 1,
+                    message = "Google app credentials saved. Tap Connect to sign in.",
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                mutableState.value = mutableState.value.copy(message = error.localizedMessage ?: "Google app credentials could not be saved")
+            } finally {
+                mutableState.value = mutableState.value.copy(googleCredentialsSaving = false)
+            }
+        }
+    }
 
     fun saveProviderIDs() = runAction("Provider app identifiers saved") {
         store.set("dropbox.appKey", state.value.dropboxKey)
@@ -179,6 +243,7 @@ class SettingsViewModel(
                     override fun getSecret(key: String) = vault.get(key)
                     override suspend fun set(key: String, value: String) = prefs.set(key, value)
                     override fun setSecret(key: String, value: String) = vault.put(key, value)
+                    override fun removeSecret(key: String) = vault.remove(key)
                     override suspend fun selectProvider(id: String, selected: Boolean) = prefs.selectProvider(id, selected)
                 }) as T
             }
