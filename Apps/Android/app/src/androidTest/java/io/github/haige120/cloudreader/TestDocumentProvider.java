@@ -12,21 +12,33 @@ import android.provider.OpenableColumns;
 import java.io.FileNotFoundException;
 import java.io.OutputStream;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public final class TestDocumentProvider extends ContentProvider {
     private static final Map<String, byte[]> FIXTURES = new ConcurrentHashMap<>();
+    private static final Map<String, CountDownLatch[]> COPY_GATES = new ConcurrentHashMap<>();
 
     public static void register(String name, byte[] bytes) { FIXTURES.put(name, bytes.clone()); }
+    public static void pauseAfterWrite(String name, CountDownLatch written, CountDownLatch resume) {
+        COPY_GATES.put(name, new CountDownLatch[] { written, resume });
+    }
     public static byte[] fixture(String name) {
         byte[] bytes = FIXTURES.get(name);
         return bytes == null ? null : bytes.clone();
     }
-    public static void clear() { FIXTURES.clear(); }
+    public static void clear() {
+        for (CountDownLatch[] gate : COPY_GATES.values()) gate[1].countDown();
+        COPY_GATES.clear();
+        FIXTURES.clear();
+    }
 
     @Override public boolean onCreate() { return true; }
 
     @Override public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
+        if ("query".equals(uri.getQueryParameter("failure"))) throw new SecurityException("Test document access was revoked");
         String[] columns = projection == null ? new String[] { OpenableColumns.DISPLAY_NAME } : projection;
         String name = uri.getQueryParameter("name");
         if (name == null) throw new IllegalArgumentException("Missing test display name");
@@ -43,6 +55,8 @@ public final class TestDocumentProvider extends ContentProvider {
 
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         if (!"r".equals(mode)) throw new IllegalArgumentException("Read only");
+        if ("open".equals(uri.getQueryParameter("failure"))) throw new FileNotFoundException("Test document is unavailable");
+        if ("cancel".equals(uri.getQueryParameter("failure"))) throw new CancellationException("Test provider cancelled the import");
         byte[] bytes = FIXTURES.get(uri.getLastPathSegment());
         if (bytes == null) throw new FileNotFoundException("Missing test fixture for " + uri);
         try {
@@ -50,6 +64,11 @@ public final class TestDocumentProvider extends ContentProvider {
             new Thread(() -> {
                 try (OutputStream output = new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])) {
                     output.write(bytes);
+                    CountDownLatch[] gate = COPY_GATES.get(uri.getLastPathSegment());
+                    if (gate != null) {
+                        gate[0].countDown();
+                        gate[1].await(10, TimeUnit.SECONDS);
+                    }
                 } catch (Exception ignored) { }
             }, "test-document-source").start();
             return pipe[0];

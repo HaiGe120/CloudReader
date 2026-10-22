@@ -23,4 +23,16 @@ class ReaderTextTest {
         val rebuilt = starts.mapIndexed { index, start -> text.substring(start, starts.getOrElse(index + 1) { text.length }) }.joinToString("")
         assertEquals(text, rebuilt)
     }
+
+    @Test fun readerSessionRestoresOnlyValidUtf16OffsetsAndFallsBackToFraction() {
+        assertEquals(7, validTextOffset("txt:7:utf16", 12))
+        assertEquals(12, validTextOffset("txt:12:utf16", 12))
+        assertEquals(null, validTextOffset("txt:13:utf16", 12))
+        assertEquals(null, validTextOffset("txt:-1:utf16", 12))
+        assertEquals(null, validTextOffset("txt:7:unknown", 12))
+        assertEquals(null, validTextOffset("pdf:3", 12))
+        assertEquals(3, textOffsetForProgress(0.25, 12))
+        assertEquals(0, textOffsetForProgress(-1.0, 12))
+        assertEquals(12, textOffsetForProgress(2.0, 12))
+    }
 }

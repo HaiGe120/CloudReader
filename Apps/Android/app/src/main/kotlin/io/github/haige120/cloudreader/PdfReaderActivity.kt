@@ -20,7 +20,8 @@ import androidx.pdf.selection.model.TextSelection
 import androidx.pdf.selection.Selection
 import androidx.pdf.view.PdfView
 import androidx.pdf.viewer.fragment.PdfViewerFragment
-import io.github.haige120.cloudreader.data.BookRow
+import io.github.haige120.cloudreader.domain.BookRecord
+import io.github.haige120.cloudreader.data.toDomain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -28,7 +29,7 @@ import java.io.File
 
 class PdfReaderActivity : FragmentActivity() {
     private var selectedText: String = ""
-    private lateinit var book: BookRow
+    private lateinit var book: BookRecord
     private lateinit var askButton: Button
     private lateinit var pageLabel: TextView
 
@@ -56,7 +57,7 @@ class PdfReaderActivity : FragmentActivity() {
 
         val id = intent.getStringExtra(EXTRA_BOOK_ID) ?: run { finish(); return }
         lifecycleScope.launch {
-            val resolved = (application as CloudReaderApp).database.libraryDao().book(id)
+            val resolved = (application as CloudReaderApp).database.libraryDao().book(id)?.toDomain()
             if (resolved == null) { finish(); return@launch }
             book = resolved
             pageLabel.text = "${book.title} · ${(book.progress * 100).toInt()}%"
@@ -129,11 +130,36 @@ class CloudPdfFragment : PdfViewerFragment() {
     }
 
     private var pageCount = 0
-    private var lastSavedPage = -1
+    private var latestPage: Int? = null
+    private var readerSession: ReaderSession? = null
+
+    override fun onStop() {
+        super.onStop()
+        checkpointLatestProgress()
+        val session = readerSession ?: return
+        (activity?.application as? CloudReaderApp)?.applicationScope?.launch { session.flush() }
+    }
+
+    private fun checkpointLatestProgress() {
+        val session = readerSession ?: return
+        val page = latestPage ?: return
+        val count = pageCount
+        if (count <= 0) return
+        session.checkpoint((page + 1.0) / count, "pdf:$page")
+    }
+
+    private fun createReaderSession(app: CloudReaderApp) {
+        readerSession = ReaderSession(bookID, app.applicationScope, ReaderProgressWriter { id, progress, location ->
+            val current = app.database.libraryDao().book(id)?.toDomain() ?: return@ReaderProgressWriter
+            app.library.progress(current, progress, location)
+        })
+    }
 
     @OptIn(ExperimentalPdfApi::class)
     override fun onPdfViewCreated(pdfView: PdfView) {
         super.onPdfViewCreated(pdfView)
+        val app = activity?.application as? CloudReaderApp ?: return
+        if (readerSession == null) createReaderSession(app)
         val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
         pdfView.pagesPerRow = if (widthDp >= 700f) 2 else 1
         pdfView.addOnSelectionChangedListener(object : PdfView.OnSelectionChangedListener {
@@ -146,14 +172,8 @@ class CloudPdfFragment : PdfViewerFragment() {
                 val count = pageCount
                 if (count > 0) {
                     (activity as? PdfReaderActivity)?.onPage(firstVisiblePage, count)
-                    if (firstVisiblePage != lastSavedPage) {
-                        lastSavedPage = firstVisiblePage
-                        (activity?.application as? CloudReaderApp)?.applicationScope?.launch {
-                            val app = activity?.application as? CloudReaderApp ?: return@launch
-                            val book = app.database.libraryDao().book(bookID) ?: return@launch
-                            app.library.progress(book, (firstVisiblePage + 1.0) / count, "pdf:$firstVisiblePage")
-                        }
-                    }
+                    latestPage = firstVisiblePage.coerceIn(0, count - 1)
+                    checkpointLatestProgress()
                 }
             }
         })

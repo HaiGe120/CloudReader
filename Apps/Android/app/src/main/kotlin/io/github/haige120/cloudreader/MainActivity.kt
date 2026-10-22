@@ -52,15 +52,21 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import io.github.haige120.cloudreader.ai.AIProfile
-import io.github.haige120.cloudreader.data.BookRow
+import io.github.haige120.cloudreader.domain.BookRecord
 import io.github.haige120.cloudreader.sync.OAuthConnector
+import io.github.haige120.cloudreader.sync.SyncTrigger
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.launch
@@ -83,7 +89,7 @@ class MainActivity : FragmentActivity() {
         super.onStart()
         cloudApp.applicationScope.launch {
             cloudApp.ready.await()
-            cloudApp.syncOutcome.value = cloudApp.sync.sync()
+            cloudApp.requestSync(SyncTrigger.FOREGROUND)
         }
     }
 }
@@ -99,6 +105,13 @@ private fun CloudReaderRoot(activity: FragmentActivity, app: CloudReaderApp) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val googleConnector = remember(app) { OAuthConnector(app, app.preferences, app.vault) }
+    val googleConnection: GoogleDriveConnectionViewModel = viewModel(factory = remember(app) {
+        viewModelFactory {
+            initializer { GoogleDriveConnectionViewModel(saveToken = { token -> googleConnector.connectGoogle(token) }) }
+        }
+    })
+    val googleState by googleConnection.state.collectAsStateWithLifecycle()
     val syncOutcome by app.syncOutcome.collectAsState()
     var separatingHinge by remember { mutableStateOf<android.graphics.Rect?>(null) }
     var rootWindowOffset by remember { mutableStateOf(Offset.Zero) }
@@ -140,19 +153,20 @@ private fun CloudReaderRoot(activity: FragmentActivity, app: CloudReaderApp) {
         }
     }
     val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) scope.launch {
-            runCatching {
-                val connector = OAuthConnector(activity, app.preferences, app.vault)
-                connector.connectGoogle(connector.finishGoogle(activity, result.data))
-            }.onSuccess { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
-                .onFailure { Toast.makeText(context, it.localizedMessage ?: "Google Drive connection failed", Toast.LENGTH_LONG).show() }
+        googleConnection.complete(
+            cancelled = result.resultCode == Activity.RESULT_CANCELED,
+            hasData = result.data != null,
+        ) {
+            googleConnector.finishGoogle(result.data)
         }
     }
     val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val selected = result.data?.getStringExtra(PdfReaderActivity.EXTRA_SELECTED_TEXT)?.takeIf(String::isNotBlank)
         if (selected != null) {
             scope.launch {
-                val resolved = result.data?.getStringExtra(PdfReaderActivity.EXTRA_BOOK_ID)?.let { app.database.libraryDao().book(it) }
+                val resolved = result.data?.getStringExtra(PdfReaderActivity.EXTRA_BOOK_ID)?.let { id ->
+                    app.library.books.first().firstOrNull { book -> book.id == id }
+                }
                 readerContext = ReaderContext(resolved, selected, null)
                 destination = MainDestination.ASSISTANT
             }
@@ -164,7 +178,7 @@ private fun CloudReaderRoot(activity: FragmentActivity, app: CloudReaderApp) {
             books.map { it.id to it.modifiedAt } + chats.map { it.id to it.modifiedAt }
         }.drop(1).debounce(2_000).collect {
             app.ready.await()
-            app.syncOutcome.value = app.sync.sync()
+            app.requestSync(SyncTrigger.LOCAL_CHANGE)
         }
     }
 
@@ -215,8 +229,10 @@ private fun CloudReaderRoot(activity: FragmentActivity, app: CloudReaderApp) {
                             when (destination) {
                                 MainDestination.LIBRARY -> LibraryScreen(
                                     app = app,
-                                    onImport = { importLauncher.launch(arrayOf("text/plain", "application/pdf", "application/epub+zip", "application/octet-stream")) },
-                                    onOpen = { book ->
+                                    actions = LibraryScreenActions(
+                                      onSync = { scope.launch { app.requestSync(SyncTrigger.MANUAL) } },
+                                      onImport = { importLauncher.launch(arrayOf("text/plain", "application/pdf", "application/epub+zip", "application/octet-stream")) },
+                                      onOpen = { book ->
                                         when (book.format.lowercase()) {
                                             "txt" -> destination = MainDestination.LIBRARY.also { readerContext = ReaderContext(book, null, null) }
                                             "pdf" -> pdfLauncher.launch(Intent(activity, PdfReaderActivity::class.java).apply {
@@ -227,13 +243,14 @@ private fun CloudReaderRoot(activity: FragmentActivity, app: CloudReaderApp) {
                                             })
                                             else -> Toast.makeText(context, "Reader coming later for ${book.format.uppercase()}", Toast.LENGTH_SHORT).show()
                                         }
-                                    },
-                                    onAsk = { book, excerpt ->
+                                      },
+                                      onAsk = { book, excerpt ->
                                         readerContext = ReaderContext(book, excerpt, null)
                                         destination = MainDestination.ASSISTANT
-                                    },
-                                    onRemove = { book -> scope.launch { app.library.remove(book) } },
-                                    onToggleFavorite = { book -> scope.launch { app.library.bookmark(book) } },
+                                      },
+                                      onRemove = { book -> scope.launch { app.library.remove(book) } },
+                                      onToggleFavorite = { book -> scope.launch { app.library.bookmark(book) } },
+                                    ),
                                 )
                                 MainDestination.ASSISTANT -> AssistantScreen(
                                     app = app, context = readerContext,
@@ -244,11 +261,14 @@ private fun CloudReaderRoot(activity: FragmentActivity, app: CloudReaderApp) {
                                     activity = activity,
                                     app = app,
                                     onPickFolder = { folderLauncher.launch(null) },
+                                    googleConnection = googleState,
                                     onConnectGoogle = {
-                                        val connector = OAuthConnector(activity, app.preferences, app.vault)
-                                        connector.authorizeGoogle(activity, { sender -> googleLauncher.launch(IntentSenderRequest.Builder(sender).build()) }, { token ->
-                                            scope.launch { connector.connectGoogle(token).also { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
-                                        }, { error -> Toast.makeText(context, error.localizedMessage ?: "Google authorization failed", Toast.LENGTH_LONG).show() })
+                                        googleConnection.connect { onToken, onError ->
+                                            googleConnector.authorizeGoogle(
+                                                { sender -> googleLauncher.launch(IntentSenderRequest.Builder(sender).build()) },
+                                                onToken, onError,
+                                            )
+                                        }
                                     },
                                     onMessage = { message = it },
                                 )
@@ -290,7 +310,7 @@ private fun DestinationIcon(destination: MainDestination) {
     }
 }
 
-data class ReaderContext(val book: BookRow?, val selectedText: String?, val bookText: String?)
+data class ReaderContext(val book: BookRecord?, val selectedText: String?, val bookText: String?)
 
 fun defaultAIProfile(settings: Map<String, String> = emptyMap()) = AIProfile(
     name = settings["ai.name"] ?: "My AI",

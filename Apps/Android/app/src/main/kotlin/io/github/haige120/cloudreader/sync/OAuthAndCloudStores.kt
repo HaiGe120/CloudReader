@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import io.github.haige120.cloudreader.data.CloudReaderPreferences
 import io.github.haige120.cloudreader.data.SecureVault
@@ -96,6 +97,7 @@ class OAuthConnector(private val context: Context, private val preferences: Clou
         response["refresh_token"]?.jsonPrimitive?.contentOrNull?.let { vault.put("dropbox.refreshToken", it) }
         val expiresIn = response["expires_in"]?.jsonPrimitive?.content?.toLongOrNull() ?: 14_400L
         vault.put("dropbox.expiresAt", (System.currentTimeMillis() / 1000L + expiresIn).toString())
+        preferences.selectProvider("dropbox", true)
         return response["account_id"]?.jsonPrimitive?.contentOrNull ?: "Dropbox connected"
     }
 
@@ -112,15 +114,20 @@ class OAuthConnector(private val context: Context, private val preferences: Clou
             ?: result.getQueryParameter("hostname") ?: "api.pcloud.com"
         require(host in setOf("api.pcloud.com", "eapi.pcloud.com")) { "pCloud returned an unsupported API region." }
         vault.put("pcloud.accessToken", token); vault.put("pcloud.apiHost", host)
+        vault.remove("pcloud.cloudReaderFolderID")
         return "pCloud connected"
     }
 
     suspend fun connectGoogle(accessToken: String, expiresInSeconds: Long = 3_600): String {
+        saveGoogleToken(accessToken, expiresInSeconds)
+        preferences.selectProvider("googleDrive", true)
+        return "Google Drive connected"
+    }
+
+    private fun saveGoogleToken(accessToken: String, expiresInSeconds: Long = 3_600) {
         require(accessToken.isNotBlank())
         vault.put("googleDrive.accessToken", accessToken)
         vault.put("googleDrive.expiresAt", (System.currentTimeMillis() / 1000L + expiresInSeconds).toString())
-        preferences.selectProvider("googleDrive", true)
-        return "Google Drive connected"
     }
 
     /** Requests a fresh cached token. Google Play services refreshes it when the previous token expires. */
@@ -142,32 +149,60 @@ class OAuthConnector(private val context: Context, private val preferences: Clou
                 }
                 .addOnFailureListener { error ->
                     if (continuation.isActive) continuation.resumeWithException(
-                        IllegalStateException("Google Drive authorization failed. Check Google Play services and app registration.", error),
+                        googleAuthorizationFailure(error),
                     )
                 }
                 .addOnCanceledListener {
                     if (continuation.isActive) continuation.resumeWithException(CancellationException("Google Drive authorization was cancelled."))
                 }
         }
-        connectGoogle(result)
+        // Renewal must not re-select a destination the user disabled during sync.
+        saveGoogleToken(result)
         return result
     }
 
-    fun authorizeGoogle(activity: Activity, resolve: (android.content.IntentSender) -> Unit, onToken: (String) -> Unit, onError: (Throwable) -> Unit) {
+    fun authorizeGoogle(resolve: (android.content.IntentSender) -> Unit, onToken: (String) -> Unit, onError: (Throwable) -> Unit) {
         val request = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope("https://www.googleapis.com/auth/drive.appdata"))).build()
-        Identity.getAuthorizationClient(activity).authorize(request)
+        Identity.getAuthorizationClient(context).authorize(request)
             .addOnSuccessListener { result ->
                 if (result.hasResolution()) {
-                    try { resolve(result.pendingIntent!!.intentSender) } catch (error: Exception) { onError(error) }
+                    try {
+                        val pendingIntent = result.pendingIntent ?: error("Google did not return an authorization screen. Try connecting again.")
+                        resolve(pendingIntent.intentSender)
+                    } catch (error: Exception) { onError(googleAuthorizationFailure(error)) }
                 } else result.accessToken?.let(onToken) ?: onError(IllegalStateException("Google did not return an access token."))
             }
-            .addOnFailureListener { error -> onError(IllegalStateException("Google Drive authorization failed. Check Google Play services and app registration.", error)) }
+            .addOnFailureListener { error -> onError(googleAuthorizationFailure(error)) }
+            .addOnCanceledListener { onError(IllegalStateException("Google Drive connection was cancelled. Tap Connect to try again.")) }
     }
 
-    suspend fun finishGoogle(activity: Activity, data: Intent?): String {
-        val result = try { Identity.getAuthorizationClient(activity).getAuthorizationResultFromIntent(data) }
-            catch (error: Exception) { throw IllegalStateException("Google Drive authorization was not completed.", error) }
-        return result.accessToken ?: throw IllegalStateException("Google did not return an access token.")
+    fun finishGoogle(data: Intent?): String {
+        val result = try { Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data) }
+            catch (error: Exception) { throw googleAuthorizationFailure(error) }
+        return result.accessToken?.takeIf(String::isNotBlank)
+            ?: throw IllegalStateException("Google did not grant Drive access. Tap Connect and approve access to CloudReader's app data.")
+    }
+
+    private fun googleAuthorizationFailure(error: Exception): IllegalStateException {
+        val code = (error as? ApiException)?.statusCode
+        val explanation = when (code) {
+            10, 12500 -> "Google could not verify this Android app. Register its Android OAuth client with the package and SHA-1 below, enable the Drive API, and check the consent-screen test users.\n${googleOAuthRegistration()}"
+            7 -> "Google Drive could not connect to Google. Check the network and try again."
+            16, 12501 -> "Google Drive authorization was cancelled or access was not granted. Tap Connect to try again. If this repeats after selecting an account, check the Android OAuth registration."
+            null -> error.localizedMessage ?: "Google Drive authorization could not be completed. Try again."
+            else -> "Google Drive authorization failed. Check Google Play services, the network, and the Android OAuth registration."
+        }
+        return IllegalStateException(if (code == null) explanation else "$explanation\nGoogle error code: $code", error)
+    }
+
+    private fun googleOAuthRegistration(): String {
+        val sha1 = runCatching {
+            val info = context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+            info.signingInfo?.apkContentsSigners?.joinToString("\n") { signature ->
+                MessageDigest.getInstance("SHA-1").digest(signature.toByteArray()).joinToString(":") { "%02X".format(it) }
+            }
+        }.getOrNull() ?: "Signing certificate unavailable"
+        return "Package: ${context.packageName}\nSHA-1: $sha1"
     }
 
     private suspend fun form(url: String, values: Map<String, String>): kotlinx.serialization.json.JsonObject = withContext(Dispatchers.IO) {

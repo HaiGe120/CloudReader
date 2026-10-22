@@ -1,6 +1,10 @@
 package io.github.haige120.cloudreader.ai
 
-import io.github.haige120.cloudreader.data.ChatMessage
+import io.github.haige120.cloudreader.domain.ChatMessage
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -9,6 +13,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.Request
+import okhttp3.Response
+import java.io.IOException
+import okio.Timeout
 
 class AIProtocolTest {
     private val messages = listOf(ChatMessage("00000000-0000-0000-0000-000000000001", "user", "What does this mean?", 0.0))
@@ -53,5 +63,48 @@ class AIProtocolTest {
         assertEquals("anthropic answer", decodeAIAnswer("anthropicMessages", json.parseToJsonElement(
             """{"content":[{"type":"text","text":"anthropic answer"}]}""",
         ).jsonObject))
+    }
+
+    @Test fun coroutineCancellationCancelsTheActiveOkHttpCall() = runBlocking {
+        val enteredEnqueue = CompletableDeferred<Unit>()
+        lateinit var pendingCall: PendingCall
+        val callFactory = Call.Factory { request ->
+            PendingCall(request, enteredEnqueue).also { pendingCall = it }
+        }
+        val service = AIService.forTesting({ "test-key" }, callFactory)
+
+        val request = launch {
+            service.ask(
+                profile.copy(endpoint = "http://127.0.0.1/ai"),
+                messages,
+            )
+        }
+        enteredEnqueue.await()
+        request.cancelAndJoin()
+
+        assertTrue(pendingCall.isCanceled())
+    }
+
+    private class PendingCall(
+        private val request: Request,
+        private val enteredEnqueue: CompletableDeferred<Unit>,
+    ) : Call {
+        @Volatile private var canceled = false
+        @Volatile private var callback: Callback? = null
+
+        override fun request() = request
+        override fun execute(): Response = error("The asynchronous path should be used")
+        override fun enqueue(responseCallback: Callback) {
+            callback = responseCallback
+            enteredEnqueue.complete(Unit)
+        }
+        override fun cancel() {
+            canceled = true
+            callback?.onFailure(this, IOException("Canceled"))
+        }
+        override fun isExecuted() = callback != null
+        override fun isCanceled() = canceled
+        override fun timeout() = Timeout()
+        override fun clone(): Call = PendingCall(request, enteredEnqueue)
     }
 }

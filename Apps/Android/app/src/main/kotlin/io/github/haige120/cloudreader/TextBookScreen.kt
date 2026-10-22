@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,25 +55,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import io.github.haige120.cloudreader.data.BookRow
+import io.github.haige120.cloudreader.domain.BookRecord
+import io.github.haige120.cloudreader.data.toDomain
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
-private data class ReaderViewState(val textSize: Float, val font: String, val theme: String, var fraction: Float)
+private class ReaderViewState(var textSize: Float, var font: String, var theme: String, var fraction: Float, var restoring: Boolean = true)
 
 @Composable
-fun TextBookScreen(app: CloudReaderApp, book: BookRow, onClose: () -> Unit, onAsk: (String) -> Unit) {
+fun TextBookScreen(app: CloudReaderApp, book: BookRecord, onClose: () -> Unit, onAsk: (String) -> Unit) {
     val configuration = LocalConfiguration.current
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
     var contents by remember(book.id) { mutableStateOf<String?>(null) }
     var error by remember(book.id) { mutableStateOf<String?>(null) }
     val fontSizeSetting by app.preferences.observe("reader.fontSize", "20").collectAsState(initial = "20")
@@ -82,10 +86,34 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRow, onClose: () -> Unit, onAs
     val customForeground by app.preferences.observe("reader.customForeground", "#292621").collectAsState(initial = "#292621")
     val layoutSetting by app.preferences.observe("reader.layout", "scroll").collectAsState(initial = "scroll")
     val fontSize = fontSizeSetting.toFloatOrNull()?.coerceIn(14f, 38f) ?: 20f
-    var saveJob by remember { mutableStateOf<Job?>(null) }
+    val readerSession = remember(book.id) {
+        ReaderSession(book.id, app.applicationScope, ReaderProgressWriter { id, progress, location ->
+            val current = app.database.libraryDao().book(id)?.toDomain() ?: return@ReaderProgressWriter
+            app.library.progress(current, progress, location)
+        })
+    }
+    fun flushProgress() { app.applicationScope.launch { readerSession.flush() } }
     var controlsVisible by rememberSaveable(book.id) { mutableStateOf(true) }
     var facingOffset by rememberSaveable(book.id) { mutableIntStateOf(book.localLocation?.substringAfter("txt:")?.substringBefore(':')?.toIntOrNull() ?: 0) }
     val readerTheme = if (themeSetting == "system" && isSystemInDarkTheme()) "dark" else themeSetting
+
+    DisposableEffect(lifecycleOwner, book.id) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) flushProgress() }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            flushProgress()
+        }
+    }
+
+    val restoredTextOffset = contents?.let { text ->
+        validTextOffset(book.localLocation, text.length) ?: textOffsetForProgress(book.progress, text.length)
+    }
+    LaunchedEffect(contents, book.id) {
+        val text = contents ?: return@LaunchedEffect
+        val offset = validTextOffset(book.localLocation, text.length) ?: textOffsetForProgress(book.progress, text.length)
+        facingOffset = offset
+    }
 
     LaunchedEffect(book.id) {
         val file = app.library.fileFor(book)
@@ -102,7 +130,7 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRow, onClose: () -> Unit, onAs
                 if (controlsVisible) {
                     Column {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close book") }
+                            IconButton(onClick = { flushProgress(); onClose() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close book") }
                             Column(Modifier.weight(1f)) {
                                 Text(book.title, fontFamily = FontFamily.Serif, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                                 Text("${(book.progress * 100).toInt()}% read", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
@@ -152,17 +180,20 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRow, onClose: () -> Unit, onAs
                                 FacingTextPages(
                                     text = contents!!, offset = facingOffset, fontSize = fontSize, font = fontSetting, theme = readerTheme,
                                     customBackground = customBackground, customForeground = customForeground,
-                                    onPageChanged = { offset -> facingOffset = offset; saveJob?.cancel(); saveJob = scope.launch { app.library.progress(book, (offset.toDouble() / contents!!.length.coerceAtLeast(1)).coerceIn(0.0, 1.0), "txt:$offset:utf16") } },
+                                    onPageChanged = { offset ->
+                                        facingOffset = offset
+                                        val fraction = (offset.toDouble() / contents!!.length.coerceAtLeast(1)).coerceIn(0.0, 1.0)
+                                        readerSession.checkpoint(fraction, "txt:$offset:utf16")
+                                    },
                                     onAsk = onAsk,
                                 )
                             } else {
                                 SingleScrollText(
-                                    text = contents!!, bookId = book.id, fontSize = fontSize, font = fontSetting, theme = readerTheme,
+                                    text = contents!!, bookId = book.id, initialOffset = restoredTextOffset ?: 0, fontSize = fontSize, font = fontSetting, theme = readerTheme,
                                     customBackground = customBackground, customForeground = customForeground,
                                     initialProgress = book.progress,
                                     onScroll = { fraction, offset ->
-                                        saveJob?.cancel()
-                                        saveJob = scope.launch { delay(450); app.library.progress(book, fraction, "txt:$offset:utf16") }
+                                        readerSession.checkpoint(fraction, "txt:$offset:utf16")
                                     },
                                     onAsk = onAsk,
                                 )
@@ -189,7 +220,7 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRow, onClose: () -> Unit, onAs
 }
 
 @Composable
-private fun SingleScrollText(text: String, bookId: String, fontSize: Float, font: String, theme: String, customBackground: String, customForeground: String, initialProgress: Double, onScroll: (Double, Int) -> Unit, onAsk: (String) -> Unit) {
+private fun SingleScrollText(text: String, bookId: String, initialOffset: Int, fontSize: Float, font: String, theme: String, customBackground: String, customForeground: String, initialProgress: Double, onScroll: (Double, Int) -> Unit, onAsk: (String) -> Unit) {
     val context = LocalContext.current
     AndroidView(
         modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 8.dp),
@@ -202,8 +233,10 @@ private fun SingleScrollText(text: String, bookId: String, fontSize: Float, font
                 val scrollView = viewScroll as ScrollView
                 val total = (scrollView.getChildAt(0)?.height ?: 0) - scrollView.height
                 if (total > 0) {
+                    val state = scrollView.tag as? ReaderViewState
+                    if (state?.restoring == true) return@setOnScrollChangeListener
                     val fraction = (scrollY.toFloat() / total).coerceIn(0f, 1f)
-                    (scrollView.tag as? ReaderViewState)?.fraction = fraction
+                    state?.fraction = fraction
                     val layout = view.layout
                     val line = if (layout != null) layout.getLineForVertical(scrollY.coerceIn(0, layout.height - 1)) else 0
                     onScroll(fraction.toDouble(), layout?.getLineStart(line) ?: (fraction * text.length).toInt())
@@ -215,7 +248,7 @@ private fun SingleScrollText(text: String, bookId: String, fontSize: Float, font
             val scroll = view as? ScrollView ?: return@AndroidView
             val textView = scroll.getChildAt(0) as TextView
             val state = scroll.tag as? ReaderViewState
-            val oldFraction = if (state == null) initialProgress.toFloat() else state.fraction
+            val oldFraction = state?.fraction ?: initialProgress.toFloat()
             textView.text = text
             textView.textSize = fontSize
             textView.typeface = typeface(font)
@@ -224,9 +257,17 @@ private fun SingleScrollText(text: String, bookId: String, fontSize: Float, font
             scroll.setBackgroundColor(readerBackground(theme, customBackground))
             scroll.post {
                 val total = (scroll.getChildAt(0)?.height ?: 0) - scroll.height
-                if (total > 0) scroll.scrollTo(0, (oldFraction.coerceIn(0f, 1f) * total).toInt())
+                if (total > 0) {
+                    val layout = textView.layout
+                    val targetY = if (state?.restoring == true && layout != null) {
+                        layout.getLineTop(layout.getLineForOffset(initialOffset.coerceIn(0, text.length)))
+                    } else (oldFraction.coerceIn(0f, 1f) * total).toInt()
+                    scroll.scrollTo(0, targetY.coerceIn(0, total))
+                }
+                state?.restoring = false
             }
-            scroll.tag = ReaderViewState(fontSize, font, theme, oldFraction)
+            if (state == null) scroll.tag = ReaderViewState(fontSize, font, theme, oldFraction)
+            else { state.textSize = fontSize; state.font = font; state.theme = theme }
         },
     )
 }

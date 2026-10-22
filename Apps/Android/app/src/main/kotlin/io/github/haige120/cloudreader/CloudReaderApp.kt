@@ -9,12 +9,15 @@ import io.github.haige120.cloudreader.data.SecureVault
 import io.github.haige120.cloudreader.sync.SyncEngine
 import io.github.haige120.cloudreader.sync.SyncOutcome
 import io.github.haige120.cloudreader.sync.OAuthConnector
+import io.github.haige120.cloudreader.sync.SyncTrigger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import io.github.haige120.cloudreader.sync.afterInitialDistinct
 
 class CloudReaderApp : Application() {
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -34,8 +37,18 @@ class CloudReaderApp : Application() {
     override fun onCreate() {
         super.onCreate()
         applicationScope.launch {
+            preferences.selectedProviders.afterInitialDistinct().collect {
+                applicationScope.launch { requestSync(SyncTrigger.PROVIDER_SELECTION) }
+            }
+        }
+        applicationScope.launch {
             runCatching { library.seedDemoBook() }
             ready.complete(Unit)
         }
+    }
+
+    suspend fun requestSync(trigger: SyncTrigger): SyncOutcome {
+        ready.await()
+        return sync.request(trigger).also { syncOutcome.value = it }
     }
 }

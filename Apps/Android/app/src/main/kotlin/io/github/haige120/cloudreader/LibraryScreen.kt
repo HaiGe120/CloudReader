@@ -17,9 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
@@ -40,11 +38,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,29 +48,108 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.haige120.cloudreader.data.BookRow
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.CreationExtras
+import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.haige120.cloudreader.domain.BookRecord
+import io.github.haige120.cloudreader.sync.SyncOutcome
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+
+data class LibraryScreenState(
+    val books: List<BookRecord> = emptyList(),
+    val searchQuery: String = "",
+    val favoritesOnly: Boolean = false,
+    val syncOutcome: SyncOutcome? = null,
+) {
+    val orderedBooks: List<BookRecord> get() = books.sortedWith(
+        compareByDescending<BookRecord> { it.lastOpenedAt != null }
+            .thenByDescending { it.lastOpenedAt ?: it.addedAt },
+    )
+    val latestBook: BookRecord? get() = orderedBooks.firstOrNull { it.lastOpenedAt != null }
+    val visibleBooks: List<BookRecord> get() = orderedBooks.filter {
+        (!favoritesOnly || it.isBookmarked) &&
+            (searchQuery.isBlank() || it.title.contains(searchQuery, true) || it.author?.contains(searchQuery, true) == true)
+    }
+}
+
+data class LibraryScreenActions(
+    val onSync: () -> Unit,
+    val onImport: () -> Unit,
+    val onOpen: (BookRecord) -> Unit,
+    val onAsk: (BookRecord, String?) -> Unit,
+    val onRemove: (BookRecord) -> Unit,
+    val onToggleFavorite: (BookRecord) -> Unit,
+)
+
+class LibraryViewModel(
+    private val savedState: SavedStateHandle,
+    books: kotlinx.coroutines.flow.Flow<List<BookRecord>>,
+    syncOutcomes: kotlinx.coroutines.flow.Flow<SyncOutcome?>,
+    stateScope: CoroutineScope? = null,
+) : ViewModel() {
+    private val searchQuery = MutableStateFlow(savedState[SEARCH_KEY] ?: "")
+    private val favoritesOnly = MutableStateFlow(savedState[FAVORITES_KEY] ?: false)
+
+    val state: StateFlow<LibraryScreenState> = combine(books, searchQuery, favoritesOnly, syncOutcomes) { currentBooks, query, favorites, outcome ->
+        LibraryScreenState(currentBooks.toList(), query, favorites, outcome)
+    }.stateIn(stateScope ?: viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryScreenState(
+        searchQuery = searchQuery.value,
+        favoritesOnly = favoritesOnly.value,
+    ))
+
+    fun search(query: String) {
+        savedState[SEARCH_KEY] = query
+        searchQuery.value = query
+    }
+
+    fun toggleFavorites() {
+        val next = !favoritesOnly.value
+        savedState[FAVORITES_KEY] = next
+        favoritesOnly.value = next
+    }
+
+    companion object {
+        private const val SEARCH_KEY = "library.search"
+        private const val FAVORITES_KEY = "library.favoritesOnly"
+
+        fun factory(app: CloudReaderApp): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
+                require(LibraryViewModel::class.java.isAssignableFrom(modelClass))
+                return LibraryViewModel(extras.createSavedStateHandle(), app.library.books, app.syncOutcome) as T
+            }
+        }
+    }
+}
 
 @Composable
 fun LibraryScreen(
     app: CloudReaderApp,
-    onImport: () -> Unit,
-    onOpen: (BookRow) -> Unit,
-    onAsk: (BookRow, String?) -> Unit,
-    onRemove: (BookRow) -> Unit,
-    onToggleFavorite: (BookRow) -> Unit,
+    actions: LibraryScreenActions,
 ) {
-    val books by app.library.books.collectAsState(initial = emptyList())
-    var search by rememberSaveable { mutableStateOf("") }
-    var favoritesOnly by rememberSaveable { mutableStateOf(false) }
-    val sync by app.syncOutcome.collectAsState()
+    val model: LibraryViewModel = viewModel(factory = LibraryViewModel.factory(app))
+    val state by model.state.collectAsStateWithLifecycle()
+    val books = state.books
+    val search = state.searchQuery
+    val favoritesOnly = state.favoritesOnly
+    val sync = state.syncOutcome
     val syncStatus = when {
         sync?.failed?.isNotEmpty() == true -> "Sync needs attention"
-        !sync?.successful.isNullOrEmpty() -> "Synced to ${sync!!.successful.size} destinations"
+        !sync?.successful.isNullOrEmpty() -> "Synced to ${sync.successful.size} destinations"
         else -> "Your shelf is ready offline"
     }
-    val ordered = books.sortedWith(compareByDescending<BookRow> { it.lastOpenedAt != null }.thenByDescending { it.lastOpenedAt ?: it.addedAt })
-    val latest = ordered.firstOrNull { it.lastOpenedAt != null }
-    val shown = ordered.filter { (!favoritesOnly || it.isBookmarked) && (search.isBlank() || it.title.contains(search, true) || it.author?.contains(search, true) == true) }
+    val latest = state.latestBook
+    val shown = state.visibleBooks
 
     Column(Modifier.fillMaxSize().padding(horizontal = 22.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -84,22 +157,25 @@ fun LibraryScreen(
                 Text("CloudReader", fontFamily = FontFamily.Serif, fontSize = 30.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                 Text(syncStatus, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
             }
-            IconButton(onClick = onImport) { Icon(Icons.Filled.Add, contentDescription = "Import books", tint = MaterialTheme.colorScheme.primary) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = actions.onSync) { Text("Sync now") }
+                IconButton(onClick = actions.onImport) { Icon(Icons.Filled.Add, contentDescription = "Import books", tint = MaterialTheme.colorScheme.primary) }
+            }
         }
         if (latest != null) {
             Text("CONTINUE READING", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
-            ContinueCard(latest, onClick = { onOpen(latest) })
+            ContinueCard(latest, onClick = { actions.onOpen(latest) })
             Spacer(Modifier.height(22.dp))
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Text("Your shelf", fontFamily = FontFamily.Serif, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
-            TextButton(onClick = { favoritesOnly = !favoritesOnly }) {
+            TextButton(onClick = model::toggleFavorites) {
                 Icon(if (favoritesOnly) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, null, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(5.dp)); Text(if (favoritesOnly) "Favorites" else "All books")
             }
         }
         OutlinedTextField(
-            value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+            value = search, onValueChange = model::search, modifier = Modifier.fillMaxWidth(), singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) }, placeholder = { Text("Search your books") },
             shape = RoundedCornerShape(16.dp),
         )
@@ -110,7 +186,7 @@ fun LibraryScreen(
                     Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(45.dp))
                     Spacer(Modifier.height(12.dp)); Text("Make room for a good book", fontFamily = FontFamily.Serif, fontSize = 22.sp)
                     Text("Imported books stay available offline.", color = MaterialTheme.colorScheme.secondary)
-                    Spacer(Modifier.height(12.dp)); Button(onClick = onImport) { Icon(Icons.Filled.UploadFile, null); Spacer(Modifier.width(8.dp)); Text("Import books") }
+                    Spacer(Modifier.height(12.dp)); Button(onClick = actions.onImport) { Icon(Icons.Filled.UploadFile, null); Spacer(Modifier.width(8.dp)); Text("Import books") }
                 }
             }
         } else if (shown.isEmpty()) {
@@ -123,7 +199,7 @@ fun LibraryScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 26.dp),
             ) {
                 items(shown, key = { it.id }) { book ->
-                    BookTile(book, onOpen = { onOpen(book) }, onAsk = { onAsk(book, null) }, onRemove = { onRemove(book) }, onFavorite = { onToggleFavorite(book) })
+                    BookTile(book, onOpen = { actions.onOpen(book) }, onAsk = { actions.onAsk(book, null) }, onRemove = { actions.onRemove(book) }, onFavorite = { actions.onToggleFavorite(book) })
                 }
             }
         }
@@ -131,7 +207,7 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun ContinueCard(book: BookRow, onClick: () -> Unit) {
+private fun ContinueCard(book: BookRecord, onClick: () -> Unit) {
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(top = 9.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EDE5))) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             BookCover(book, Modifier.size(width = 72.dp, height = 93.dp))
@@ -149,7 +225,7 @@ private fun ContinueCard(book: BookRow, onClick: () -> Unit) {
 }
 
 @Composable
-private fun BookTile(book: BookRow, onOpen: () -> Unit, onAsk: () -> Unit, onRemove: () -> Unit, onFavorite: () -> Unit) {
+private fun BookTile(book: BookRecord, onOpen: () -> Unit, onAsk: () -> Unit, onRemove: () -> Unit, onFavorite: () -> Unit) {
     Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFDF7))) {
         Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(12.dp)) {
             Box(Modifier.fillMaxWidth().aspectRatio(0.82f)) {
@@ -173,7 +249,7 @@ private fun BookTile(book: BookRow, onOpen: () -> Unit, onAsk: () -> Unit, onRem
 }
 
 @Composable
-private fun BookCover(book: BookRow, modifier: Modifier = Modifier) {
+private fun BookCover(book: BookRecord, modifier: Modifier = Modifier) {
     val colors = listOf(Color(0xFF536D59), Color(0xFF80654B), Color(0xFF697D82), Color(0xFF9A7760), Color(0xFF7A6654))
     val swatch = colors[(book.title.sumOf(Char::code) % colors.size)]
     Column(modifier.clip(RoundedCornerShape(12.dp)).background(swatch).padding(11.dp), verticalArrangement = Arrangement.SpaceBetween) {

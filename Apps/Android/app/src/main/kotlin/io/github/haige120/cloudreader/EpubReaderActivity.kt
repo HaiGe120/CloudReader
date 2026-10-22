@@ -10,7 +10,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import androidx.fragment.app.commitNow
-import io.github.haige120.cloudreader.data.BookRow
+import io.github.haige120.cloudreader.domain.BookRecord
+import io.github.haige120.cloudreader.data.toDomain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -29,7 +30,7 @@ class EpubReaderActivity : AppCompatActivity() {
     private val app get() = application as CloudReaderApp
     private lateinit var status: TextView
     private lateinit var titleView: TextView
-    private var book: BookRow? = null
+    private var book: BookRecord? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Readium restores child fragments through a factory. If Android recreated this
@@ -75,7 +76,7 @@ class EpubReaderActivity : AppCompatActivity() {
         if (bookId == null) { status.text = "Book not found"; return }
         lifecycleScope.launch {
             runCatching {
-                val result = app.database.libraryDao().book(bookId) ?: error("Book not found.")
+                val result = app.database.libraryDao().book(bookId)?.toDomain() ?: error("Book not found.")
                 book = result
                 titleView.text = result.title
                 app.library.opened(result)
@@ -84,7 +85,7 @@ class EpubReaderActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun openPublication(book: BookRow, containerId: Int) = withContext(Dispatchers.IO) {
+    private suspend fun openPublication(book: BookRecord, containerId: Int) = withContext(Dispatchers.IO) {
         val file = app.library.fileFor(book) ?: error("The local book file is missing.")
         val httpClient = DefaultHttpClient()
         val assetRetriever = AssetRetriever(contentResolver, httpClient)

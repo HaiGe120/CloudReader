@@ -21,6 +21,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 interface RemoteBookStore {
     suspend fun read(name: String): ByteArray?
     suspend fun write(name: String, bytes: ByteArray)
+    suspend fun close() {}
 }
 
 class FolderStore(context: Context, treeUri: Uri) : RemoteBookStore {
@@ -87,6 +88,13 @@ class SftpStore(context: Context, private val vault: SecureVault) : RemoteBookSt
     private data class Connection(val client: ChannelSftp, val session: com.jcraft.jsch.Session)
     @Volatile private var connection: Connection? = null
     private val knownHosts = File(context.applicationContext.noBackupFilesDir, "sftp_known_hosts")
+
+    override suspend fun close() {
+        val active = connection
+        connection = null
+        active?.client?.disconnect()
+        active?.session?.disconnect()
+    }
 
     override suspend fun read(name: String): ByteArray? = withContext(Dispatchers.IO) {
         requireSafeObject(name)

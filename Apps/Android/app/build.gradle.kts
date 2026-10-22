@@ -7,6 +7,8 @@ plugins {
 
 dependencyLocking { lockAllConfigurations() }
 
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
 android {
     namespace = "io.github.haige120.cloudreader"
     compileSdk = 37
@@ -29,6 +31,7 @@ android {
     }
     packaging.resources.excludes += setOf("META-INF/LICENSE*", "META-INF/NOTICE*")
     testOptions { animationsDisabled = true }
+    sourceSets.getByName("androidTest").assets.directories.add("$projectDir/../../../Contracts/v1/fixtures")
 }
 
 dependencies {
