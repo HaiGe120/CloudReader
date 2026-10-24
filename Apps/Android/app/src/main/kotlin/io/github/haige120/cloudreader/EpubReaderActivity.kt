@@ -1,19 +1,16 @@
 package io.github.haige120.cloudreader
 
 import android.os.Bundle
+import android.content.res.Configuration
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.fragment.app.commitNow
 import io.github.haige120.cloudreader.domain.BookRecord
 import io.github.haige120.cloudreader.data.toDomain
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
-import org.readium.r2.navigator.input.InputListener
-import org.readium.r2.navigator.input.TapEvent
-import org.readium.r2.navigator.util.DirectionalNavigationAdapter
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.http.DefaultHttpClient
@@ -27,6 +24,8 @@ class EpubReaderActivity : AppCompatActivity() {
     private val app get() = application as CloudReaderApp
     private lateinit var chrome: NativeReaderChrome
     private var book: BookRecord? = null
+    private var readerHost: EpubReaderHost? = null
+    private var readerSession: ReaderSession? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Readium restores child fragments through a factory. If Android recreated this
@@ -41,7 +40,7 @@ class EpubReaderActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val bookId = intent.getStringExtra(EXTRA_BOOK_ID)
         val containerId = R.id.epub_viewer_container
-        chrome = NativeReaderChrome(this, containerId)
+        chrome = NativeReaderChrome(this, containerId, showRestoreControl = false, immersiveSystemBars = true)
         chrome.setTitle("EPUB")
         setContentView(chrome.root)
 
@@ -50,11 +49,18 @@ class EpubReaderActivity : AppCompatActivity() {
             runCatching {
                 val result = app.database.libraryDao().book(bookId)?.toDomain() ?: error("Book not found.")
                 book = result
+                readerSession = ReaderSession(result.id, app.applicationScope, ReaderProgressWriter { id, progress, location ->
+                    val current = app.database.libraryDao().book(id)?.toDomain() ?: return@ReaderProgressWriter
+                    app.library.progress(current, progress, location)
+                })
                 chrome.setTitle(result.title)
                 chrome.setProgress("${(result.progress * 100).toInt().coerceIn(0, 100)}%")
                 app.library.opened(result)
                 openPublication(result, containerId)
-            }.onFailure { chrome.showError(it.localizedMessage ?: "This EPUB could not be opened.") }
+            }.onFailure {
+                if (it is CancellationException) throw it
+                chrome.showError(it.localizedMessage ?: "This EPUB could not be opened.")
+            }
         }
     }
 
@@ -73,30 +79,38 @@ class EpubReaderActivity : AppCompatActivity() {
         val savedLocator = book.localLocation?.takeIf { it.startsWith("readium:") }
             ?.removePrefix("readium:")
             ?.let { raw -> runCatching { Locator.fromJSON(org.json.JSONObject(raw)) }.getOrNull() }
-        val factory = EpubNavigatorFactory(publication).createFragmentFactory(initialLocator = savedLocator)
+        val settings = EpubReaderAppearance.SETTING_KEYS.mapNotNull { key ->
+            app.preferences.get(key)?.let { key to it }
+        }.toMap()
         withContext(Dispatchers.Main) {
-            supportFragmentManager.fragmentFactory = factory
-            supportFragmentManager.commitNow {
-                replace(containerId, EpubNavigatorFragment::class.java, Bundle(), "epub-navigator")
-            }
-            val navigator = supportFragmentManager.findFragmentByTag("epub-navigator") as EpubNavigatorFragment
-            // Readium emits these taps after internal links/selection handling. Keep its edge
-            // taps and keyboard navigation separate from the center tap used by reader chrome.
-            navigator.addInputListener(object : InputListener {
-                override fun onTap(event: TapEvent): Boolean {
-                    if (!isReaderChromeCenterTap(event.point.x, navigator.publicationView.width)) return false
-                    chrome.toggleControls()
-                    return true
-                }
-            })
-            navigator.addInputListener(DirectionalNavigationAdapter(navigator))
-            lifecycleScope.launch {
-                navigator.currentLocator.collect { locator ->
-                    val fraction = locator.locations.totalProgression ?: locator.locations.progression ?: book.progress
-                    chrome.setProgress("${(fraction * 100).toInt().coerceIn(0, 100)}%")
-                    app.library.progress(book, fraction, "readium:${locator.toJSON()}")
-                }
-            }
+            readerHost = EpubReaderHost(
+                this@EpubReaderActivity, chrome, containerId,
+                onSettingChanged = { key, value -> app.preferences.set(key, value) },
+                onLocatorChanged = { locator -> checkpoint(locator) },
+            ).also { it.attach(publication, savedLocator, EpubReaderAppearance.fromSettings(settings)) }
         }
+    }
+
+    private fun checkpoint(locator: Locator) {
+        val fraction = locator.locations.totalProgression ?: locator.locations.progression ?: book?.progress ?: 0.0
+        chrome.setProgress((fraction * 100).toInt().coerceIn(0, 100).toString() + "%")
+        readerSession?.checkpoint(fraction, "readium:" + locator.toJSON())
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        readerHost?.let { it.applyAppearance(it.appearance) }
+    }
+
+    override fun onStop() {
+        readerHost?.navigator?.currentLocator?.value?.let(::checkpoint)
+        readerSession?.let { session -> app.applicationScope.launch { session.flush() } }
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        readerHost?.close()
+        readerHost = null
+        super.onDestroy()
     }
 }

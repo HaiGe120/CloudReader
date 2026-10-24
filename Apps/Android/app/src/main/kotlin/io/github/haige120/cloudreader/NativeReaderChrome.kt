@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -20,7 +21,14 @@ import androidx.core.view.WindowInsetsControllerCompat
 import kotlin.math.roundToInt
 
 /** A small native shell shared by the PDF and Readium hosts. Hiding it releases its layout space. */
-internal class NativeReaderChrome(private val activity: Activity, containerId: Int) {
+internal class NativeReaderChrome(
+    private val activity: Activity,
+    containerId: Int,
+    private val showRestoreControl: Boolean = true,
+    private val immersiveSystemBars: Boolean = false,
+) {
+    private var foregroundColor = INK
+    private var controlsAccessibilityAction: Int? = null
     val root = FrameLayout(activity).apply { setBackgroundColor(PAPER) }
     val content = FrameLayout(activity).apply { id = containerId }
     private val column = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
@@ -45,6 +53,10 @@ internal class NativeReaderChrome(private val activity: Activity, containerId: I
         setPadding(0, 0, dp(4), 0)
     }
     private val selectionAction = action("AI", "Ask AI about selection").apply { visibility = View.GONE }
+    private val appearanceAction = action("Aa", "Reading appearance").apply {
+        textSize = 18f
+        visibility = View.GONE
+    }
     private val restore = action("Show controls", "Show reading controls").apply {
         textSize = 12f
         minimumWidth = dp(112)
@@ -82,6 +94,7 @@ internal class NativeReaderChrome(private val activity: Activity, containerId: I
         title.gravity = Gravity.CENTER_VERTICAL
         toolbar.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         toolbar.addView(selectionAction, LinearLayout.LayoutParams(dp(48), dp(48)))
+        toolbar.addView(appearanceAction, LinearLayout.LayoutParams(dp(48), dp(48)))
         toolbar.addView(action("⌄", "Hide reading controls").apply {
             textSize = 24f
             setOnClickListener { setControlsVisible(false) }
@@ -89,10 +102,13 @@ internal class NativeReaderChrome(private val activity: Activity, containerId: I
         column.addView(toolbar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
         column.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(column, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        root.addView(restore, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48), Gravity.TOP or Gravity.END).apply {
-            topMargin = dp(8)
-            marginEnd = dp(12)
-        })
+        if (showRestoreControl) {
+            root.addView(restore, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48), Gravity.TOP or Gravity.END).apply {
+                topMargin = dp(8)
+                marginEnd = dp(12)
+            })
+        }
+        root.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
         setControlsVisible(true)
     }
 
@@ -111,13 +127,49 @@ internal class NativeReaderChrome(private val activity: Activity, containerId: I
         selectionAction.setOnClickListener { onClick() }
     }
 
+    fun setAppearanceAction(onClick: () -> Unit) {
+        appearanceAction.visibility = View.VISIBLE
+        appearanceAction.setOnClickListener { onClick() }
+    }
+
+    fun setReadingColors(background: Int, foreground: Int, muted: Int) {
+        foregroundColor = foreground
+        root.setBackgroundColor(background)
+        content.setBackgroundColor(background)
+        toolbar.setBackgroundColor(background)
+        for (index in 0 until toolbar.childCount) {
+            (toolbar.getChildAt(index) as? TextView)?.setTextColor(foreground)
+        }
+        progress.setTextColor(muted)
+        restore.setTextColor(foreground)
+        (restore.background as? GradientDrawable)?.apply {
+            setColor(background)
+            setStroke(dp(1), ColorUtils.setAlphaComponent(muted, 100))
+        }
+        for (index in 0 until content.childCount) {
+            (content.getChildAt(index) as? TextView)?.setTextColor(foreground)
+        }
+        val controller = WindowCompat.getInsetsController(activity.window, root)
+        val lightBackground = ColorUtils.calculateLuminance(background) > 0.5
+        controller.isAppearanceLightStatusBars = lightBackground
+        controller.isAppearanceLightNavigationBars = lightBackground
+    }
+
     fun setControlsVisible(visible: Boolean) {
         controlsVisible = visible
         toolbar.visibility = if (visible) View.VISIBLE else View.GONE
-        restore.visibility = if (visible) View.GONE else View.VISIBLE
+        restore.visibility = if (showRestoreControl && !visible) View.VISIBLE else View.GONE
         val controller = WindowCompat.getInsetsController(activity.window, root)
-        if (visible) controller.show(WindowInsetsCompat.Type.statusBars())
-        else controller.hide(WindowInsetsCompat.Type.statusBars())
+        val bars = if (immersiveSystemBars) WindowInsetsCompat.Type.systemBars() else WindowInsetsCompat.Type.statusBars()
+        if (visible) controller.show(bars) else controller.hide(bars)
+        controlsAccessibilityAction?.let { ViewCompat.removeAccessibilityAction(root, it) }
+        controlsAccessibilityAction = ViewCompat.addAccessibilityAction(
+            root,
+            if (visible) "Hide reading controls" else "Show reading controls",
+        ) { _, _ ->
+            setControlsVisible(!controlsVisible)
+            true
+        }
         ViewCompat.requestApplyInsets(root)
     }
 
@@ -127,7 +179,7 @@ internal class NativeReaderChrome(private val activity: Activity, containerId: I
         content.addView(TextView(activity).apply {
             text = message
             textSize = 16f
-            setTextColor(INK)
+            setTextColor(foregroundColor)
             gravity = Gravity.CENTER
             setPadding(dp(24), dp(24), dp(24), dp(24))
         }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -136,7 +188,7 @@ internal class NativeReaderChrome(private val activity: Activity, containerId: I
 
     /** Overlay controls and system insets must never count as publication taps. */
     fun containsContentPoint(rawX: Float, rawY: Float): Boolean =
-        content.containsScreenPoint(rawX, rawY) && !restore.containsScreenPoint(rawX, rawY)
+        content.containsScreenPoint(rawX, rawY) && (!showRestoreControl || !restore.containsScreenPoint(rawX, rawY))
 
     private fun action(label: String, description: String) = TextView(activity).apply {
         text = label

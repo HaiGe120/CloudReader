@@ -34,7 +34,9 @@ Connection status remains visible below the Google row. Returned intents are par
 
 ## Reading controls
 
-TXT, EPUB and PDF use a compact reader bar. Tap the reading content to hide or restore it; EPUB uses the center region so edge page turns remain available. A small **Show controls** button restores hidden controls. TXT appearance, font, color and layout options are grouped under **Aa**. Reading gestures and native text selection remain available while the bar is hidden.
+TXT, EPUB and PDF use a compact reader bar. EPUB opens with the bar and system bars hidden, with no floating button covering the book. Tap the center area to show or hide the controls; edge taps retain Readium page navigation. Accessibility actions also show or hide the bar. TXT and PDF retain their small **Show controls** button.
+
+EPUB's **Aa** panel provides serif, sans and monospace fonts, text size, System/Light/Sepia/Dark/Custom colors, scrolling, one page and two pages. Changes are saved on this device and apply to the open book. Two pages use screens at least 600 dp wide, with one page on compact screens; fixed-layout EPUBs retain their original typography. Font and color preferences are shared with TXT, while EPUB's page layout is saved separately. TXT also groups its appearance options under **Aa**. Reading gestures and native text selection remain available while the bar is hidden. See [EPUB appearance evidence](../../docs/engineering/evidence/ANDROID-EPUB-03.md) for checks and limits.
 
 Dropbox and pCloud app IDs are configured by the user in Settings. WebDAV, SFTP, and folder sync use user-provided connection details. Credentials are encrypted with an Android Keystore key, are excluded from device backup, and are never included in the shared sync index. Live provider checks require the corresponding provider app registrations and user credentials.
 
