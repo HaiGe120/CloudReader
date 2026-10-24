@@ -12,6 +12,9 @@ final class MacReaderUITests: XCTestCase {
         app.launchEnvironment["CLOUDREADER_UI_TEST_LAYOUT"] = layout
         app.launchEnvironment["CLOUDREADER_UI_TEST_WIDTH"] = String(width)
         app.launchEnvironment["CLOUDREADER_UI_TEST_FIXTURE_ROOT"] = root.path
+        // Runtime and UI targets share the isolated app identity. Finish any
+        // remaining test-host process before launching a visible reader session.
+        if app.state != .notRunning { app.terminate() }
         app.launch()
         return app
     }
@@ -68,6 +71,36 @@ final class MacReaderUITests: XCTestCase {
         ready(app)
         XCTAssertTrue(app.buttons["reader.askAI"].exists)
         capture(app, name: "Mac EPUB restored wide")
+    }
+
+    @MainActor
+    func testEPUBPageButtonsAndChapterJumpsKeepMeasuredNavigation() {
+        let app = launch(format: "epub", layout: "facingPages")
+        ready(app)
+        let status = app.staticTexts["reader.pageStatus"]
+        let pageCount = statusText(status).components(separatedBy: " of ").last!
+        app.buttons["reader.next"].click()
+        let nextSpread = XCTNSPredicateExpectation(predicate: textEquals("Pages 3–4 of \(pageCount)"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [nextSpread], timeout: 10), .completed)
+        app.buttons["Next chapter"].click()
+        let chapters = app.descendants(matching: .any).matching(identifier: "reader.chapters").firstMatch
+        let secondChapter = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", "Second chapter", "Second chapter"), object: chapters)
+        XCTAssertEqual(XCTWaiter.wait(for: [secondChapter], timeout: 10), .completed)
+        ready(app)
+        XCTAssertTrue(statusText(status).hasPrefix("Pages 1–2 of "), statusText(status))
+        capture(app, name: "Mac EPUB next chapter ready")
+        chapters.click()
+        app.menuItems.matching(NSPredicate(format: "title CONTAINS %@", "First chapter")).firstMatch.click()
+        let firstChapter = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value CONTAINS %@ OR label CONTAINS %@", "First chapter", "First chapter"), object: chapters)
+        XCTAssertEqual(XCTWaiter.wait(for: [firstChapter], timeout: 10), .completed)
+        ready(app)
+        XCTAssertEqual(statusText(status), "Pages 1–2 of \(pageCount)")
+        app.buttons["reader.next"].click()
+        let resumed = XCTNSPredicateExpectation(predicate: textEquals("Pages 3–4 of \(pageCount)"), object: status)
+        XCTAssertEqual(XCTWaiter.wait(for: [resumed], timeout: 10), .completed)
+        capture(app, name: "Mac EPUB chapter menu return and page turn")
     }
 
     @MainActor

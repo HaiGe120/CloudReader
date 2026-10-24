@@ -2,6 +2,10 @@
 
 Status: complete at local Mac runtime/UI gates, 2026-10-21. This bounded sub-batch follows the user's request to apply the iOS reader repair and new formats to macOS; the wider M01 backlog remains separate.
 
+The 2026-10-24 page-turn/chapter-jump flicker regression repair is documented separately in [M01-EPUB-NAV-01](M01-EPUB-NAV-01.md), including current checks and a local Mac build.
+
+The subsequent cumulative spread-drift repair, including verification with a staged copy of the reported chapter, is recorded in [M01-EPUB-ALIGN-01](M01-EPUB-ALIGN-01.md).
+
 ## Ownership and boundary
 
 - Coordinator: shared contracts/preparation, XcodeGen specifications and generated projects, dependency locks, isolated test launch, integration and regression repair.

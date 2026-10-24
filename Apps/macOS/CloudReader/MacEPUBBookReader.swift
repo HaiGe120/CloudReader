@@ -27,6 +27,7 @@ struct MacEPUBBookReader: View {
     @State private var chapterProgress = 0.0
     @State private var loadError: String?
     @State private var isLoadingChapter = true
+    @State private var showsChapterLoadingIndicator = false
     @State private var reloadID = UUID()
     @State private var navigationID = UUID()
     @State private var targetFragment: String?
@@ -100,7 +101,7 @@ struct MacEPUBBookReader: View {
                             }
                         )
                         .id(EPUBMacSource(url: url, bookID: bookID, reloadID: reloadID))
-                        if isLoadingChapter {
+                        if isLoadingChapter && showsChapterLoadingIndicator {
                             ProgressView("Opening chapter…")
                                 .padding(14)
                                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -159,6 +160,13 @@ struct MacEPUBBookReader: View {
                 loadError = error.localizedDescription
             }
         }
+        .task(id: isLoadingChapter) {
+            showsChapterLoadingIndicator = false
+            guard isLoadingChapter else { return }
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, isLoadingChapter else { return }
+            showsChapterLoadingIndicator = true
+        }
         .onAppear { consume(navigationRequest) }
         .onChange(of: navigationRequest) { consume(navigationRequest) }
         .onChange(of: publication != nil) { if publication != nil { consume(navigationRequest) } }
@@ -193,11 +201,12 @@ struct MacEPUBBookReader: View {
         case .previousChapter: navigate(to: chapter - 1, in: publication)
         case .nextChapter: navigate(to: chapter + 1, in: publication)
         case .chapter(let index): navigate(to: index, in: publication)
-        case .seek(let value): let location = EPUBPublication.location(progress: value, chapterCount: publication.chapters.count); navigate(to: location.chapter, in: publication); chapterProgress = location.fraction; navigationID = UUID()
+        case .seek(let value): targetFragment = nil; let location = EPUBPublication.location(progress: value, chapterCount: publication.chapters.count); navigate(to: location.chapter, in: publication); chapterProgress = location.fraction; navigationID = UUID()
         }
     }
 
     private func turn(_ direction: Int, in publication: EPUBPublication) {
+        targetFragment = nil
         let layout = ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll
         guard let count = currentPageCount else {
             if direction < 0 && chapterProgress > 0.002 { chapterProgress = max(0, chapterProgress - 0.08); navigationID = UUID() }
@@ -323,31 +332,24 @@ struct MacEPUBWebView: NSViewRepresentable {
         }
         let path = context.coordinator.nonSpineDocumentPath ?? publication.chapters[chapter].path
         if context.coordinator.loadedPath != path {
-            context.coordinator.loadedPath = path
-            context.coordinator.isReady = false
-            context.coordinator.restoreFraction = initialProgress
-            context.coordinator.lastNavigationID = navigationID
-            context.coordinator.restoreFragment = targetFragment
-            var components = URLComponents()
-            components.scheme = "cloudreader-epub"
-            components.host = "book"
-            components.path = "/" + path
-            if let resourceURL = components.url {
-                view.load(URLRequest(url: resourceURL))
-            } else {
-                onError(EPUBError.unsafePath.localizedDescription)
-            }
-        } else if context.coordinator.isReady {
-            if context.coordinator.lastNavigationID != navigationID {
+            context.coordinator.loadDocument(path: path, fraction: initialProgress, fragment: targetFragment)
+        } else {
+            let needsNavigation = context.coordinator.lastNavigationID != navigationID
+            if needsNavigation {
+                // A jump can arrive before didFinish or while initial layout is
+                // settling. Keep its destination until this document is ready.
                 context.coordinator.lastNavigationID = navigationID
-                context.coordinator.applyAppearance(restoring: initialProgress, fragment: targetFragment)
-            } else {
-                context.coordinator.applyAppearance()
+                context.coordinator.restoreFraction = initialProgress
+                context.coordinator.restoreFragment = targetFragment
+            }
+            if context.coordinator.isReady {
+                context.coordinator.applyAppearance(restoring: needsNavigation ? initialProgress : nil, fragment: needsNavigation ? targetFragment : nil)
             }
         }
     }
 
     static func dismantleNSView(_ view: WKWebView, coordinator: Coordinator) {
+        coordinator.cancelPresentation()
         view.stopLoading()
         view.configuration.userContentController.removeScriptMessageHandler(forName: "reader", contentWorld: .defaultClient)
         view.navigationDelegate = nil
@@ -363,6 +365,7 @@ struct MacEPUBWebView: NSViewRepresentable {
         var lastNavigationID: UUID?
         var nonSpineDocumentPath: String?
         private var activeNavigation: WKNavigation?
+        private var documentID = UUID()
         private var appearanceKey = ""
         private var configurationID = UUID()
         private var pendingLoadNotification = false
@@ -370,8 +373,48 @@ struct MacEPUBWebView: NSViewRepresentable {
 
         init(parent: MacEPUBWebView) { self.parent = parent }
 
+        func loadDocument(path: String, fraction: Double, fragment: String?) {
+            guard let view else { return }
+            var components = URLComponents()
+            components.scheme = "cloudreader-epub"
+            components.host = "book"
+            components.path = "/" + path
+            guard let resourceURL = components.url else {
+                parent.onError(EPUBError.unsafePath.localizedDescription)
+                return
+            }
+            timeoutTask?.cancel()
+            documentID = UUID()
+            let expectedDocument = documentID
+            configurationID = UUID()
+            loadedPath = path
+            activeNavigation = nil
+            isReady = false
+            pendingLoadNotification = false
+            restoreFraction = fraction
+            restoreFragment = fragment
+            lastNavigationID = parent.navigationID
+            appearanceKey = ""
+            let load = { [weak self, weak view] in
+                guard let self, let view, self.documentID == expectedDocument else { return }
+                self.activeNavigation = view.load(URLRequest(url: resourceURL))
+            }
+            if let readerView = view as? MacReaderWKWebView {
+                readerView.holdCurrentPage(then: load)
+            } else {
+                load()
+            }
+        }
+
+        func cancelPresentation() {
+            documentID = UUID()
+            configurationID = UUID()
+            timeoutTask?.cancel()
+            (view as? MacReaderWKWebView)?.discardHeldPage()
+        }
+
         func turnPage(_ direction: Int) {
-            guard parent.pageLayoutRaw != "scroll", let view else { return }
+            guard isReady, parent.pageLayoutRaw != "scroll", let view else { return }
             view.callAsyncJavaScript(
                 "return window.cloudReader.turnPage(direction);",
                 arguments: ["direction": direction],
@@ -394,21 +437,21 @@ struct MacEPUBWebView: NSViewRepresentable {
                 try? await Task.sleep(for: .seconds(25))
                 guard !Task.isCancelled, let self else { return }
                 webView.stopLoading()
-                self.parent.onError("This chapter took too long to open. Try again or import another copy of the book.")
+                self.failed(NSError(domain: "CloudReader.EPUB", code: 1, userInfo: [NSLocalizedDescriptionKey: "This chapter took too long to open. Try again or import another copy of the book."]))
             }
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             guard activeNavigation === navigation else { return }
             timeoutTask?.cancel()
-            isReady = true
             appearanceKey = ""
             pendingLoadNotification = true
             applyAppearance(restoring: restoreFraction, fragment: restoreFragment)
         }
 
-        func applyAppearance(restoring fraction: Double? = nil, fragment: String? = nil) {
-            guard let view else { return }
+        @discardableResult
+        func applyAppearance(restoring fraction: Double? = nil, fragment: String? = nil) -> Bool {
+            guard let view else { return false }
             let foreground = Self.cssColor(parent.foreground, view: view)
             let background = Self.cssColor(parent.background, view: view)
             let family: String
@@ -444,48 +487,87 @@ struct MacEPUBWebView: NSViewRepresentable {
             let width = max(parent.viewportSize.width, 1)
             let columnWidth = (width - metrics.gutter * CGFloat(metrics.effectiveColumnCount - 1)) / CGFloat(metrics.effectiveColumnCount)
             let css = """
-            html { width:\(width)px!important; min-height:100%; background:\(background)!important; color:\(foreground)!important; -webkit-text-size-adjust:none; }
+            html { scroll-behavior:auto!important; overflow-anchor:none!important; width:\(width)px!important; min-height:100%; background:\(background)!important; color:\(foreground)!important; -webkit-text-size-adjust:none; }
             body { color:\(foreground)!important; background:\(background)!important; font-family:\(family)!important; font-size:\(parent.fontSize)px!important; font-weight:400!important; line-height:\(lineHeight)!important; margin:0 auto!important; padding:0 \(metrics.horizontalMargin)px!important; box-sizing:border-box; overflow-wrap:anywhere; }
             html body * { color:inherit!important; font-family:inherit!important; font-size:inherit!important; font-weight:inherit!important; line-height:inherit!important; background-color:transparent!important; background-image:none!important; max-width:100%!important; box-sizing:border-box!important; }
             p, li, blockquote, dd { width:auto!important; text-indent:0!important; margin-inline-start:0!important; margin-inline-end:0!important; } html body p { margin-block:0 \(parent.fontSize * 0.55)px!important; }
             html body h1,html body h2,html body h3,html body h4,html body h5,html body h6,html body strong,html body b,html body th { font-weight:600!important; } html body h1{font-size:1.7em!important} html body h2{font-size:1.45em!important} html body h3{font-size:1.25em!important} html body h4,html body h5,html body h6{font-size:1.1em!important}
             img,svg,video,canvas,table{max-width:100%!important;height:auto;object-fit:contain} pre,code{white-space:pre-wrap!important;overflow-wrap:anywhere!important} a{text-decoration:underline}
             [style*="width"],[width]{max-width:100%!important}
-            :root { --cloudreader-chrome-visible:\(parent.isChromeVisible ? 1 : 0); }
             \(paged ? "html { height:100%!important; overflow-x:auto!important; overflow-y:hidden!important; } body { height:100vh!important; width:\(width)px!important; padding:0!important; overflow:visible!important; column-count:auto!important; column-width:\(columnWidth)px!important; column-gap:\(metrics.gutter)px!important; column-fill:auto!important; } html body > :not(img):not(svg):not(video):not(canvas) { margin-inline:\(metrics.horizontalMargin)px!important; }" : "body { width:auto!important; max-width:\(metrics.maximumProseWidth + metrics.horizontalMargin * 2)px!important; margin:0 auto!important; }")
             """
             let key = "\(css)|height:\(parent.viewportSize.height)"
-            guard appearanceKey != key || fraction != nil else { return }
+            let changesLayout = appearanceKey != key
+            guard changesLayout || fraction != nil || fragment != nil else { return false }
             appearanceKey = key
+            let identifier = UUID()
+            let expectedDocument = documentID
+            let requestedNavigation = lastNavigationID
             let arguments: [String: Any] = [
                 "css": css,
                 "paged": paged,
                 "fraction": fraction as Any? ?? NSNull(),
-                "fragment": fragment as Any? ?? NSNull()
-                ,"chromeVisible": parent.isChromeVisible, "viewportWidth": width,
-                "columns": metrics.effectiveColumnCount, "gutter": metrics.gutter
+                "fragment": fragment as Any? ?? NSNull(),
+                "viewportWidth": width, "columns": metrics.effectiveColumnCount, "gutter": metrics.gutter,
+                "configurationID": identifier.uuidString
             ]
             let expectedPath = loadedPath
-            let identifier = UUID()
             configurationID = identifier
+            // Position-only navigation must not replace CSS: WebKit can briefly
+            // reset its columns/scroll offset when an identical sheet is replaced.
+            let script = changesLayout
+                ? "return await window.cloudReader.configure(css, paged, fraction, fragment, viewportWidth, columns, gutter, configurationID);"
+                : "return await window.cloudReader.navigate(fraction, fragment, configurationID);"
             view.callAsyncJavaScript(
-                "return await window.cloudReader.configure(css, paged, fraction, fragment, chromeVisible, viewportWidth, columns, gutter);",
+                script,
                 arguments: arguments,
                 in: nil,
                 in: .defaultClient
             ) { [weak self] result in
-                guard let self, self.isReady, self.loadedPath == expectedPath, self.configurationID == identifier else { return }
+                guard let self, self.documentID == expectedDocument, self.loadedPath == expectedPath,
+                      self.configurationID == identifier else { return }
                 switch result {
                 case .success:
                     if self.pendingLoadNotification {
-                        self.pendingLoadNotification = false
-                        self.parent.onLoaded()
+                        self.finishInitialLoad(configuration: identifier, navigation: requestedNavigation)
                     }
                 case .failure(let error):
-                    if (error as NSError).code != NSURLErrorCancelled {
-                        self.parent.onError(error.localizedDescription)
-                    }
+                    self.failed(error)
                 }
+            }
+            return true
+        }
+
+        private func finishInitialLoad(configuration: UUID, navigation: UUID?) {
+            guard let view, pendingLoadNotification, configurationID == configuration else { return }
+            if lastNavigationID != navigation {
+                applyAppearance(restoring: restoreFraction, fragment: restoreFragment)
+                return
+            }
+            // Geometry/appearance can also change during loading. Complete that
+            // reflow before revealing the new document.
+            if applyAppearance() { return }
+            view.callAsyncJavaScript(
+                "return await window.cloudReader.reveal(configurationID);",
+                arguments: ["configurationID": configuration.uuidString], in: nil, in: .defaultClient
+            ) { [weak self] result in
+                guard let self, self.pendingLoadNotification, self.configurationID == configuration else { return }
+                if case let .failure(error) = result {
+                    self.failed(error)
+                    return
+                }
+                if self.lastNavigationID != navigation {
+                    self.applyAppearance(restoring: self.restoreFraction, fragment: self.restoreFragment)
+                    return
+                }
+                if self.applyAppearance() { return }
+                (view as? MacReaderWKWebView)?.revealCurrentPage()
+                self.pendingLoadNotification = false
+                self.isReady = true
+                self.parent.onLoaded()
+                // Initial reports were suppressed while the outgoing snapshot
+                // was visible. Publish only the final, presented destination.
+                view.callAsyncJavaScript("window.cloudReader.report();", arguments: [:], in: nil, in: .defaultClient) { _ in }
             }
         }
 
@@ -495,13 +577,13 @@ struct MacEPUBWebView: NSViewRepresentable {
                   let frame = URLComponents(url: frameURL, resolvingAgainstBaseURL: false),
                   frame.scheme == "cloudreader-epub", frame.host == "book",
                   String(frame.path.dropFirst()) == loadedPath,
-                  let payload = message.body as? [String: Any] else { return }
+                  let payload = message.body as? [String: Any],
+                  payload["configurationID"] as? String == configurationID.uuidString else { return }
             let isSpineChapter = parent.publication.chapters.contains { $0.path == loadedPath }
             if isSpineChapter, let fraction = payload["progress"] as? Double, fraction.isFinite {
                 parent.onProgress(min(max(fraction, 0), 1))
             }
             if isSpineChapter, payload["kind"] as? String == "location" {
-                finishInitialLoadIfNeeded()
                 parent.onNavigationState(payload["page"] as? Int, payload["pages"] as? Int, (payload["progress"] as? Double) ?? 0)
             }
             if isSpineChapter, payload["kind"] as? String == "boundary", let direction = payload["direction"] as? Int {
@@ -511,12 +593,6 @@ struct MacEPUBWebView: NSViewRepresentable {
                 parent.onSelection(String(selection.prefix(18_000)))
             }
             if payload["kind"] as? String == "tap" { parent.onContentTap() }
-        }
-
-        private func finishInitialLoadIfNeeded() {
-            guard pendingLoadNotification else { return }
-            pendingLoadNotification = false
-            parent.onLoaded()
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -541,11 +617,9 @@ struct MacEPUBWebView: NSViewRepresentable {
                     decisionHandler(.cancel)
                     parent.onNavigate(index, targetFragment)
                 case let .document(path, fragment):
+                    decisionHandler(.cancel)
                     nonSpineDocumentPath = path
-                    loadedPath = path
-                    restoreFraction = 0
-                    restoreFragment = fragment
-                    decisionHandler(.allow)
+                    loadDocument(path: path, fraction: 0, fragment: fragment)
                 case nil:
                     decisionHandler(.allow)
                 }
@@ -562,6 +636,8 @@ struct MacEPUBWebView: NSViewRepresentable {
             if let navigation, activeNavigation !== navigation { return }
             timeoutTask?.cancel()
             if (error as NSError).code != NSURLErrorCancelled {
+                cancelPresentation()
+                isReady = false
                 parent.onError(error.localizedDescription)
             }
         }
@@ -580,6 +656,14 @@ struct MacEPUBWebView: NSViewRepresentable {
 
     private static let viewportScript = """
     (() => {
+      // Preserve layout measurement while preventing a publisher-style/first-page
+      // paint before the reader has restored the requested location.
+      const namespace = document.documentElement.namespaceURI;
+      const gate = namespace === 'http://www.w3.org/2000/svg'
+        ? document.createElementNS(namespace, 'style') : document.createElement('style');
+      gate.id = 'cloudreader-pending-layout';
+      gate.textContent = ':root { opacity:0!important; }';
+      (document.head || document.documentElement).appendChild(gate);
       let meta = document.querySelector('meta[name="viewport"]');
       if (!meta) { meta = document.createElement('meta'); meta.name = 'viewport'; (document.head || document.documentElement).appendChild(meta); }
       meta.content = 'width=device-width, initial-scale=1';
@@ -588,14 +672,56 @@ struct MacEPUBWebView: NSViewRepresentable {
 
     private static let readerScript = """
     (() => {
-      let paged = false, restoring = true, configured = false, timer, previous = 0, pageWidth = 1, pageGap = 0, pagesPerView = 1, suppressScrollUntil = 0, cachedPageCount = null;
-      let desired = null, restoreVersion = 0, passage = null;
+      let paged = false, restoring = true, configured = false, timer, previous = 0, spreadWidth = 1, pageGap = 0, pagesPerView = 1, suppressScrollUntil = 0, cachedPageCount = null;
+      let desired = null, restoreVersion = 0, passage = null, configurationID = null;
+      let columnPitch = 1, viewportWidth = 1, cachedContentMetrics = null;
+      const post = payload => webkit.messageHandlers.reader.postMessage({...payload, configurationID});
+      const scrollInstantly = (left, top) => scrollTo({left, top, behavior:'instant'});
       const waiters = [];
       let pointerStart = null;
       const root = () => document.scrollingElement || document.documentElement;
+      const pageCount = () => {
+        const content = document.body || document.documentElement;
+        const metrics = [content.scrollWidth, content.scrollHeight, columnPitch, pagesPerView].join('|');
+        if (cachedPageCount !== null && cachedContentMetrics === metrics) return cachedPageCount;
+        cachedContentMetrics = metrics;
+        if (!paged) return cachedPageCount = Math.max(1, Math.ceil((root().scrollHeight + 1) / Math.max(innerHeight, 1)));
+        let finalColumn = 0;
+        const include = rect => {
+          if (rect.width <= 0 || rect.height <= 0) return;
+          const right = Math.max(0, rect.right + scrollX - 1);
+          finalColumn = Math.max(finalColumn, Math.floor(right / columnPitch));
+        };
+        const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          if (!walker.currentNode.nodeValue.trim()) continue;
+          const range = document.createRange(); range.selectNodeContents(walker.currentNode);
+          Array.from(range.getClientRects()).forEach(include);
+        }
+        // Image-only chapters and trailing illustrations also occupy columns.
+        content.querySelectorAll('img,svg,video,canvas,table,hr').forEach(element => {
+          Array.from(element.getClientRects()).forEach(include);
+        });
+        return cachedPageCount = finalColumn + 1;
+      };
       const distance = () => {
-        const e = root();
-        return Math.max(0, paged ? e.scrollWidth - innerWidth : e.scrollHeight - innerHeight);
+        if (!paged) return Math.max(0, root().scrollHeight - innerHeight);
+        const maximum = Math.max(0, Math.ceil(pageCount() / pagesPerView) - 1) * spreadWidth;
+        if (document.body) {
+          // An odd final page still needs a full viewport of scrollable space.
+          // Keep the extent marker outside the columns so it adds no content page.
+          let marker = document.getElementById('cloudreader-page-extent');
+          if (!marker) {
+            marker = document.createElement('div');
+            marker.id = 'cloudreader-page-extent';
+            marker.setAttribute('aria-hidden', 'true');
+            marker.style.cssText = 'position:absolute!important;top:0!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important;';
+            document.documentElement.appendChild(marker);
+          }
+          const left = Math.ceil(maximum + innerWidth) - 1 + 'px';
+          if (marker.style.left !== left) marker.style.setProperty('left', left, 'important');
+        }
+        return maximum;
       };
       const position = () => {
         const extent = distance();
@@ -603,7 +729,7 @@ struct MacEPUBWebView: NSViewRepresentable {
       };
       const restore = fraction => {
         const extent = distance();
-        scrollTo(paged ? Math.round(fraction * extent / Math.max(pageWidth, 1)) * pageWidth : 0, paged ? 0 : fraction * extent);
+        scrollInstantly(paged ? Math.round(fraction * extent / Math.max(spreadWidth, 1)) * spreadWidth : 0, paged ? 0 : fraction * extent);
       };
       const findPassage = value => {
         if (!value) return null;
@@ -655,7 +781,7 @@ struct MacEPUBWebView: NSViewRepresentable {
         const rect = range.getBoundingClientRect();
         return {text:quote, occurrence, x:rect.left, y:rect.top};
       };
-      const requestRestore = (fraction, fragment, passageAnchor = null) => {
+      const requestRestore = (fraction, fragment, passageAnchor = null, reflow = false) => {
         const request = {fraction:Math.max(0, Math.min(1, fraction)), fragment, passageAnchor, version:++restoreVersion};
         desired = request;
         // Keep the desired position even when the first, zero-sized viewport
@@ -667,13 +793,20 @@ struct MacEPUBWebView: NSViewRepresentable {
         let lastMetrics = '', stableFrames = 0, attempts = 0;
         const step = () => {
           if (request.version !== restoreVersion) return;
+          // Initial images/fonts can settle after configure's first measurement.
+          if (reflow && paged) cachedPageCount = null;
           const anchor = request.fragment === null ? null : document.getElementById(request.fragment) || document.getElementsByName(request.fragment)[0];
           const passageRange = anchor ? null : findPassage(request.passageAnchor);
-          if (anchor) anchor.scrollIntoView({block:'start', inline:'start'});
+          if (anchor) {
+            if (paged) {
+              const rect = anchor.getClientRects()[0] || anchor.getBoundingClientRect();
+              scrollInstantly(Math.max(0, Math.floor((scrollX + rect.left) / spreadWidth)) * spreadWidth, 0);
+            } else anchor.scrollIntoView({block:'start', inline:'start', behavior:'instant'});
+          }
           else if (passageRange) {
             const rect = passageRange.getBoundingClientRect();
-            if (paged) scrollTo(Math.floor((scrollX + rect.left) / Math.max(pageWidth, 1)) * pageWidth, 0);
-            else scrollTo(0, Math.max(0, scrollY + rect.top - request.passageAnchor.y));
+            if (paged) scrollInstantly(Math.floor((scrollX + rect.left) / Math.max(spreadWidth, 1)) * spreadWidth, 0);
+            else scrollInstantly(0, Math.max(0, scrollY + rect.top - request.passageAnchor.y));
             passage = request.passageAnchor;
           }
           else restore(request.fraction);
@@ -692,52 +825,43 @@ struct MacEPUBWebView: NSViewRepresentable {
         requestAnimationFrame(() => requestAnimationFrame(step));
       };
       const report = () => {
-        const e = root(), extent = distance(), progress = position();
-        let page = paged ? Math.max(1, Math.floor(scrollX / Math.max(pageWidth, 1)) * pagesPerView + 1) : Math.max(0, Math.floor(scrollY / Math.max(innerHeight, 1)));
-        if (cachedPageCount === null) {
-          if (!paged) cachedPageCount = Math.max(1, Math.ceil((e.scrollHeight + 1) / Math.max(innerHeight, 1)));
-          else {
-            const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
-            let lastRect = null;
-            while (walker.nextNode()) {
-              if (!walker.currentNode.nodeValue.trim()) continue;
-              const range = document.createRange(); range.selectNodeContents(walker.currentNode);
-              const rects = range.getClientRects();
-              if (rects.length) lastRect = rects[rects.length - 1];
-            }
-            if (!lastRect) cachedPageCount = 1;
-            else {
-              const pageWidthInner = (pageWidth - pageGap * (pagesPerView - 1)) / pagesPerView;
-              const documentRight = Math.max(0, lastRect.right + scrollX - 1);
-              const spread = Math.floor(documentRight / pageWidth);
-              const withinSpread = documentRight - spread * pageWidth;
-              const pagesInLastSpread = pagesPerView === 1 || withinSpread <= pageWidthInner ? 1 : 2;
-              cachedPageCount = spread * pagesPerView + pagesInLastSpread;
-            }
-          }
-        }
-        const pages = cachedPageCount;
-        if (paged) page = Math.min(page, Math.floor((pages - 1) / pagesPerView) * pagesPerView + 1);
-        else page = Math.min(page, pages - 1);
+        const extent = distance(), progress = position(), pages = pageCount();
+        const spread = Math.min(Math.max(0, Math.round(scrollX / spreadWidth)), Math.ceil(pages / pagesPerView) - 1);
+        const page = paged ? spread * pagesPerView + 1 : Math.min(Math.max(0, Math.floor(scrollY / Math.max(innerHeight, 1))), pages - 1);
         passage = capturePassage();
-        webkit.messageHandlers.reader.postMessage({kind:'location', progress, page, pages});
+        post({kind:'location', progress, page, pages});
       };
       const turnPage = direction => {
         if (!paged) return;
-        const maximum = distance(), current = Math.round(scrollX / Math.max(pageWidth, 1));
+        const maximum = distance(), current = Math.round(scrollX / Math.max(spreadWidth, 1));
         const next = current + Math.sign(direction);
-        const target = next * pageWidth;
-        if (target < -1 || target > maximum + 1) { webkit.messageHandlers.reader.postMessage({kind:'boundary', direction:Math.sign(direction)}); return; }
-        scrollTo(Math.min(Math.max(target, 0), maximum), 0);
+        const target = next * spreadWidth;
+        if (target < -1 || target > maximum + 1) { post({kind:'boundary', direction:Math.sign(direction)}); return; }
+        scrollInstantly(Math.min(Math.max(target, 0), maximum), 0);
       };
-      window.cloudReader = { turnPage, configure(css, horizontal, fraction, fragment, chromeVisible, measuredWidth, columnCount, measuredGap) {
+      window.cloudReader = { turnPage, report,
+        navigate(fraction, fragment, identifier) {
+          configurationID = identifier;
+          const ready = new Promise(resolve => waiters.push(resolve));
+          requestRestore(fraction === null ? position() : fraction, fragment);
+          return ready;
+        },
+        async reveal(identifier) {
+          if (configurationID !== identifier) return;
+          document.getElementById('cloudreader-pending-layout')?.remove();
+          // Let WebKit composite the restored content before removing its native cover.
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        },
+        configure(css, horizontal, fraction, fragment, measuredWidth, columnCount, measuredGap, identifier) {
+        configurationID = identifier;
         const target = fraction === null ? (desired ? desired.fraction : position()) : fraction;
         const keepPassage = fraction === null && fragment === null ? (passage || capturePassage()) : null;
         paged = horizontal;
-        pageWidth = Math.max(measuredWidth || innerWidth, 1);
+        viewportWidth = Math.max(measuredWidth || innerWidth, 1);
         pageGap = measuredGap || 0;
         pagesPerView = Math.max(columnCount || 1, 1);
         cachedPageCount = null;
+        document.getElementById('cloudreader-page-extent')?.remove();
         document.querySelectorAll('[style]').forEach(element => {
           ['font-family','font-size','font-weight','line-height','text-indent','color','background-color','background-image','margin-left','margin-right','margin-inline-start','margin-inline-end'].forEach(property => element.style.removeProperty(property));
         });
@@ -748,20 +872,27 @@ struct MacEPUBWebView: NSViewRepresentable {
           style.id = 'cloudreader-style';
           (document.head || document.documentElement).appendChild(style);
         }
-        style.textContent = css;
+        if (style.textContent !== css) style.textContent = css;
+        const bodyWidth = document.body ? document.body.getBoundingClientRect().width : viewportWidth;
+        const columnWidth = Math.max(1, (bodyWidth - pageGap * (pagesPerView - 1)) / pagesPerView);
+        columnPitch = columnWidth + pageGap;
+        // Overflowing columns retain their gutter after the last visible column:
+        // a complete spread advances by bodyWidth + gutter, not bodyWidth.
+        spreadWidth = columnPitch * pagesPerView;
+        distance();
         configured = true;
         const ready = new Promise(resolve => waiters.push(resolve));
-        requestRestore(target, fragment, keepPassage);
+        requestRestore(target, fragment, keepPassage, true);
         return ready;
       }};
       addEventListener('scroll', () => {
         if (restoring || Date.now() < suppressScrollUntil) return;
         previous = position();
         clearTimeout(timer);
-        timer = setTimeout(() => { if (!restoring) { webkit.messageHandlers.reader.postMessage({progress:position()}); report(); } }, 100);
+        timer = setTimeout(() => { if (!restoring) { post({progress:position()}); report(); } }, 100);
       }, {passive:true});
-      document.addEventListener('selectionchange', () => webkit.messageHandlers.reader.postMessage({selection:String(getSelection())}));
-      document.addEventListener('keydown', event => { if(!paged||!getSelection().isCollapsed||event.metaKey||event.ctrlKey||event.altKey)return;let d=0;if(event.key==='ArrowRight'||event.key==='PageDown'||event.key===' ')d=1;else if(event.key==='ArrowLeft'||event.key==='PageUp')d=-1;else return;event.preventDefault();const max=distance(),page=Math.round(scrollX/Math.max(pageWidth,1)),next=page+d;if(next<0||scrollX>=max-2&&d>0)webkit.messageHandlers.reader.postMessage({kind:'boundary',direction:d});else scrollTo(Math.min(max,Math.max(0,next*pageWidth)),0);});
+      document.addEventListener('selectionchange', () => post({selection:String(getSelection())}));
+      document.addEventListener('keydown', event => { if(!paged||!getSelection().isCollapsed||event.metaKey||event.ctrlKey||event.altKey)return;let d=0;if(event.key==='ArrowRight'||event.key==='PageDown'||event.key===' ')d=1;else if(event.key==='ArrowLeft'||event.key==='PageUp')d=-1;else return;event.preventDefault();turnPage(d);});
       let tapTimer=null;
       document.addEventListener('click', event => {
         if (event.detail > 1) { clearTimeout(tapTimer); tapTimer=null; return; }
@@ -771,7 +902,7 @@ struct MacEPUBWebView: NSViewRepresentable {
         const target=event.target;
         if (target && target.closest && target.closest('a,button,input,select,textarea,video,audio,[contenteditable=true]')) return;
         clearTimeout(tapTimer);
-        tapTimer=setTimeout(()=>{tapTimer=null;if(!String(getSelection()).trim())webkit.messageHandlers.reader.postMessage({kind:'tap'});},\(max(NSEvent.doubleClickInterval * 1000, 260)));
+        tapTimer=setTimeout(()=>{tapTimer=null;if(!String(getSelection()).trim())post({kind:'tap'});},\(max(NSEvent.doubleClickInterval * 1000, 260)));
       }, {passive:true});
       document.addEventListener('pointerdown', event => {
         if (event.isPrimary) pointerStart = {x:event.clientX, y:event.clientY};
@@ -787,6 +918,41 @@ final class MacReaderWKWebView: WKWebView {
     private var horizontalDelta: CGFloat = 0
     private var pendingTurn: DispatchWorkItem?
     private var gestureTurned = false
+    private var hasPresentedPage = false
+    private var navigationSnapshot: NSImageView?
+    private var snapshotID = UUID()
+
+    func holdCurrentPage(then load: @escaping () -> Void) {
+        snapshotID = UUID()
+        let identifier = snapshotID
+        guard hasPresentedPage, navigationSnapshot == nil else { load(); return }
+        takeSnapshot(with: nil) { [weak self] image, _ in
+            guard let self, self.snapshotID == identifier else { return }
+            if let image {
+                let cover = NSImageView(frame: self.bounds)
+                cover.identifier = NSUserInterfaceItemIdentifier("reader.navigationSnapshot")
+                cover.image = image
+                cover.imageScaling = .scaleAxesIndependently
+                cover.autoresizingMask = [.width, .height]
+                cover.setAccessibilityElement(false)
+                self.addSubview(cover, positioned: .above, relativeTo: nil)
+                self.navigationSnapshot = cover
+            }
+            load()
+        }
+    }
+
+    func revealCurrentPage() {
+        hasPresentedPage = true
+        navigationSnapshot?.removeFromSuperview()
+        navigationSnapshot = nil
+    }
+
+    func discardHeldPage() {
+        snapshotID = UUID()
+        navigationSnapshot?.removeFromSuperview()
+        navigationSnapshot = nil
+    }
 
     override func scrollWheel(with event: NSEvent) {
         guard pageLayoutRaw != "scroll",
