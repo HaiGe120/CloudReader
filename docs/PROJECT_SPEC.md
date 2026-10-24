@@ -171,7 +171,7 @@ Selecting text in a supported reader should expose an **Ask CloudReader AI** act
 | EPUB CFI positions, in-book annotations, conflict-choice UI, background sync | Planned |
 | macOS client | Implemented: native library, local persistence, paged TXT/PDF layouts, EPUB reader, shared provider sync, desktop Google OAuth, remote AI, on-device AI, and App Intent |
 | Android client | Kotlin/Compose app builds as an installable debug APK; unit tests, lint, and an Android 12 instrumentation test for import, duplicate titles, CJK content, unsupported files, and source preservation pass. Offline TXT resume and process recreation were also checked with Wi-Fi disabled on ARM64 Android 12; launch and recreation were checked on Android 16. Full tablet/foldable/accessibility coverage, the broader format matrix, cross-platform sync round trips, and live provider/OAuth checks remain to be completed. |
-| Windows, Linux clients | Planned |
+| Windows, Linux clients | Prototype underway: shared Kotlin/JVM desktop shell with local TXT import/resume; full reader, sync, AI, accessibility, and packaging support remain planned |
 
 ## Project checks
 

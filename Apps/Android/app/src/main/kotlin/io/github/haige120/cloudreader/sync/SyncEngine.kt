@@ -7,6 +7,7 @@ import io.github.haige120.cloudreader.data.ConversationRow
 import io.github.haige120.cloudreader.data.LibraryDao
 import io.github.haige120.cloudreader.data.LibraryRepository
 import io.github.haige120.cloudreader.data.SecureVault
+import io.github.haige120.cloudreader.core.contract.SyncCodec as SharedSyncCodec
 import io.github.haige120.cloudreader.data.canonicalUUID
 import io.github.haige120.cloudreader.data.nowFoundationSeconds
 import java.security.MessageDigest
@@ -73,6 +74,10 @@ class SyncEngine(
 
     private suspend fun syncOnce(store: RemoteBookStore): Pair<Int, Int> {
         val remoteBytes = store.read("manifest.json")
+        // Run the shared JVM contract preflight before the Android adapter
+        // applies its Room/local-file merge. This keeps wire safety rules in
+        // one implementation while preserving the Android storage boundary.
+        remoteBytes?.let { SharedSyncCodec.manifestFromJson(it) }
         val remote = remoteBytes?.let(SyncCodec::manifestFromJson) ?: SyncManifest(updatedAt = nowFoundationSeconds())
 
         for (deletion in remote.deletions) library.applyDeletion(deletion)

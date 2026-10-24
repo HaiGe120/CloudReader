@@ -326,6 +326,7 @@ Task ownership below uses **integrator** for the coordinating agent and **worker
 
 - Depends: Q02. Owner: integrator design review plus bounded prototype worker. Paths: isolated desktop prototype and decision record; existing apps unchanged.
 - Prove Kotlin/JVM Compose Desktop on Windows and Linux with TXT/PDF/EPUB load, selection, resume, keyboard/screen-reader access, file picker/drop, durable local storage and OS credential storage. Choose maintained reader engines after checking license/package/architecture constraints. AndroidX PDF and Android Readium are not assumed to run on desktop.
+- **Current implementation:** the bounded Compose Desktop/JVM prototype and ADR now exist under `Apps/Desktop`, `Packages/CloudReaderKotlin`, and `docs/engineering/decisions/ADR-001-windows-linux-desktop.md`. The actual Windows/Linux reader, accessibility, credential-service, package, and startup evidence remains open until the GitHub Actions runners execute it.
 - Done: actual OS evidence and an ADR ratify or revise the stack. Include package size/startup, engine limitations and JVM/native dependencies. If a required engine or accessible integration fails, revise this decision before D02; do not disguise a placeholder reader as delivered.
 
 ### D02 — Extract reusable Kotlin domain/contract services

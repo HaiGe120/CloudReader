@@ -1,0 +1,90 @@
+name: CloudReader desktop
+
+on:
+  push:
+    paths:
+      - 'Packages/CloudReaderKotlin/**'
+      - 'Apps/Desktop/**'
+      - 'Apps/Windows/**'
+      - 'Apps/Linux/**'
+      - 'Apps/Android/settings.gradle.kts'
+      - 'Apps/Android/app/build.gradle.kts'
+      - 'Apps/Android/app/src/main/kotlin/io/github/haige120/cloudreader/sync/SyncEngine.kt'
+      - 'Contracts/v1/**'
+      - '.github/workflows/desktop.yml'
+  pull_request:
+    paths:
+      - 'Packages/CloudReaderKotlin/**'
+      - 'Apps/Desktop/**'
+      - 'Apps/Windows/**'
+      - 'Apps/Linux/**'
+      - 'Apps/Android/settings.gradle.kts'
+      - 'Apps/Android/app/build.gradle.kts'
+      - 'Apps/Android/app/src/main/kotlin/io/github/haige120/cloudreader/sync/SyncEngine.kt'
+      - 'Contracts/v1/**'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-jvm:
+    name: Desktop JVM checks (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            runner: windows-2022
+          - os: debian-12
+            runner: [self-hosted, linux, x64, debian-12]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Run Kotlin core tests
+        shell: bash
+        run: ./Packages/CloudReaderKotlin/gradlew -p Packages/CloudReaderKotlin test
+
+      - name: Run desktop unit checks
+        shell: bash
+        run: ./Packages/CloudReaderKotlin/gradlew -p Apps/Desktop test
+
+      - name: Build desktop distribution
+        shell: bash
+        run: ./Packages/CloudReaderKotlin/gradlew -p Apps/Desktop packageDistributionForCurrentOS
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudreader-desktop-${{ matrix.os }}
+          path: |
+            Apps/Desktop/build/compose/binaries/**
+            Apps/Desktop/build/distributions/**
+
+  contract-fixtures:
+    name: Shared contract fixture checks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Run Kotlin contract tests
+        shell: bash
+        run: ./Packages/CloudReaderKotlin/gradlew -p Packages/CloudReaderKotlin test --tests '*Contract*' --tests '*Merge*'
