@@ -14,7 +14,7 @@ class LocalLibraryTest {
         Files.writeString(source, "第一行\nSecond line")
         val repository = FileLibraryRepository(root.resolve("library"))
 
-        val imported = repository.importBook(source) as? ImportResult.Imported ?: fail("TXT import failed")
+        val imported = repository.importBook(source) as? ImportResult.Imported ?: throw AssertionError("TXT import failed")
         assertTrue(imported.book.sourcePath != source)
         assertTrue(imported.book.sourcePath.fileName.toString().startsWith("book-"))
         assertEquals("第一行\nSecond line", Files.readString(imported.book.sourcePath))
@@ -29,7 +29,7 @@ class LocalLibraryTest {
         val root = Files.createTempDirectory("cloudreader-desktop-test")
         val repository = FileLibraryRepository(root.resolve("library"))
         val pdf = Files.createTempFile(root, "sample", ".pdf")
-        val result = repository.importBook(pdf) as? ImportResult.Unsupported ?: fail("PDF should be reported as unsupported")
+        val result = repository.importBook(pdf) as? ImportResult.Unsupported ?: throw AssertionError("PDF should be reported as unsupported")
         assertEquals(BookFormat.PDF, result.format)
     }
 
@@ -38,7 +38,7 @@ class LocalLibraryTest {
         val root = Files.createTempDirectory("cloudreader-desktop-test")
         val repository = FileLibraryRepository(root.resolve("library"))
         val fb2 = Files.createTempFile(root, "sample", ".fb2")
-        val result = repository.importBook(fb2) as? ImportResult.Unsupported ?: fail("FB2 should be reported as unsupported")
+        val result = repository.importBook(fb2) as? ImportResult.Unsupported ?: throw AssertionError("FB2 should be reported as unsupported")
         assertEquals(BookFormat.FB2, result.format)
     }
 }

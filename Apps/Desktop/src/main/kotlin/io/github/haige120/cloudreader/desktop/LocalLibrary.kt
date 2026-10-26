@@ -22,7 +22,8 @@ class FileLibraryRepository(private val root: Path) : LibraryRepository, DropTar
     }
 
     override fun books(): List<BookRecord> = Files.list(metadataDir).use { files ->
-        files.filter { it.fileName.toString().endsWith(".properties") }
+        files.iterator().asSequence()
+            .filter { it.fileName.toString().endsWith(".properties") }
             .mapNotNull(::readMetadata)
             .sortedByDescending { it.importedAt }
             .toList()
