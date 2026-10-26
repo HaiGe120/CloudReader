@@ -7,11 +7,6 @@ plugins {
 group = "io.github.haige120.cloudreader"
 version = "0.1.0"
 
-repositories {
-    google()
-    mavenCentral()
-}
-
 dependencies {
     implementation("io.github.haige120.cloudreader:CloudReaderKotlin:1.0.0-SNAPSHOT")
     implementation(compose.desktop.currentOs)

@@ -37,10 +37,23 @@ jobs:
         include:
           - os: windows-2022
             runner: windows-2022
+            container: ''
           - os: debian-12
-            runner: [self-hosted, linux, x64, debian-12]
+            runner: ubuntu-24.04
+            container: debian:12-slim
     runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
     steps:
+      # The hosted runner supplies Docker; all Linux checks run inside Debian 12.
+      - name: Install Debian build prerequisites
+        if: matrix.os == 'debian-12'
+        shell: bash
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            binutils ca-certificates curl fakeroot fontconfig git libasound2 \
+            libfreetype6 libstdc++6 libx11-6 libxext6 libxi6 libxrender1 libxtst6 unzip
+
       - name: Check out source
         uses: actions/checkout@v4
 
