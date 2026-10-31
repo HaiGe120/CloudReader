@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17.0.21+9'
+          java-version: '17.0.20+8'
       - run: ./Packages/CloudReaderKotlin/gradlew -p Packages/CloudReaderKotlin test --no-daemon --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process
       - run: python3 -m unittest discover -s scripts -p 'test_collect_apps.py'
 
@@ -36,7 +36,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17.0.21+9'
+          java-version: '17.0.20+8'
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
@@ -82,7 +82,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17.0.21+9'
+          java-version: '17.0.20+8'
       - shell: bash
         env:
           CLOUDREADER_GUI_TESTS: '1'
