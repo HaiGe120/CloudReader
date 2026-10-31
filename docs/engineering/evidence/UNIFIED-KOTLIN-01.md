@@ -1,6 +1,7 @@
 # Android / Windows / Linux convergence — 2026-10-31
 
-Status: integration verification; coordinated target-OS packages pending.
+Status: coordinated **1.2.0 convergence preview delivered and verified**.
+Full iOS feature/visual parity and production acceptance remain incomplete.
 
 ## Preserved baseline and scope
 
@@ -91,6 +92,61 @@ the container attempted an unnecessary Git ownership-sensitive revision lookup,
 and the packaged-launcher check needed an explicit app-image build. Those setup
 issues were repaired. Final coordinated results are appended after verification.
 
+### Final coordinated delivery
+
+GitHub Actions run `41186055676` completed successfully on 2026-10-31 at
+08:55:47 UTC (16:55:47 Asia/Shanghai). The core, Android, Windows, Debian and
+collection jobs all passed. Compiled revision:
+`06132a50c268f9b6a7a8681d0e8d07e5eacbe16e` on
+`codex/unified-android-desktop-20261031`. Subsequent delivery-documentation
+commits are not the compiled revision and do not change these packages.
+
+| Final target-OS gate | Actual result |
+| --- | --- |
+| Android Linux-hosted build | 121 JVM tests, zero failures/errors/skips; lint and debug APK assembly passed |
+| Windows Server 2022 x64 | 15 tests, zero failures/errors/skips, including 4 real native-reader tests; MSI and standalone bundled app built |
+| Debian 12 amd64 | 15 tests, zero failures/errors/skips, including 4 real native-reader tests; DEB and standalone bundled app built |
+| Windows and Debian bundled launchers | PDF render, WebKit load/page turn, actual shared-library UI and isolated-library checks all returned true |
+| Windows and Debian UI review | Actual shared-library screenshots from disposable CI desktops visually inspected; neither was blank; Android compact library/reader screenshots also inspected |
+| Final collection and local download | Exactly one APK/MSI/DEB, all version 1.2.0 and the same compiled revision; all three downloaded SHA-256 digests matched |
+
+The desktop proof invokes the built app image with its bundled runtime. It does
+not install the MSI/DEB or prove installer/update/file-association acceptance.
+Android's 29 isolated emulator tests and screenshots were from the local build
+of the final application source, not an emulator run against the downloaded
+CI-signed APK. No personal account or library was used. The emulator, review app
+and persistent build processes are no longer running.
+
+Downloaded delivery folder:
+`/Users/joe/Documents/CloudReader/Build/Deliveries/CloudReader-1.2.0/`.
+The folder includes the original CI packages/manifests, `delivery.json`,
+`SHA256SUMS`, a progress report and preserved UI/check evidence. All three
+packages and that evidence are also collected in
+`/Users/joe/Documents/CloudReader/Build/Deliveries/CloudReader-1.2.0-all-platforms-preview.zip`.
+No public release, pull request or merge was created by this delivery checkpoint.
+
+| Package | SHA-256 |
+| --- | --- |
+| `CloudReader-1.2.0-android-debug.apk` | `585175944a3d6f43e3e2fe7f75160e108ea9f94bf3500ccf90033cde6e98e615` |
+| `CloudReader-1.2.0-windows.msi` | `32a2a1886988c2c047ac7d196fe7a1bedfe70383be8e0c3653abccbd1cdf43cb` |
+| `CloudReader-1.2.0-linux.deb` | `abb7ddbb4c3169be4617de3b3392f708bd61dbd2c5cbfb4abea739d468991988` |
+
+Independent Android inspection confirmed application ID
+`io.github.haige120.cloudreader`, version name `1.2.0`, version code `4`, minimum
+API 31 and target API 37. APK v2 signature verification passed using an Android
+Debug certificate, SHA-1 `F2:9B:FE:4A:02:32:AC:BE:77:D2:13:A1:ED:44:15:30:1C:33:83:74`.
+This CI debug certificate may differ from existing installations and registered
+Google OAuth credentials. It is not a verified in-place update or live OAuth
+artifact. Do not uninstall an existing library to work around a signature
+mismatch; use the intended matching signing key for a safe update instead.
+Debian control metadata confirmed `cloudreader` version `1.2.0-1`, architecture
+`amd64`; the MSI identifies an x64 installer. Windows packaging is unsigned.
+
+The final workflow emitted non-blocking action-version deprecation warnings;
+local builds also warn about Gradle features that will be incompatible with
+Gradle 10. All current gates passed; dependency/toolchain migration is separate
+maintenance, not evidence of a current build failure.
+
 Full logs and intermediate screenshots remain under
 `/tmp/cloudreader-unified-20261031/`, outside source control.
 
@@ -115,3 +171,14 @@ Full logs and intermediate screenshots remain under
   sync remain follow-on work, not features introduced by this assignment.
 - Android debug signing and unsigned Windows packaging are preview distribution
   limits; trusted production/update signing requires the intended release keys.
+
+### Next acceptance work, in order
+
+1. Establish stable update-signing identities and validate installation/update
+   without deleting existing Android/desktop library data.
+2. Exercise authorized OAuth, token refresh, OS secret stores, live AI and an
+   Apple↔Android↔desktop sync round trip against isolated test accounts.
+3. Complete desktop export/share and the remaining iOS visual/accessibility,
+   physical-device and installed-OS acceptance matrices.
+4. Address schema-v1 concurrent-writer safety through a separately coordinated
+   protocol decision; do not silently change the portable schema.

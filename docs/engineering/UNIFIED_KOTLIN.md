@@ -45,7 +45,11 @@ Windows MSI must be packaged on Windows; Linux DEB on Debian. A Mac host cannot
 produce or validate those installers. Distribution signing credentials and public
 publication are separate channel concerns.
 
-Status: U01–U05 implemented; U06 delivery verification in progress. Local gates
+Status: U01–U05 implemented; U06 coordinated **preview delivery verified** on
+2026-10-31. Run `41186055676` passed core, Android, Windows, Debian and final
+collection for compiled revision `06132a50c268f9b6a7a8681d0e8d07e5eacbe16e`.
+The downloaded APK/MSI/DEB passed independent SHA-256 checks in
+`Build/Deliveries/CloudReader-1.2.0/`. Local gates, target-OS runtime evidence
 and explicit feature/acceptance gaps are recorded in
 [UNIFIED-KOTLIN-01](evidence/UNIFIED-KOTLIN-01.md). This is a convergence preview,
 not an assertion that every iOS feature or target-device acceptance gate is done.
