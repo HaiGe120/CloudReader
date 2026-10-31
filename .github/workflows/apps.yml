@@ -31,8 +31,6 @@ jobs:
     needs: core
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      CLOUDREADER_BUILD_ROOT: ${{ runner.temp }}/cloudreader-build
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -42,6 +40,8 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
       - run: bash scripts/build-app.sh android
+        env:
+          CLOUDREADER_BUILD_ROOT: ${{ runner.temp }}/cloudreader-build
       - name: Preserve Android check results
         if: always()
         uses: actions/upload-artifact@v4
@@ -58,8 +58,6 @@ jobs:
   desktop:
     needs: core
     timeout-minutes: 30
-    env:
-      CLOUDREADER_BUILD_ROOT: ${{ runner.temp }}/cloudreader-build
     strategy:
       fail-fast: false
       matrix:
@@ -86,6 +84,7 @@ jobs:
       - shell: bash
         env:
           CLOUDREADER_GUI_TESTS: '1'
+          CLOUDREADER_BUILD_ROOT: ${{ runner.temp }}/cloudreader-build
         run: |
           if [ "${{ matrix.platform }}" = linux ]; then
             xvfb-run -a bash scripts/build-app.sh linux
