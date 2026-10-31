@@ -38,16 +38,18 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
-      - run: bash scripts/build-app.sh android
-        env:
-          CLOUDREADER_BUILD_ROOT: ${{ runner.temp }}/cloudreader-build
+      - run: |
+          export CLOUDREADER_BUILD_ROOT="$GITHUB_WORKSPACE/Build/Work"
+          bash scripts/build-app.sh android
       - name: Preserve Android check results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: checks-android
-          path: ${{ runner.temp }}/cloudreader-build/**/test-results/**/*.xml
+          path: Build/Work/**/test-results/**/*.xml
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
@@ -84,8 +86,8 @@ jobs:
       - shell: bash
         env:
           CLOUDREADER_GUI_TESTS: '1'
-          CLOUDREADER_BUILD_ROOT: ${{ runner.temp }}/cloudreader-build
         run: |
+          export CLOUDREADER_BUILD_ROOT="$GITHUB_WORKSPACE/Build/Work"
           if [ "${{ matrix.platform }}" = linux ]; then
             xvfb-run -a bash scripts/build-app.sh linux
           else
@@ -97,7 +99,7 @@ jobs:
         with:
           name: checks-${{ matrix.platform }}
           path: |
-            ${{ runner.temp }}/cloudreader-build/**/test-results/**/*.xml
+            Build/Work/**/test-results/**/*.xml
             Build/Coordinated/${{ matrix.platform }}/checks/*
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4

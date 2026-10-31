@@ -4,7 +4,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 target="${1:-}"
 output="${CLOUDREADER_OUTPUT_DIR:-$repo_root/Build/Coordinated/$target}"
 version="$(sed -n 's/^version=//p' "$repo_root/release.properties" | tr -d '\r')"
-revision="$(git -C "$repo_root" rev-parse HEAD)"
+revision="${GITHUB_SHA:-$(git -C "$repo_root" rev-parse HEAD)}"
 mkdir -p "$output"
 export CLOUDREADER_BUILD_ROOT="${CLOUDREADER_BUILD_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/cloudreader-build.XXXXXX")}"
 # Java does not translate MSYS paths passed through environment variables.
@@ -22,7 +22,7 @@ case "$target" in
       MINGW*:windows|MSYS*:windows|CYGWIN*:windows|Linux:linux) ;;
       *) echo "Package $target on its own operating system, or run the coordinated GitHub workflow." >&2; exit 2 ;;
     esac
-    "$repo_root/Packages/CloudReaderKotlin/gradlew" -p "$repo_root/Apps/Desktop" test packageDistributionForCurrentOS "${common[@]}"
+    "$repo_root/Packages/CloudReaderKotlin/gradlew" -p "$repo_root/Apps/Desktop" test createDistributable packageDistributionForCurrentOS "${common[@]}"
     python3 "$repo_root/scripts/check-packaged-desktop.py" "$CLOUDREADER_BUILD_ROOT/CloudReaderDesktop_/compose/binaries/main/app" "$output/checks"
     extension=deb; [[ "$target" == windows ]] && extension=msi
     package="$(find "$CLOUDREADER_BUILD_ROOT/CloudReaderDesktop_/compose/binaries/main" -type f -name "*$version*.$extension" -print -quit)"
