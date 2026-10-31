@@ -54,8 +54,9 @@ and explicit feature/acceptance gaps are recorded in
 [UNIFIED-KOTLIN-01](evidence/UNIFIED-KOTLIN-01.md). This is a convergence preview,
 not an assertion that every iOS feature or target-device acceptance gate is done.
 
-Public prerelease preparation subsequently pins a common Windows/Linux runtime
-and regenerates all three packages without changing application code. Its
+The public prerelease subsequently pinned a common Windows/Linux runtime
+and regenerated all three packages without changing application code. It was
+published on 2026-10-31 as `v1.2.0-unified-preview`. Its
 compiled revision, release URL and publication checks are tracked separately in
 [OPEN-SOURCE-RELEASE-01](evidence/OPEN-SOURCE-RELEASE-01.md); the original local
 checkpoint and its hashes above remain historical evidence, not the new downloads.

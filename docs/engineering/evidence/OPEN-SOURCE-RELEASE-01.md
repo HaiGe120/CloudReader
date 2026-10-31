@@ -1,7 +1,10 @@
 # Open-source preview publication — 2026-10-31
 
-Status: coordinated release build, local checks and all **18 uploaded draft
-asset sizes/SHA-256 digests verified**; public publication pending.
+Status: **public prerelease published and verified** on 2026-10-31 at
+10:09:07 UTC (18:09:07 Asia/Shanghai). All **18 public asset names, sizes,
+uploaded states and SHA-256 digests** match the local publication manifest.
+
+Release: <https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.0-unified-preview>.
 
 ## Authorized scope and preservation
 
@@ -33,8 +36,9 @@ The corrected release revision is
 `6973577172f0da70f752b8f51e76b5dc470975b0`, pinning **Temurin 17.0.20+8**,
 verified to have official Windows/Linux binaries and matching source. Application
 code, dependency versions, schema v1 and Android identity/minimums are unchanged.
-The prerelease tag `v1.2.0-unified-preview` will point at that compiled revision;
-later documentation commits are separate.
+The public prerelease tag `v1.2.0-unified-preview` points at that compiled
+revision, independently verified through the GitHub tag API. Later documentation
+commits are separate.
 
 ## Open-source/distribution preparation
 
@@ -56,8 +60,8 @@ later documentation commits are separate.
   desktop JARs (60 mapped to cached Maven coordinates). It is distribution
   provenance, not a claim of a comprehensive security/legal audit or full SBOM.
 
-Final build, uploaded asset checksums, public URLs and default-branch verification
-will be recorded below after the draft is verified and published.
+The final build, public asset checksums and default-branch verification are
+recorded below. Published packages were not modified while finalizing these records.
 
 ## Final release build and local checks
 
@@ -101,7 +105,37 @@ Release-wide `SHA256SUMS` covers the other 17 assets; no package was re-signed o
 changed after CI download. The old local delivery remains intact and is not
 mistaken for this new public build.
 
-Draft release ID: `429850183`. Every one of the 18 uploaded asset names, sizes,
+Release ID: `429850183`. Every one of the 18 uploaded asset names, sizes,
 `uploaded` states and GitHub-reported `sha256:` digests matched the local asset
 manifest before publication. The draft target is the exact compiled revision;
 no public asset was overwritten or published before these checks.
+
+## Public publication and default branch
+
+- The release API confirms `draft: false`, `prerelease: true`, publication at
+  `2026-10-31T10:09:07Z`, and the canonical release URL above. It was published
+  without promoting it to the latest stable release.
+- All 18 public assets were rechecked against the local manifest after publication,
+  including canonical download URLs, names, sizes, uploaded states and SHA-256
+  digests. An anonymous download of `SHA256SUMS` matches the retained file;
+  an anonymous APK download matches its expected SHA-256 above.
+- The README and open-source/community documentation were pushed to the feature
+  branch and default `main` at
+  `f9a8841791f27dd1a9b55b749fcc5e1e7a0637b1`. The public default-branch README
+  bytes were independently compared with the local README. These documentation
+  updates do not change the compiled release tag.
+- Repository settings confirm public visibility, MIT licensing, default `main`,
+  updated description/platform topics and enabled private vulnerability reporting.
+- The older source-only `v1.2.0-desktop-preview` release now links to the unified
+  packages, with its original notes retained below the superseded notice.
+- Receipts are retained under `Build/ReleasePublication/1.2.0/`, including
+  `published-release.json`, `published-tag.json`, `asset-manifest.json`,
+  `repo-settings-verified.json` and the anonymous downloads in
+  `public-download-check/`.
+
+This remains a **CI debug-signed Android / unsigned Windows preview**, not a
+production-signing, safe-update, physical-device or full-iOS-parity acceptance.
+Existing libraries must not be uninstalled or cleared to bypass a signature
+mismatch. Live OAuth, AI, credential-vault and cross-device sync acceptance,
+desktop share/export, installer/update/accessibility matrices and schema-v1
+concurrent-writer risk remain as documented in the release notes.
