@@ -30,3 +30,8 @@ use the enabled iOS readers as the feature reference, and collect all three targ
 packages from one version and revision. See [the bounded integration tasks](UNIFIED_KOTLIN.md).
 Apple implementation and schema v1 remain unchanged. Target-OS runtime evidence,
 live providers and distribution signing are recorded separately from compilation.
+
+The authorized public prerelease uses a common pinned desktop runtime and keeps
+the existing MIT source license. See [release notes](../releases/1.2.0-unified-preview.md),
+[publication evidence](evidence/OPEN-SOURCE-RELEASE-01.md),
+[contribution guidance](../../CONTRIBUTING.md) and [release procedure](../RELEASING.md).

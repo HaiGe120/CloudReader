@@ -6,6 +6,11 @@ provide file access, credential storage, PDF rendering and WebKit. The current
 reader scope follows the enabled iOS readers: TXT, PDF, EPUB, FB2 and CBZ.
 MOBI/AZW3/CBR remain importable storage-only formats.
 
+Download the MSI/DEB or all-platform bundle from the
+[1.2.0 unified prerelease](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.0-unified-preview).
+See the [release notes](../../docs/releases/1.2.0-unified-preview.md) and retain the
+accompanying third-party license/source information when redistributing.
+
 The existing library at `~/.cloudreader-desktop` is retained, including prototype
 properties files and UTF-16 TXT offsets. Original imported files are copied. New
 metadata writes are staged, deletion records are durable, and credentials stay
@@ -14,7 +19,9 @@ for test and development runs.
 
 ## Build
 
-Use JDK 17 (Temurin is recommended for packaging). From the repository root:
+Use JDK 17; coordinated release CI pins Temurin 17.0.20+8. Windows packaging
+requires WiX Toolset 3 and Git Bash; Linux packaging requires Debian packaging
+tools, a graphical session and native GUI libraries. From the repository root:
 
 ```sh
 ./Packages/CloudReaderKotlin/gradlew -p Apps/Desktop test
@@ -53,8 +60,10 @@ in the chat and includes it in selected-destination sync.
 
 ## Validation boundaries
 
-Local JVM tests and Mac-hosted shared-app UI review do not establish Windows or
-Linux GUI/accessibility/install-update behavior. Those require target-OS checks.
+The public preview has target-OS Windows Server 2022 and Debian 12 test,
+bundled-launcher and real shared-library screenshot evidence. These checks do
+not install the MSI/DEB or establish broad accessibility, graphics, scaling or
+install/update behavior. Those remain installed-device acceptance work.
 PDF supports dragging over text to select a passage. Comics use bounded image
 decoding, adaptive spreads, scrollbars and Ctrl+wheel zoom. Broader publisher-layout
 fidelity, physical gestures and screen-reader behavior need target-device acceptance. v1 uses unconditional manifests: synchronize devices

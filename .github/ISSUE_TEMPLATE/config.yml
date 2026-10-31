@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability privately
+    url: https://github.com/HaiGe120/CloudReader/security/advisories/new
+    about: Do not post security-sensitive details, tokens or private books in public issues.

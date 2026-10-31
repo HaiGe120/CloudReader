@@ -19,8 +19,8 @@ Choose the `CloudReader` scheme and an iOS 26 or later iPhone/iPad simulator. Th
 - Import EPUB, PDF, TXT, MOBI, AZW3, FB2, CBZ, and CBR files through the system Files picker or **Open in CloudReader**, including locations exposed by iCloud Drive and other file providers. The first imported book opens directly.
 - Choose **CloudReader** in another app's share sheet to save a copy. Open CloudReader afterward; queued books are imported automatically and the first opens for reading. The extension does not force another app to launch CloudReader.
 - Copy selected files into the app's private Application Support directory; the original Files-provider documents remain untouched.
-- Persist the book index, imported copies, bookmarks, and PDF/EPUB/TXT reading positions locally; search the library and remove imported copies.
-- Read PDF with PDFKit, TXT with a selectable native text reader, and DRM-free EPUB with an in-app chapter reader. EPUB preparation runs off the main thread and is cached for faster reopening; damaged or DRM-protected books show an explanation instead of an indefinite preview.
+- Persist the book index, imported copies, favorites and format-specific reading positions locally; search the library and remove imported copies.
+- Read PDF with PDFKit, TXT with a selectable native text reader, EPUB/FB2 with the reflow reader, and CBZ with the comic reader. EPUB preparation runs off the main thread and is cached for faster reopening; damaged or DRM-protected books show an explanation instead of an indefinite preview.
 - On wide screens, switch TXT and PDF to facing pages and turn spreads horizontally; compact iPhone layouts remain single-page.
 - Choose system, light, sepia, dark, or custom paper/text colors and a font and text size for TXT and EPUB. PDF uses its fixed page typography.
 - Select text in TXT to add **Ask CloudReader AI** to the selection menu. Selecting text in PDF reveals an **Ask AI about selection** action. Selecting text in EPUB exposes its **Ask AI about selection** button. These actions open the assistant with the excerpt visible and sharing enabled; the passage is sent only after the user submits a question.
@@ -31,7 +31,10 @@ Choose the `CloudReader` scheme and an iOS 26 or later iPhone/iPad simulator. Th
 - Ask questions through OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, or a compatible custom endpoint; API keys stay in Keychain.
 - Ask the configured provider through a Siri/Shortcuts App Intent, or share a prompt to another app from the assistant.
 
-MOBI, AZW3, FB2, CBZ, and CBR import into the library but do not yet have readers. Google Drive, Dropbox, and pCloud require provider app IDs; CloudReader does not embed shared provider credentials. Google sign-in requires an iOS OAuth client ID and requests only the `drive.appdata` scope. Dropbox uses PKCE and requests file-content and metadata read/write scopes. pCloud uses its documented mobile token flow and automatically follows the account's US or EU API region. OAuth tokens and WebDAV/SFTP passwords stay in Keychain. Use HTTPS for WebDAV, especially on untrusted networks.
+MOBI, AZW3 and CBR remain gated/storage-only on iOS. This enabled reader set is
+the reference for the separate [Android/Windows/Linux convergence preview](releases/1.2.0-unified-preview.md);
+that release does not replace or revalidate the native Apple distributions.
+Google Drive, Dropbox, and pCloud require provider app IDs; CloudReader does not embed shared provider credentials. Google sign-in requires an iOS OAuth client ID and requests only the `drive.appdata` scope. Dropbox uses PKCE and requests file-content and metadata read/write scopes. pCloud uses its documented mobile token flow and automatically follows the account's US or EU API region. OAuth tokens and WebDAV/SFTP passwords stay in Keychain. Use HTTPS for WebDAV, especially on untrusted networks.
 
 SMB can be used through a folder provided by Files. Direct SMB protocol support is not bundled. Files-folder sync depends on the provider app being installed and reachable. Sync currently runs while the app is foregrounded; it is not an iOS background transfer service. If two devices changed the same book while offline, the newer timestamp wins; a position conflict chooser remains future work.
 

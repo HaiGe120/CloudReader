@@ -3,6 +3,13 @@
 Status: coordinated **1.2.0 convergence preview delivered and verified**.
 Full iOS feature/visual parity and production acceptance remain incomplete.
 
+This document retains the **initial local delivery checkpoint** and its hashes.
+The subsequently authorized public prerelease regenerates the packages with a
+common pinned Java runtime and a new compiled revision, without application-code
+changes. See [public release evidence](OPEN-SOURCE-RELEASE-01.md) and
+[release notes](../../releases/1.2.0-unified-preview.md) for the public downloads;
+the certificate and package hashes below identify the earlier checkpoint only.
+
 ## Preserved baseline and scope
 
 Branch: `codex/unified-android-desktop-20261031`, based on `cd90c96`.

@@ -29,7 +29,7 @@ All clients must be able to exchange a library created by another client. A plat
 
 ## Library and reading data
 
-Every book has a stable UUID, title, optional author, format, managed local filename, added time, last-opened time, normalized progress fraction, favorite/bookmark flag, and modified time. Book bytes are stored separately from metadata. Imported source files remain untouched. The current iOS implementation reads EPUB, PDF, and TXT; MOBI, AZW3, FB2, CBZ, and CBR can be retained in the library while their native readers are future work.
+Every book has a stable UUID, title, optional author, format, managed local filename, added time, last-opened time, normalized progress fraction, favorite/bookmark flag, and modified time. Book bytes are stored separately from metadata. Imported source files remain untouched. The current iOS implementation reads EPUB, PDF, TXT, FB2 and CBZ; MOBI, AZW3 and CBR remain gated/storage-only. Android/Windows/Linux follow that enabled set in the 1.2.0 convergence preview; see [release notes](releases/1.2.0-unified-preview.md) for acceptance limits.
 
 Reading adapters should represent position in a format-aware way in addition to normalized progress:
 

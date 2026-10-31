@@ -1,0 +1,72 @@
+[
+  {
+    "repository": "JetBrains/skiko",
+    "ref": "v0.9.22.2",
+    "path": "LICENSE",
+    "file": "JetBrains-skiko-LICENSE",
+    "url": "https://github.com/JetBrains/skiko/blob/v0.9.22.2/LICENSE"
+  },
+  {
+    "repository": "JetBrains/skiko",
+    "ref": "v0.9.22.2",
+    "path": "NOTICE",
+    "file": "JetBrains-skiko-NOTICE",
+    "url": "https://github.com/JetBrains/skiko/blob/v0.9.22.2/NOTICE"
+  },
+  {
+    "repository": "readium/kotlin-toolkit",
+    "ref": "3.4.0",
+    "path": "LICENSE",
+    "file": "readium-kotlin-toolkit-LICENSE",
+    "url": "https://github.com/readium/kotlin-toolkit/blob/3.4.0/LICENSE"
+  },
+  {
+    "repository": "bcgit/bc-java",
+    "ref": "r1rv83",
+    "path": "LICENSE.html",
+    "file": "bcgit-bc-java-LICENSE.html",
+    "url": "https://github.com/bcgit/bc-java/blob/r1rv83/LICENSE.html"
+  },
+  {
+    "repository": "JetBrains/compose-multiplatform",
+    "ref": "v1.9.0",
+    "path": "LICENSE.txt",
+    "file": "JetBrains-compose-multiplatform-LICENSE.txt",
+    "url": "https://github.com/JetBrains/compose-multiplatform/blob/v1.9.0/LICENSE.txt"
+  },
+  {
+    "repository": "JetBrains/kotlin",
+    "ref": "v2.4.20",
+    "path": "license/LICENSE.txt",
+    "file": "JetBrains-kotlin-LICENSE.txt",
+    "url": "https://github.com/JetBrains/kotlin/blob/v2.4.20/license/LICENSE.txt"
+  },
+  {
+    "repository": "JetBrains/kotlin",
+    "ref": "v2.4.20",
+    "path": "license/NOTICE.txt",
+    "file": "JetBrains-kotlin-NOTICE.txt",
+    "url": "https://github.com/JetBrains/kotlin/blob/v2.4.20/license/NOTICE.txt"
+  },
+  {
+    "repository": "Kotlin/kotlinx.coroutines",
+    "ref": "1.10.2",
+    "path": "LICENSE.txt",
+    "file": "Kotlin-kotlinx.coroutines-LICENSE.txt",
+    "url": "https://github.com/Kotlin/kotlinx.coroutines/blob/1.10.2/LICENSE.txt"
+  },
+  {
+    "repository": "Kotlin/kotlinx.serialization",
+    "ref": "v1.9.0",
+    "path": "LICENSE.txt",
+    "file": "Kotlin-kotlinx.serialization-LICENSE.txt",
+    "url": "https://github.com/Kotlin/kotlinx.serialization/blob/v1.9.0/LICENSE.txt"
+  },
+  {
+    "repository": "google/skia",
+    "ref": "main (BSD copyright/license text; not a binary source-version assertion)",
+    "path": "LICENSE",
+    "file": "google-skia-LICENSE",
+    "url": "https://github.com/google/skia/blob/main/LICENSE"
+  }
+]

@@ -19,3 +19,10 @@ __pycache__/
 *.provisionprofile
 *.p12
 *.key
+*.jks
+*.keystore
+*.pem
+.env
+.env.*
+!.env.example
+**/local.properties

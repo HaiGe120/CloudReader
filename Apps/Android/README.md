@@ -2,6 +2,15 @@
 
 Native Kotlin and Jetpack Compose application. Android 12 (API 31) or newer.
 
+## 1.2.0 coordinated preview
+
+Download the APK or all-platform bundle from the
+[unified preview release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.0-unified-preview).
+Read the [release notes](../../docs/releases/1.2.0-unified-preview.md) for exact
+source/runtime provenance and acceptance limits. CI APKs are debug-signed.
+Do not uninstall an existing app or delete its library to bypass a signature
+mismatch; a safe update needs the original matching signing key.
+
 ## Build
 
 Install JDK 17 and Android SDK Platform 37, Build Tools 37, and Platform Tools. Set `JAVA_HOME` to the JDK and `ANDROID_HOME` or `ANDROID_SDK_ROOT` to the SDK; an ignored `Apps/Android/local.properties` with `sdk.dir=...` is also supported by Gradle. Android Studio Device Manager or the Android CLI can create emulators. The Gradle wrapper is the supported build entry point. From the repository root, run the reproducible checks with:
@@ -26,17 +35,21 @@ Settings accepts your own **Web application OAuth client ID and client secret**.
 
 The Web client must belong to the Google Cloud project that owns this APK's **Android OAuth registration**. In that project, enable the Drive API and configure the consent audience/test users. Settings → **Android registration details** displays the installed package and signing SHA-1. Android clients themselves do not have a client secret. Google permits a package/SHA-1 pair in only one project, so Web credentials from an unrelated project cannot bypass that registration requirement. A separately signed build needs its own matching registration. See [Google's registration restriction](https://support.google.com/firebase/answer/6401008?hl=en).
 
-To inspect a locally built APK's certificate, run `./gradlew signingReport` and use the `SHA1` for that variant. This preview's debug SHA-1 is `E3:F7:0B:33:F7:71:2E:FC:B3:75:5B:82:59:5F:BF:43:19:1E:11:9B`; replacing the signing keystore changes it. The package is `io.github.haige120.cloudreader`.
+To inspect a locally built APK's certificate, run `./gradlew signingReport` and
+use the `SHA1` for that variant. A CI runner's debug key can differ from a local
+build or earlier preview. Use **Android registration details** in the installed
+app or inspect the actual downloaded APK; do not reuse a historical certificate
+fingerprint. The package remains `io.github.haige120.cloudreader`.
 
 The configured flow uses native Google account/consent UI, then exchanges its server authorization code with the user-supplied Web credentials and renews with an encrypted refresh token. Google's documentation describes that exchange as a backend operation; this app performs it locally using the user's credentials. No developer client secret is bundled. Without custom credentials, the existing native Play services authorization remains available. Successful authorization with a real Google account has **not** been verified in this repair. See [Google authorization](https://developer.android.com/identity/authorization) and [native code exchange parameters](https://developer.android.com/identity/legacy/gsi/offline-access).
 
-Connection status remains visible below the Google row. Returned intents are parsed even when Android reports a non-OK result; errors include the authorization stage and sanitized provider detail. Error 8 is an internal Google error, not proof of a particular registration fault. The native account picker alone does not establish successful authorization. See [initial repair evidence](../../docs/engineering/evidence/ANDROID-AUTH-01.md) and [reader/credentials update evidence](../../docs/engineering/evidence/ANDROID-READER-02.md).
+Connection status remains visible below the Google row. Returned intents are parsed even when Android reports a non-OK result; errors include the authorization stage and sanitized provider detail. Error 8 is an internal Google error, not proof of a particular registration fault. The native account picker alone does not establish successful authorization. See [current public verification and limits](../../docs/engineering/evidence/UNIFIED-KOTLIN-01.md).
 
 ## Reading controls
 
 TXT, EPUB and PDF use a compact reader bar. EPUB opens with the bar and system bars hidden, with no floating button covering the book. Tap the center area to show or hide the controls; edge taps retain Readium page navigation. Accessibility actions also show or hide the bar. TXT and PDF retain their small **Show controls** button.
 
-EPUB's **Aa** panel provides serif, sans and monospace fonts, text size, System/Light/Sepia/Dark/Custom colors, scrolling, one page and two pages. Changes are saved on this device and apply to the open book. Two pages use screens at least 600 dp wide, with one page on compact screens; fixed-layout EPUBs retain their original typography. Font and color preferences are shared with TXT, while EPUB's page layout is saved separately. TXT also groups its appearance options under **Aa**. Reading gestures and native text selection remain available while the bar is hidden. See [EPUB appearance evidence](../../docs/engineering/evidence/ANDROID-EPUB-03.md) for checks and limits.
+EPUB's **Aa** panel provides serif, sans and monospace fonts, text size, System/Light/Sepia/Dark/Custom colors, scrolling, one page and two pages. Changes are saved on this device and apply to the open book. Two pages use screens at least 600 dp wide, with one page on compact screens; fixed-layout EPUBs retain their original typography. Font and color preferences are shared with TXT, while EPUB's page layout is saved separately. TXT also groups its appearance options under **Aa**. Reading gestures and native text selection remain available while the bar is hidden. See [current reader evidence](../../docs/engineering/evidence/UNIFIED-KOTLIN-01.md) for checks and limits.
 
 Dropbox and pCloud app IDs are configured by the user in Settings. WebDAV, SFTP, and folder sync use user-provided connection details. Credentials are encrypted with an Android Keystore key, are excluded from device backup, and are never included in the shared sync index. Live provider checks require the corresponding provider app registrations and user credentials.
 

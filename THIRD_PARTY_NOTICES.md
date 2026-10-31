@@ -18,6 +18,11 @@ The Apple apps use Apple frameworks and the following open-source libraries for 
 
 Exact dependency revisions are pinned in each Apple project's `project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.
 
+Retained Kotlin/desktop upstream license and attribution copies are in
+[`ThirdPartyLicenses/KotlinDesktop/`](ThirdPartyLicenses/KotlinDesktop/), with
+repository/ref/path provenance. These copies supplement, not replace, notices
+already carried by upstream artifacts and the binary distribution companion.
+
 The Android, Windows and Linux clients also use the following dependencies. Their
 upstream artifacts retain their license and third-party notices; desktop packages
 include this notice file alongside the application resources.
@@ -25,10 +30,22 @@ include this notice file alongside the application resources.
 - [Compose Multiplatform 1.9.0](https://github.com/JetBrains/compose-multiplatform), Apache License 2.0; Android uses AndroidX Compose under Apache License 2.0.
 - [Kotlin](https://github.com/JetBrains/kotlin), Kotlin coroutines and serialization, Apache License 2.0.
 - [jsoup 1.23.2](https://jsoup.org/), MIT License; shared safe EPUB/FB2 preparation.
-- [OpenJFX 21.0.9](https://github.com/openjdk/jfx/tree/jfx21.0.9), GPL version 2 with the Classpath Exception, plus the third-party notices included in its artifacts; desktop WebKit rendering. Matching source and upstream legal files are available from the linked OpenJFX repository.
+- [OpenJFX 21.0.9](https://github.com/openjdk/jfx21u/tree/21.0.9%2B1), GPL version 2 with the Classpath Exception and retained third-party terms; desktop WebKit rendering. The unified release supplies the matching `21.0.9+1` source archive and upstream legal files alongside the binaries.
+- [Eclipse Temurin 17.0.20+8](https://github.com/adoptium/temurin17-binaries/releases/tag/jdk-17.0.20%2B8), the bundled desktop Java runtime: GPL version 2 with the Classpath Exception and additional retained notices. Matching source is supplied with the unified release; each runtime retains its `legal/` directory.
+- [Skiko 0.9.22.2](https://github.com/JetBrains/skiko/tree/v0.9.22.2), Apache License 2.0, including its retained NOTICE and Skia/native third-party terms. Compose uses Skiko for desktop graphics.
 - [Apache PDFBox 3.0.6](https://pdfbox.apache.org/), Apache License 2.0; desktop PDF rendering and text extraction.
 - [OkHttp 4.12.0](https://github.com/square/okhttp), Apache License 2.0.
 - [mwiede JSch 2.27.3](https://github.com/mwiede/jsch), BSD-3-Clause; [Bouncy Castle 1.83](https://www.bouncycastle.org/), Bouncy Castle License (MIT style).
 - Android additionally retains [Readium Kotlin Toolkit 3.4.0](https://github.com/readium/kotlin-toolkit), BSD-3-Clause, and AndroidX PDF, Room, Lifecycle, DataStore and Window libraries under Apache License 2.0. Google Play services authorization remains subject to Google's SDK terms.
 
 Test-only Kindle and RAR fixtures have separate provenance and retained license texts in `Apps/iOS/CloudReaderTests/KindleFixtures/` and `CBRFixtures/`. The libmobi HUFF/CDIC sample is covered by its retained LGPL-3.0-or-later notice; it is not an app resource or decoder dependency.
+
+## Binary distribution companion
+
+The `v1.2.0-unified-preview` release includes
+`CloudReader-1.2.0-third-party-notices.zip`, containing retained notices from the
+actual APK/desktop dependencies, Maven license metadata, runtime legal files and
+upstream attributions. The all-app bundle includes that companion; keep it with
+individual-package redistributions. Matching Java/OpenJFX source archives are
+separate assets in the same release. The project's MIT license applies to
+CloudReader's original code, not all bundled dependencies or platform SDKs.

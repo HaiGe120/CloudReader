@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a reproducible application or build problem.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "For vulnerabilities, use private reporting instead. Do not attach credentials, private books or personal sync data."
+  - type: input
+    id: version
+    attributes:
+      label: App version / source revision
+      description: Include the release asset name or commit and whether this is a source build.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform and environment
+      description: OS version, device/emulator, architecture and screen size if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Use a synthetic/sample book and a disposable library where possible.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence
+      description: Exact error, logs or running-app screenshots. Remove secrets and personal paths.
