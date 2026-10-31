@@ -65,7 +65,32 @@ Local checks run sequentially using JDK 17, two workers, a 2GB build heap,
 in-process Kotlin compiler and no persistent build daemon. Generated files are
 redirected away from the synchronized source checkout.
 
-Latest local gates and coordinated CI results are recorded below when complete.
+Local gates at the delivery checkpoint:
+
+| Gate | Actual result |
+| --- | --- |
+| Shared Kotlin core | 20 tests, no failures/skips |
+| Desktop repository/context/native-reader tests | 15 tests, no failures/skips on the Mac development host |
+| Android JVM, lint, APK | 121 tests, no failures/skips; lint and debug assembly passed |
+| Android isolated emulator | 29 tests, no failures/skips; API 37 ARM64, also tested the compact 360dp shared toolbar |
+| Collector rejection/aggregation tests | 4 Python tests passed |
+| Bundled Mac development runtime | Real PDF render and WebKit load/page turn passed |
+| Interactive UI review | Android compact/wide library and TXT screenshots inspected; desktop reader page 1→2 and reader→assistant checked through accessibility in an isolated development copy |
+
+Desktop native tests cover real PDF text selection, PDF facing pages/odd final
+page, legacy TXT resume, EPUB page turns and reflow. Android's shared WebView
+test also queues competing reflow/restore callbacks to guard against stale
+callbacks resetting the requested passage. The temporary Android emulator was
+shut down after testing to reclaim its memory. A hidden Mac review window could
+not provide a usable whole-window screenshot; this is not counted as a full
+desktop visual/accessibility acceptance matrix.
+
+Initial coordinated CI proved Windows tests and MSI packaging; its delivery gate
+correctly blocked collection because the SDK setup requested obsolete `tools`,
+the container attempted an unnecessary Git ownership-sensitive revision lookup,
+and the packaged-launcher check needed an explicit app-image build. Those setup
+issues were repaired. Final coordinated results are appended after verification.
+
 Full logs and intermediate screenshots remain under
 `/tmp/cloudreader-unified-20261031/`, outside source control.
 

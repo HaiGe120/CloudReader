@@ -45,4 +45,7 @@ Windows MSI must be packaged on Windows; Linux DEB on Debian. A Mac host cannot
 produce or validate those installers. Distribution signing credentials and public
 publication are separate channel concerns.
 
-Status: active. Update the evidence record with checks as they actually finish.
+Status: U01–U05 implemented; U06 delivery verification in progress. Local gates
+and explicit feature/acceptance gaps are recorded in
+[UNIFIED-KOTLIN-01](evidence/UNIFIED-KOTLIN-01.md). This is a convergence preview,
+not an assertion that every iOS feature or target-device acceptance gate is done.

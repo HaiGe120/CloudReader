@@ -45,7 +45,45 @@ internal object PackagedRuntimeCheck {
                 image.createGraphics().let{graphics->try{window.paint(graphics)}finally{graphics.dispose()}}
                 javax.imageio.ImageIO.write(image,"png",output.resolve("packaged-reader.png").toFile())
             }
-            Files.writeString(output.resolve("runtime-check.json"),"""{"pdfRender":true,"webkitLoad":true,"webkitPageTurn":true,"isolatedLibrary":true}""")
+            // Exercise the actual shared library shell too, including the bundled
+            // Compose/Skiko runtime, rather than validating only reader engines.
+            val repository=FileLibraryRepository(root.resolve("library")).apply{seedDemo()}
+            val names=AtomicReference("")
+            SwingUtilities.invokeAndWait{
+                host?.close();host=null;frame?.dispose()
+                val compose=androidx.compose.ui.awt.ComposePanel().apply{
+                    setContent{CloudReaderDesktopApp(repository,SwingFilePicker(),root.resolve("library"))}
+                }
+                frame=JFrame("CloudReader isolated packaged-library check").apply{add(compose);setSize(1100,800);isVisible=true}
+            }
+            val deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(25)
+            while(System.nanoTime()<deadline){
+                SwingUtilities.invokeAndWait{
+                    fun collect(accessible:javax.accessibility.Accessible):String{
+                        val context=accessible.accessibleContext?:return ""
+                        return context.accessibleName.orEmpty()+" "+(0 until context.accessibleChildrenCount).joinToString(" "){index->context.getAccessibleChild(index)?.let(::collect).orEmpty()}
+                    }
+                    names.set(collect(frame!!))
+                }
+                if(names.get().contains("The Open Shelf")&&names.get().contains("Settings"))break
+                Thread.sleep(50)
+            }
+            check(names.get().contains("The Open Shelf")&&names.get().contains("Settings")){"Bundled shared library UI did not become accessible: ${names.get()}"}
+            // GPU-backed Compose panels do not paint into a Java2D image. Only
+            // capture the real display on disposable CI desktops, never a user's.
+            if(System.getenv("CI")=="true"){
+                val bounds=AtomicReference<java.awt.Rectangle>()
+                SwingUtilities.invokeAndWait{
+                    val window=frame!!
+                    val screen=window.graphicsConfiguration.bounds
+                    window.setSize(minOf(1100,screen.width-32),minOf(800,screen.height-64))
+                    window.setLocation(screen.x+16,screen.y+16);window.toFront()
+                    bounds.set(window.bounds)
+                }
+                val robot=java.awt.Robot();robot.waitForIdle();Thread.sleep(250)
+                javax.imageio.ImageIO.write(robot.createScreenCapture(bounds.get()),"png",output.resolve("packaged-library.png").toFile())
+            }
+            Files.writeString(output.resolve("runtime-check.json"),"""{"pdfRender":true,"webkitLoad":true,"webkitPageTurn":true,"sharedLibraryUI":true,"isolatedLibrary":true}""")
         }finally{
             SwingUtilities.invokeAndWait{host?.close();frame?.dispose()}
             root.toFile().deleteRecursively()
