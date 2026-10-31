@@ -1,0 +1,133 @@
+name: Android, Windows and Linux
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['Apps/Android/**', 'Apps/Desktop/**', 'Packages/CloudReaderKotlin/**', 'Packages/CloudReaderUI/**', 'Contracts/v1/**', 'release.properties', 'scripts/**', '.github/workflows/apps.yml']
+  pull_request:
+    paths: ['Apps/Android/**', 'Apps/Desktop/**', 'Packages/CloudReaderKotlin/**', 'Packages/CloudReaderUI/**', 'Contracts/v1/**', 'release.properties', 'scripts/**', '.github/workflows/apps.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: ./Packages/CloudReaderKotlin/gradlew -p Packages/CloudReaderKotlin test --no-daemon --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process
+      - run: python3 -m unittest discover -s scripts -p 'test_collect_apps.py'
+
+  android:
+    needs: core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CLOUDREADER_BUILD_ROOT: ${{ runner.temp }}/cloudreader-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - run: bash scripts/build-app.sh android
+      - name: Preserve Android check results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checks-android
+          path: ${{ runner.temp }}/cloudreader-build/**/test-results/**/*.xml
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-android
+          path: Build/Coordinated/android/*
+          if-no-files-found: error
+
+  desktop:
+    needs: core
+    timeout-minutes: 30
+    env:
+      CLOUDREADER_BUILD_ROOT: ${{ runner.temp }}/cloudreader-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-2022
+            container: ''
+          - platform: linux
+            runner: ubuntu-24.04
+            container: debian:12-slim
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Debian prerequisites
+        if: matrix.platform == 'linux'
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends binutils ca-certificates curl fakeroot fontconfig git libasound2 libfreetype6 libstdc++6 libx11-6 libxext6 libxi6 libxrender1 libxtst6 libgtk-3-0 libgl1 python3 unzip xvfb xauth
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - shell: bash
+        env:
+          CLOUDREADER_GUI_TESTS: '1'
+        run: |
+          if [ "${{ matrix.platform }}" = linux ]; then
+            xvfb-run -a bash scripts/build-app.sh linux
+          else
+            bash scripts/build-app.sh windows
+          fi
+      - name: Preserve desktop check results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checks-${{ matrix.platform }}
+          path: |
+            ${{ runner.temp }}/cloudreader-build/**/test-results/**/*.xml
+            Build/Coordinated/${{ matrix.platform }}/checks/*
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.platform }}
+          path: |
+            Build/Coordinated/${{ matrix.platform }}/*.msi
+            Build/Coordinated/${{ matrix.platform }}/*.deb
+            Build/Coordinated/${{ matrix.platform }}/*.json
+          if-no-files-found: error
+
+  all-apps:
+    name: Collect all three apps
+    needs: [android, desktop]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: app-*
+          merge-multiple: true
+          path: Build/Coordinated/all
+      - name: Verify one coordinated output
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version=//p' release.properties)
+          python3 scripts/collect-apps.py collect Build/Coordinated/all --version "$version" --revision "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CloudReader-all-platforms-${{ github.sha }}
+          path: Build/Coordinated/all/*
+          if-no-files-found: error

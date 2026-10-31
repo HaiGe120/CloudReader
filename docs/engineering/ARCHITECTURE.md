@@ -10,9 +10,9 @@ CloudReader remains an offline-first, personal book library. Books and reading r
 | --- | --- | --- |
 | iOS / iPadOS | Retain SwiftUI, UIKit/WebKit bridges, PDFKit, current EPUB engine | Reference behavior, reliable import/reading, shared services extraction |
 | macOS | Retain SwiftUI, AppKit/WebKit bridges, PDFKit | Use the same Apple services and iOS visual language; add desktop interaction conventions |
-| Android | Retain Kotlin/Compose, Room, DataStore, Readium, AndroidX PDF | Persistence/lifecycle safety, feature parity, tested portable contract |
-| Windows | Proposed Kotlin/JVM Compose Desktop client shared with Linux | Gated feasibility slice after current clients stabilize |
-| Linux | Same proposed desktop client, OS-specific integration adapters | Separate Linux build/install/accessibility verification |
+| Android | Kotlin/Compose with shared application UI; retain Room, DataStore, Readium and AndroidX PDF | Persistence/lifecycle safety, feature parity, tested portable contract |
+| Windows | Kotlin/JVM Compose Desktop host sharing Kotlin application UI/services with Android and Linux | Gated feasibility slice after current clients stabilize |
+| Linux | Same shared Kotlin desktop host, with OS-specific integration adapters | Separate Linux build/install/accessibility verification |
 
 The Windows/Linux choice is a recommendation to validate in D01, not a shipped dependency or a requirement to rewrite Android. It limits the number of implementation languages and can reuse a pure Kotlin contract/merge library. Android reader libraries and Room entities are not automatically portable. D01 must prove PDF/EPUB engines, credentials, accessibility, and packaging before this choice is ratified. No desktop framework is added during the Apple/Android cleanup.
 
@@ -156,3 +156,16 @@ The integration owner alone changes schema rules, package manifests, XcodeGen sp
 CI should provide path-aware contract checks, Apple package tests, iOS simulator tests, macOS build/tests, Android unit/lint/build, and explicit device/instrumentation jobs. Live OAuth/provider tests use dedicated accounts and are recorded separately. Windows/Linux packaging later runs on each actual OS. A Mac compile cannot verify either desktop installer.
 
 The delivery milestone is reached when iOS, macOS, and Android preserve their existing libraries, pass the same contract/merge fixtures, can import/read/resume offline, and complete a real cross-platform sync round trip without losing favorites, deletions, or chats. A tidy folder tree alone does not complete the architecture migration.
+
+
+## Kotlin application convergence (2026-10-31 assignment)
+
+`Packages/CloudReaderUI` owns platform-neutral Compose library/navigation,
+assistant, reader toolbar and appearance sources. Android and desktop compile
+these same sources against their platform Compose artifacts. `CloudReaderKotlin`
+continues to own portable values, contract/merge/assistant behavior and now bounded
+publication preparation and reflow policy. Android Room/Keystore/SAF/Readium/PDF
+and desktop file/credential/WebKit/PDFBox hosts remain platform adapters.
+`release.properties` and the coordinated apps workflow own version and output
+collection. This supersedes the earlier feasibility-only desktop status above;
+it does not turn future v2, annotation or migration proposals into shipped work.

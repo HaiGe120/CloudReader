@@ -1,9 +1,11 @@
-# Linux desktop client
+# Linux
 
-Linux uses the shared Compose Desktop prototype in [`Apps/Desktop`](../Desktop/README.md) while D01/D03 are evaluated. This folder is reserved for Linux-specific adapters and packaging:
+Debian 12 x64 is the packaging baseline for the shared app in `Apps/Desktop`.
+Run `bash scripts/build-app.sh linux` with JDK 17 and the `fakeroot`/Debian packaging
+tools, or use the **Android, Windows and Linux** workflow for a same-version
+APK/MSI/DEB collection. Other distributions may build from source.
 
-- native file picker/drop integration
-- Secret Service/libsecret adapter for `CredentialStore`
-- desktop entry, MIME types, package/runtime dependencies, and accessibility verification
-
-If a Secret Service is unavailable, credentials remain explicitly unavailable by default. Settings may offer the documented plaintext fallback only after explicit opt-in and disclosure; it is protected with user-only file permissions and never synced. No Linux package or distribution support matrix is claimed yet. Verify packaging on the declared Linux runner as required by D06.
+A graphical session, GTK 3, Fontconfig, X11 compatibility and graphics libraries
+are required. `secret-tool` plus an unlocked Secret Service persist credentials;
+unavailable storage is session-only unless the disclosed fallback is explicitly
+enabled. See the desktop README for the current feature and verification limits.

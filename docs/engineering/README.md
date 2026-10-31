@@ -20,3 +20,13 @@ The foundation and contract baseline is in place. Continue with bounded service 
 The implementation plan and evidence files track both code and documentation changes. Each completed card records its owned paths, acceptance evidence, commands, and limits. Keep the user informed of regressions and repair them before starting dependent cards; never reset, replace, or discard unrelated working-tree changes.
 
 Document authority: `PROJECT_SPEC.md` owns product intent; `ARCHITECTURE.md` owns the proposed code structure; `IMPLEMENTATION_PLAN.md` owns execution order/status; `Contracts/` owns the v1 wire specification and fixtures. When documents disagree, compare them with source and resolve the disagreement in the relevant task; a planned capability is never evidence that it already ships.
+
+
+## Android / Windows / Linux convergence — 2026-10-31
+
+The user's current assignment supersedes the staged desktop-only expansion order:
+share the Kotlin application's library/navigation/assistant and portable behavior,
+use the enabled iOS readers as the feature reference, and collect all three target
+packages from one version and revision. See [the bounded integration tasks](UNIFIED_KOTLIN.md).
+Apple implementation and schema v1 remain unchanged. Target-OS runtime evidence,
+live providers and distribution signing are recorded separately from compilation.

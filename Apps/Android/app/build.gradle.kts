@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -7,6 +9,12 @@ plugins {
 
 dependencyLocking { lockAllConfigurations() }
 
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
+val coordinatedRelease = Properties().apply {
+    rootProject.file("../../release.properties").inputStream().use { load(it) }
+}
+
 android {
     namespace = "io.github.haige120.cloudreader"
     compileSdk = 37
@@ -15,8 +23,8 @@ android {
         applicationId = "io.github.haige120.cloudreader"
         minSdk = 31
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = coordinatedRelease.getProperty("androidVersionCode").toInt()
+        versionName = coordinatedRelease.getProperty("version")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -29,6 +37,8 @@ android {
     }
     packaging.resources.excludes += setOf("META-INF/LICENSE*", "META-INF/NOTICE*")
     testOptions { animationsDisabled = true }
+    sourceSets.getByName("androidTest").assets.directories.add("$projectDir/../../../Contracts/v1/fixtures")
+    sourceSets.getByName("main").kotlin.directories.add("../../../Packages/CloudReaderUI/src/main/kotlin")
 }
 
 dependencies {

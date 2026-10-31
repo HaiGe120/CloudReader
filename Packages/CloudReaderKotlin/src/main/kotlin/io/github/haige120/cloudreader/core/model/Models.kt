@@ -5,6 +5,7 @@ enum class BookFormat(val extension: String) {
     EPUB("epub"), PDF("pdf"), TXT("txt"), MOBI("mobi"), AZW3("azw3"), FB2("fb2"), CBZ("cbz"), CBR("cbr");
 
     val hasNativeReader: Boolean get() = this == EPUB || this == PDF || this == TXT
+    val readable: Boolean get() = hasNativeReader || this == FB2 || this == CBZ
 
     companion object {
         fun fromExtension(value: String): BookFormat? = entries.firstOrNull { it.extension == value.lowercase() }

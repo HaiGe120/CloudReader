@@ -1,0 +1,48 @@
+# Android, Windows and Linux application convergence
+
+Assigned 2026-10-31: replace the independent Android/desktop feature paths with a
+shared Kotlin application using the **current iOS** feature set as the reference,
+and produce the three platform packages together from one revision.
+
+## Scope and ownership
+
+One integration owner, sequential implementation and checks. Preserve Android's
+Room v1 database, application ID, preferences, credentials and imported originals;
+preserve the desktop prototype's local library. No Apple production files are owned.
+Baseline archive, tracked patch, status and source hashes are preserved under
+`/tmp/cloudreader-unified-20261031/`. Historical duplicate files stay on disk;
+exclude them from Kotlin compilation rather than deleting unexplained work.
+
+| Child | Owned paths | Acceptance |
+| --- | --- | --- |
+| U01 | `Packages/CloudReaderKotlin/build.gradle.kts`, Kotlin core model/application/reader sources and tests | One portable model and shared feature policies; deterministic tests; exclude stale copies |
+| U02 | `Packages/CloudReaderUI/`, Android library/root adapters, desktop UI/build wiring | Same responsive library/navigation/components compiled for Android and desktop |
+| U03 | Shared publication preparation; Android format host/manifest and desktop reader hosts | TXT/PDF/EPUB/FB2/CBZ load, navigation, appearance, resume; malformed files fail safely |
+| U04 | Desktop repository/services/settings and shared assistant/sync services | Durable imports, favorites/deletions/chats; explicit context consent; provider errors visible |
+| U05 | Root packaging scripts, `.github/workflows/`, version metadata, platform packaging files | APK/MSI/DEB share a version/revision; aggregate output requires every platform job to succeed |
+| U06 | Isolated tests and task evidence | Report actual unit/build/UI results and remaining OS/device validation separately |
+
+## iOS reference and platform capabilities
+
+Shared scope: offline library, import copies, search, favorites, continue reading,
+deletion confirmation, TXT/PDF/EPUB/FB2/CBZ, reading appearance and hidden controls,
+local resume, optional multi-destination v1 sync, remote assistant protocols,
+conversation history and explicit book-context consent.
+
+MOBI/AZW3 and CBR are currently gated on iOS and are not required to claim matching
+its enabled readers. Apple FoundationModels, Siri and iCloud document integration
+are Apple capabilities; other systems use remote AI and native file/folder access.
+
+The existing native Android readers remain platform adapters. Windows and Linux
+share the desktop host. Shared Compose source is compiled against each platform's
+Compose artifacts, avoiding Android dependencies in the portable core.
+
+## Delivery and validation
+
+Coordinated delivery means one workflow/revision/version and a final artifact
+collection that is created only after Android, Windows and Debian jobs succeed.
+Windows MSI must be packaged on Windows; Linux DEB on Debian. A Mac host cannot
+produce or validate those installers. Distribution signing credentials and public
+publication are separate channel concerns.
+
+Status: active. Update the evidence record with checks as they actually finish.

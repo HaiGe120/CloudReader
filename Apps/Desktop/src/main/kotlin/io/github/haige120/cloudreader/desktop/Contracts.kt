@@ -44,6 +44,19 @@ data class BookRecord(
     val importedAt: Instant,
     val textOffset: Int = 0,
     val isFavorite: Boolean = false,
+    val progress: Double = 0.0,
+    val lastOpenedAt: Double? = null,
+    val modifiedAt: Double = importedAt.epochSecond.toDouble() - 978_307_200.0,
+    val author: String? = null,
+    val localLocation: String? = null,
+    val unknownJson: String = "{}",
+)
+
+fun BookRecord.portable() = io.github.haige120.cloudreader.core.model.BookRecord(
+    io.github.haige120.cloudreader.core.model.canonicalUUID(id.value), title, author, fileName = sourcePath.fileName.toString(), format = format.extension,
+    addedAt = importedAt.toEpochMilli() / 1000.0 - 978_307_200.0, lastOpenedAt = lastOpenedAt,
+    progress = progress, isBookmarked = isFavorite, modifiedAt = modifiedAt,
+    localLocation = localLocation ?: if (textOffset > 0) "txt:$textOffset" else null, unknownJson = unknownJson,
 )
 
 interface LibraryRepository {

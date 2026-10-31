@@ -1,0 +1,7 @@
+// Keep disposable generated files outside a synchronized source checkout.
+def outputRoot = System.getenv('CLOUDREADER_BUILD_ROOT')
+if (outputRoot) {
+    gradle.beforeProject { project ->
+        project.layout.buildDirectory.set(new File(outputRoot, project.rootProject.name + project.path.replace(':', '_')))
+    }
+}

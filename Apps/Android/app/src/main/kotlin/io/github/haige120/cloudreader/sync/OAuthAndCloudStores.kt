@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
 import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import io.github.haige120.cloudreader.data.CloudReaderPreferences
 import io.github.haige120.cloudreader.data.SecureVault
@@ -96,6 +98,7 @@ class OAuthConnector(private val context: Context, private val preferences: Clou
         response["refresh_token"]?.jsonPrimitive?.contentOrNull?.let { vault.put("dropbox.refreshToken", it) }
         val expiresIn = response["expires_in"]?.jsonPrimitive?.content?.toLongOrNull() ?: 14_400L
         vault.put("dropbox.expiresAt", (System.currentTimeMillis() / 1000L + expiresIn).toString())
+        preferences.selectProvider("dropbox", true)
         return response["account_id"]?.jsonPrimitive?.contentOrNull ?: "Dropbox connected"
     }
 
@@ -112,19 +115,49 @@ class OAuthConnector(private val context: Context, private val preferences: Clou
             ?: result.getQueryParameter("hostname") ?: "api.pcloud.com"
         require(host in setOf("api.pcloud.com", "eapi.pcloud.com")) { "pCloud returned an unsupported API region." }
         vault.put("pcloud.accessToken", token); vault.put("pcloud.apiHost", host)
+        vault.remove("pcloud.cloudReaderFolderID")
         return "pCloud connected"
     }
 
     suspend fun connectGoogle(accessToken: String, expiresInSeconds: Long = 3_600): String {
-        require(accessToken.isNotBlank())
-        vault.put("googleDrive.accessToken", accessToken)
-        vault.put("googleDrive.expiresAt", (System.currentTimeMillis() / 1000L + expiresInSeconds).toString())
+        // A custom-client code exchange already saved Google's actual expiry before delivering the token.
+        if (vault.get("googleDrive.accessToken") != accessToken || vault.get("googleDrive.expiresAt") == null) {
+            saveGoogleToken(accessToken, expiresInSeconds)
+        }
         preferences.selectProvider("googleDrive", true)
         return "Google Drive connected"
     }
 
-    /** Requests a fresh cached token. Google Play services refreshes it when the previous token expires. */
+    private fun saveGoogleToken(accessToken: String, expiresInSeconds: Long = 3_600) {
+        require(accessToken.isNotBlank())
+        synchronized(GoogleOAuthTokenState.commitLock) {
+            vault.put("googleDrive.accessToken", accessToken)
+            vault.put("googleDrive.expiresAt", (System.currentTimeMillis() / 1000L + expiresInSeconds).toString())
+            vault.remove("googleDrive.accessTokenGrant")
+        }
+    }
+
+    /** Custom clients renew their stored grant; the default flow renews through Google Play services. */
     suspend fun refreshGoogleToken(): String {
+        val credentials = googleClientCredentials()
+        if (credentials != null) {
+            val (refreshToken, cachedToken) = synchronized(GoogleOAuthTokenState.commitLock) {
+                val grant = vault.get("googleDrive.refreshToken")?.takeIf(String::isNotBlank)
+                    ?.takeIf { vault.get("googleDrive.refreshTokenClientID") == credentials.clientID }
+                    ?: error("Reconnect Google Drive in Settings to approve offline access for this OAuth client.")
+                grant to cachedGoogleAccessToken(
+                    accessToken = vault.get("googleDrive.accessToken"),
+                    expiresAt = vault.get("googleDrive.expiresAt")?.toLongOrNull(),
+                    storedGrantBinding = vault.get("googleDrive.accessTokenGrant"),
+                    expectedGrantBinding = googleOAuthGrantBinding(credentials, grant),
+                    nowEpochSeconds = System.currentTimeMillis() / 1000L,
+                )
+            }
+            if (cachedToken != null) return cachedToken
+            val tokens = GoogleOAuthTokenClient(http).refresh(credentials, refreshToken)
+            saveGoogleTokens(tokens, credentials, renewalGrant = refreshToken)
+            return tokens.accessToken
+        }
         val request = AuthorizationRequest.builder()
             .setRequestedScopes(listOf(Scope("https://www.googleapis.com/auth/drive.appdata")))
             .build()
@@ -142,32 +175,125 @@ class OAuthConnector(private val context: Context, private val preferences: Clou
                 }
                 .addOnFailureListener { error ->
                     if (continuation.isActive) continuation.resumeWithException(
-                        IllegalStateException("Google Drive authorization failed. Check Google Play services and app registration.", error),
+                        googleAuthorizationFailure(error, GoogleAuthorizationStage.RENEWAL),
                     )
                 }
                 .addOnCanceledListener {
                     if (continuation.isActive) continuation.resumeWithException(CancellationException("Google Drive authorization was cancelled."))
                 }
         }
-        connectGoogle(result)
+        // Renewal must not re-select a destination the user disabled during sync.
+        saveGoogleToken(result)
         return result
     }
 
-    fun authorizeGoogle(activity: Activity, resolve: (android.content.IntentSender) -> Unit, onToken: (String) -> Unit, onError: (Throwable) -> Unit) {
-        val request = AuthorizationRequest.builder().setRequestedScopes(listOf(Scope("https://www.googleapis.com/auth/drive.appdata"))).build()
-        Identity.getAuthorizationClient(activity).authorize(request)
-            .addOnSuccessListener { result ->
-                if (result.hasResolution()) {
-                    try { resolve(result.pendingIntent!!.intentSender) } catch (error: Exception) { onError(error) }
-                } else result.accessToken?.let(onToken) ?: onError(IllegalStateException("Google did not return an access token."))
+    suspend fun authorizeGoogle(resolve: (android.content.IntentSender) -> Unit, onToken: (String) -> Unit, onError: (Throwable) -> Unit) {
+        try {
+            val credentials = googleClientCredentials()
+            val request = AuthorizationRequest.builder()
+                .setRequestedScopes(listOf(Scope("https://www.googleapis.com/auth/drive.appdata")))
+                .apply {
+                    if (credentials != null) {
+                        requestOfflineAccess(credentials.clientID)
+                        // A deliberate reconnect must be able to replace a lost or revoked refresh grant.
+                        setPrompt(AuthorizationRequest.Prompt.CONSENT)
+                    }
+                }
+                .build()
+            val result = suspendCancellableCoroutine<AuthorizationResult> { continuation ->
+                Identity.getAuthorizationClient(context).authorize(request)
+                    .addOnSuccessListener { if (continuation.isActive) continuation.resume(it) }
+                    .addOnFailureListener { if (continuation.isActive) continuation.resumeWithException(it) }
+                    .addOnCanceledListener {
+                        if (continuation.isActive) continuation.resumeWithException(IllegalStateException("Google Drive connection was cancelled. Tap Connect to try again."))
+                    }
             }
-            .addOnFailureListener { error -> onError(IllegalStateException("Google Drive authorization failed. Check Google Play services and app registration.", error)) }
+            if (result.hasResolution()) {
+                val pendingIntent = result.pendingIntent ?: error("Google did not return an authorization screen. Try connecting again.")
+                resolve(pendingIntent.intentSender)
+            } else onToken(googleAccessToken(result, credentials))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            onError(googleAuthorizationFailure(error, GoogleAuthorizationStage.REQUEST))
+        }
     }
 
-    suspend fun finishGoogle(activity: Activity, data: Intent?): String {
-        val result = try { Identity.getAuthorizationClient(activity).getAuthorizationResultFromIntent(data) }
-            catch (error: Exception) { throw IllegalStateException("Google Drive authorization was not completed.", error) }
-        return result.accessToken ?: throw IllegalStateException("Google did not return an access token.")
+    suspend fun finishGoogle(data: Intent?): String = try {
+        val result = Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data)
+        googleAccessToken(result, googleClientCredentials())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        throw googleAuthorizationFailure(error, GoogleAuthorizationStage.CALLBACK)
+    }
+
+    private suspend fun googleClientCredentials(): GoogleOAuthClientCredentials? = GoogleOAuthConfiguration.credentials(
+        preferences.get("googleDrive.clientID"), vault.get("googleDrive.clientSecret"),
+    )
+
+    private suspend fun googleAccessToken(result: AuthorizationResult, credentials: GoogleOAuthClientCredentials?): String {
+        if (credentials != null) {
+            val code = result.serverAuthCode?.takeIf(String::isNotBlank)
+                ?: error("Google did not return an authorization code for the configured Web client. Check the Android and Web OAuth clients are in the same project, then reconnect Google Drive.")
+            val tokens = GoogleOAuthTokenClient(http).exchangeAuthorizationCode(credentials, code)
+            saveGoogleTokens(tokens, credentials)
+            return tokens.accessToken
+        }
+        check(result.serverAuthCode.isNullOrBlank()) { "Google OAuth settings changed during authorization. Connect Google Drive again." }
+        return result.accessToken?.takeIf(String::isNotBlank)
+            ?: error("Google returned an authorization result without an access token. Tap Connect and approve access to CloudReader's app data.")
+    }
+
+    private suspend fun saveGoogleTokens(tokens: GoogleOAuthTokens, credentials: GoogleOAuthClientCredentials, renewalGrant: String? = null) {
+        val current = googleClientCredentials()
+        check(current != null && current.clientID == credentials.clientID && current.clientSecret == credentials.clientSecret) {
+            "Google OAuth settings changed during authorization. Connect Google Drive again."
+        }
+        synchronized(GoogleOAuthTokenState.commitLock) {
+            val previousToken = vault.get("googleDrive.refreshToken")
+            val previousClientID = vault.get("googleDrive.refreshTokenClientID")
+            if (renewalGrant != null) {
+                requireCurrentGoogleRefreshGrant(renewalGrant, credentials.clientID, previousToken, previousClientID)
+            }
+            val refreshToken = googleRefreshTokenForClient(
+                incoming = tokens.refreshToken,
+                previous = previousToken,
+                previousClientID = previousClientID,
+                currentClientID = credentials.clientID,
+                // An explicit account selection may have changed users; only renewal can retain an old grant.
+                allowPrevious = renewalGrant != null,
+            )
+            if (tokens.refreshToken != null) {
+                vault.put("googleDrive.refreshToken", refreshToken)
+                vault.put("googleDrive.refreshTokenClientID", credentials.clientID)
+            }
+            saveGoogleToken(tokens.accessToken, tokens.expiresInSeconds)
+            vault.put("googleDrive.accessTokenGrant", googleOAuthGrantBinding(credentials, refreshToken))
+        }
+    }
+
+    private fun googleAuthorizationFailure(error: Exception, stage: GoogleAuthorizationStage): IllegalStateException {
+        val code = (error as? ApiException)?.statusCode
+        return IllegalStateException(
+            GoogleAuthorizationDiagnostics.message(
+                code = code,
+                providerMessage = error.message,
+                stage = stage,
+                registration = if (code in listOf(8, 10, 12500)) googleOAuthRegistration() else null,
+            ),
+            error,
+        )
+    }
+
+    internal fun googleOAuthRegistration(): String {
+        val sha1 = runCatching {
+            val info = context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+            info.signingInfo?.apkContentsSigners?.joinToString("\n") { signature ->
+                MessageDigest.getInstance("SHA-1").digest(signature.toByteArray()).joinToString(":") { "%02X".format(it) }
+            }
+        }.getOrNull() ?: "Signing certificate unavailable"
+        return "Package: ${context.packageName}\nSHA-1: $sha1"
     }
 
     private suspend fun form(url: String, values: Map<String, String>): kotlinx.serialization.json.JsonObject = withContext(Dispatchers.IO) {
@@ -240,7 +366,22 @@ class DropboxStore(private val vault: SecureVault, private val preferences: Clou
     private fun enc(value: String) = URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")
 }
 
-class GoogleDriveStore(private val vault: SecureVault, private val http: OkHttpClient = OkHttpClient()) : RemoteBookStore {
+class GoogleDriveStore internal constructor(
+    tokenSnapshot: () -> GoogleDriveAuthorizationSnapshot,
+    private val http: OkHttpClient = OkHttpClient(),
+) : RemoteBookStore {
+    // Keep one account's authorization for the entire sync pass, even if Settings reconnects meanwhile.
+    private val authorization = synchronized(GoogleOAuthTokenState.commitLock) { tokenSnapshot() }
+
+    constructor(vault: SecureVault, http: OkHttpClient = OkHttpClient()) : this(
+        {
+            GoogleDriveAuthorizationSnapshot(
+                vault.get("googleDrive.accessToken"),
+                vault.get("googleDrive.expiresAt")?.toLongOrNull() ?: 0,
+            )
+        },
+        http,
+    )
     override suspend fun read(name: String): ByteArray? = withContext(Dispatchers.IO) {
         val id = findId(name) ?: return@withContext null
         val request = Request.Builder().url("https://www.googleapis.com/drive/v3/files/${encPath(id)}?alt=media").header("Authorization", "Bearer ${token()}").get().build()
@@ -267,11 +408,7 @@ class GoogleDriveStore(private val vault: SecureVault, private val http: OkHttpC
         http.newCall(upload).execute().use { if (!it.isSuccessful) throw IllegalStateException("Google Drive upload returned HTTP ${it.code}") }
     }
 
-    private fun token(): String {
-        val expiry = vault.get("googleDrive.expiresAt")?.toLongOrNull() ?: 0
-        if (expiry < System.currentTimeMillis() / 1000L + 30) throw IllegalStateException("Reconnect Google Drive in Settings to refresh authorization.")
-        return vault.get("googleDrive.accessToken") ?: throw IllegalStateException("Connect Google Drive in Settings.")
-    }
+    private fun token(): String = authorization.token(System.currentTimeMillis() / 1000L)
 
     private fun findId(name: String): String? {
         val query = "name='$name' and trashed=false"

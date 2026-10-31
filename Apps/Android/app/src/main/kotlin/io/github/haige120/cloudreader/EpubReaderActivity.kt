@@ -1,90 +1,66 @@
 package io.github.haige120.cloudreader
 
 import android.os.Bundle
-import android.view.Gravity
-import android.view.ViewGroup
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.content.res.Configuration
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
-import androidx.fragment.app.commitNow
-import io.github.haige120.cloudreader.data.BookRow
+import io.github.haige120.cloudreader.domain.BookRecord
+import io.github.haige120.cloudreader.data.toDomain
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.readium.r2.navigator.epub.EpubNavigatorFactory
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
-import java.io.File
 
 class EpubReaderActivity : AppCompatActivity() {
     companion object { const val EXTRA_BOOK_ID = "book_id" }
 
     private val app get() = application as CloudReaderApp
-    private lateinit var status: TextView
-    private lateinit var titleView: TextView
-    private var book: BookRow? = null
+    private lateinit var chrome: NativeReaderChrome
+    private var book: BookRecord? = null
+    private var readerHost: EpubReaderHost? = null
+    private var readerSession: ReaderSession? = null
+    private var restoredLocator: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Readium restores child fragments through a factory. If Android recreated this
-        // Activity after process death, the Publication is no longer in memory; finish
-        // cleanly and reopen from the persisted Locator instead of restoring a dead view.
-        if (savedInstanceState != null) {
-            supportFragmentManager.fragmentFactory = EpubNavigatorFragment.createDummyFactory()
-            super.onCreate(savedInstanceState)
-            finish()
-            return
-        }
-        super.onCreate(savedInstanceState)
+        // Reopen the publication before creating a fresh navigator. A restored fragment
+        // cannot safely retain an in-memory publication after process death.
+        restoredLocator = savedInstanceState?.getString("reader.locator")
+        super.onCreate(null)
         val bookId = intent.getStringExtra(EXTRA_BOOK_ID)
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val toolbar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(12)
-        }
-        val close = TextView(this).apply {
-            text = "‹  Library"
-            textSize = 16f
-            contentDescription = "Close book"
-            setOnClickListener { finish() }
-        }
-        titleView = TextView(this).apply {
-            textSize = 18f
-            setPadding(20, 0, 0, 0)
-        }
-        status = TextView(this).apply {
-            textSize = 13f
-            gravity = Gravity.END
-            setPadding(12, 0, 0, 0)
-        }
-        toolbar.addView(close, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        toolbar.addView(titleView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        toolbar.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        root.addView(toolbar)
         val containerId = R.id.epub_viewer_container
-        root.addView(FrameLayout(this).apply { setId(containerId) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        setContentView(root)
+        chrome = NativeReaderChrome(this, containerId, showRestoreControl = false, immersiveSystemBars = true)
+        chrome.setTitle("EPUB")
+        setContentView(chrome.root)
 
-        if (bookId == null) { status.text = "Book not found"; return }
+        if (bookId == null) { chrome.showError("Book not found."); return }
         lifecycleScope.launch {
             runCatching {
-                val result = app.database.libraryDao().book(bookId) ?: error("Book not found.")
+                val result = app.database.libraryDao().book(bookId)?.toDomain() ?: error("Book not found.")
                 book = result
-                titleView.text = result.title
+                readerSession = ReaderSession(result.id, app.applicationScope, ReaderProgressWriter { id, progress, location ->
+                    val current = app.database.libraryDao().book(id)?.toDomain() ?: return@ReaderProgressWriter
+                    app.library.progress(current, progress, location)
+                })
+                chrome.setTitle(result.title)
+                chrome.setProgress("${(result.progress * 100).toInt().coerceIn(0, 100)}%")
                 app.library.opened(result)
                 openPublication(result, containerId)
-            }.onFailure { status.text = it.localizedMessage ?: "This EPUB could not be opened." }
+            }.onFailure {
+                if (it is CancellationException) throw it
+                chrome.showError(it.localizedMessage ?: "This EPUB could not be opened.")
+            }
         }
     }
 
-    private suspend fun openPublication(book: BookRow, containerId: Int) = withContext(Dispatchers.IO) {
+    @OptIn(ExperimentalReadiumApi::class)
+    private suspend fun openPublication(book: BookRecord, containerId: Int) = withContext(Dispatchers.IO) {
         val file = app.library.fileFor(book) ?: error("The local book file is missing.")
         val httpClient = DefaultHttpClient()
         val assetRetriever = AssetRetriever(contentResolver, httpClient)
@@ -95,23 +71,53 @@ class EpubReaderActivity : AppCompatActivity() {
         val asset = assetResult.getOrNull() ?: error("Could not open this EPUB: ${assetResult.failureOrNull()}")
         val publicationResult = opener.open(asset, allowUserInteraction = false)
         val publication = publicationResult.getOrNull() ?: error("Could not read this EPUB: ${publicationResult.failureOrNull()}")
-        val savedLocator = book.localLocation?.takeIf { it.startsWith("readium:") }
+        val savedLocator = restoredLocator?.let { raw -> runCatching { Locator.fromJSON(org.json.JSONObject(raw)) }.getOrNull() }
+            ?: book.localLocation?.takeIf { it.startsWith("readium:") }
             ?.removePrefix("readium:")
             ?.let { raw -> runCatching { Locator.fromJSON(org.json.JSONObject(raw)) }.getOrNull() }
-        val factory = EpubNavigatorFactory(publication).createFragmentFactory(initialLocator = savedLocator)
+        val settings = EpubReaderAppearance.SETTING_KEYS.mapNotNull { key ->
+            app.preferences.get(key)?.let { key to it }
+        }.toMap()
         withContext(Dispatchers.Main) {
-            supportFragmentManager.fragmentFactory = factory
-            supportFragmentManager.commitNow {
-                replace(containerId, EpubNavigatorFragment::class.java, Bundle(), "epub-navigator")
-            }
-            val navigator = supportFragmentManager.findFragmentByTag("epub-navigator") as EpubNavigatorFragment
-            lifecycleScope.launch {
-                navigator.currentLocator.collect { locator ->
-                    val fraction = locator.locations.totalProgression ?: locator.locations.progression ?: book.progress
-                    status.text = "${(fraction * 100).toInt().coerceIn(0, 100)}%"
-                    app.library.progress(book, fraction, "readium:${locator.toJSON()}")
-                }
-            }
+            readerHost = EpubReaderHost(
+                this@EpubReaderActivity, chrome, containerId,
+                onSettingChanged = { key, value -> app.preferences.set(key, value) },
+                onLocatorChanged = { locator -> checkpoint(locator) },
+                onSelectedText = { selected ->
+                    setResult(RESULT_OK, android.content.Intent()
+                        .putExtra(PdfReaderActivity.EXTRA_BOOK_ID, book.id)
+                        .putExtra(PdfReaderActivity.EXTRA_SELECTED_TEXT, selected.take(18_000)))
+                    finish()
+                },
+            ).also { it.attach(publication, savedLocator, EpubReaderAppearance.fromSettings(settings)) }
         }
+    }
+
+    private fun checkpoint(locator: Locator) {
+        val fraction = locator.locations.totalProgression ?: locator.locations.progression ?: book?.progress ?: 0.0
+        chrome.setProgress((fraction * 100).toInt().coerceIn(0, 100).toString() + "%")
+        readerSession?.checkpoint(fraction, "readium:" + locator.toJSON())
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        readerHost?.let { it.applyAppearance(it.appearance) }
+    }
+
+    override fun onStop() {
+        readerHost?.navigator?.currentLocator?.value?.let(::checkpoint)
+        readerSession?.let { session -> app.applicationScope.launch { session.flush() } }
+        super.onStop()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        readerHost?.navigator?.currentLocator?.value?.let { outState.putString("reader.locator", it.toJSON().toString()) }
+        super.onSaveInstanceState(outState)
+    }
+
+    override fun onDestroy() {
+        readerHost?.close()
+        readerHost = null
+        super.onDestroy()
     }
 }

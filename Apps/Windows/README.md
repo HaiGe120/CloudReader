@@ -1,9 +1,10 @@
-# Windows desktop client
+# Windows
 
-Windows uses the shared Compose Desktop prototype in [`Apps/Desktop`](../Desktop/README.md) while D01/D03 are evaluated. This folder is reserved for Windows-specific adapters and packaging:
+Windows 10/11 x64 uses the shared app in `Apps/Desktop`. JDK 17 builds it; the MSI
+includes the runtime. Run `bash scripts/build-app.sh windows` in Git Bash, or use
+the **Android, Windows and Linux** workflow to obtain the same-version APK/MSI/DEB
+collection. See the desktop README for features, credentials and validation limits.
 
-- native file picker/drop integration
-- Windows Credential Manager adapter for `CredentialStore` (secure default; plaintext only through explicit user opt-in when required)
-- file associations, installer, update, and accessibility verification
-
-No Windows installer or OS validation is claimed yet. Run the shared JVM tests first, then verify packaging on an actual Windows runner as required by D05.
+The MSI uses a stable upgrade UUID. Packages are unsigned previews. Verify actual
+installation, update with library retention, file opening, scaling, keyboard and
+screen-reader behavior on Windows before production delivery.

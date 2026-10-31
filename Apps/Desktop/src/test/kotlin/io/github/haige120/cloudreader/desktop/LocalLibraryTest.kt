@@ -25,21 +25,25 @@ class LocalLibraryTest {
     }
 
     @Test
-    fun leavesPdfAndEpubVisibleAsUnsupported() {
+    fun importsPdfAsOriginalBytesForTheNativeReader() {
         val root = Files.createTempDirectory("cloudreader-desktop-test")
         val repository = FileLibraryRepository(root.resolve("library"))
         val pdf = Files.createTempFile(root, "sample", ".pdf")
-        val result = repository.importBook(pdf) as? ImportResult.Unsupported ?: throw AssertionError("PDF should be reported as unsupported")
-        assertEquals(BookFormat.PDF, result.format)
+        Files.write(pdf, byteArrayOf(37, 80, 68, 70))
+        val result = repository.importBook(pdf) as? ImportResult.Imported ?: throw AssertionError("PDF import failed")
+        assertEquals(BookFormat.PDF, result.book.format)
+        assertTrue(Files.readAllBytes(pdf).contentEquals(Files.readAllBytes(result.book.sourcePath)))
     }
 
     @Test
-    fun recognizesAdditionalPortableFormatsBeforeReaderSupportExists() {
+    fun importsFb2WithoutChangingOriginalBytes() {
         val root = Files.createTempDirectory("cloudreader-desktop-test")
         val repository = FileLibraryRepository(root.resolve("library"))
         val fb2 = Files.createTempFile(root, "sample", ".fb2")
-        val result = repository.importBook(fb2) as? ImportResult.Unsupported ?: throw AssertionError("FB2 should be reported as unsupported")
-        assertEquals(BookFormat.FB2, result.format)
+        Files.writeString(fb2, "<FictionBook><body><p>Original text</p></body></FictionBook>")
+        val result = repository.importBook(fb2) as? ImportResult.Imported ?: throw AssertionError("FB2 import failed")
+        assertEquals(BookFormat.FB2, result.book.format)
+        assertEquals(Files.readString(fb2), Files.readString(result.book.sourcePath))
     }
 }
 

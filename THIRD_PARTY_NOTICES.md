@@ -18,4 +18,17 @@ The Apple apps use Apple frameworks and the following open-source libraries for 
 
 Exact dependency revisions are pinned in each Apple project's `project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.
 
+The Android, Windows and Linux clients also use the following dependencies. Their
+upstream artifacts retain their license and third-party notices; desktop packages
+include this notice file alongside the application resources.
+
+- [Compose Multiplatform 1.9.0](https://github.com/JetBrains/compose-multiplatform), Apache License 2.0; Android uses AndroidX Compose under Apache License 2.0.
+- [Kotlin](https://github.com/JetBrains/kotlin), Kotlin coroutines and serialization, Apache License 2.0.
+- [jsoup 1.23.2](https://jsoup.org/), MIT License; shared safe EPUB/FB2 preparation.
+- [OpenJFX 21.0.9](https://github.com/openjdk/jfx/tree/jfx21.0.9), GPL version 2 with the Classpath Exception, plus the third-party notices included in its artifacts; desktop WebKit rendering. Matching source and upstream legal files are available from the linked OpenJFX repository.
+- [Apache PDFBox 3.0.6](https://pdfbox.apache.org/), Apache License 2.0; desktop PDF rendering and text extraction.
+- [OkHttp 4.12.0](https://github.com/square/okhttp), Apache License 2.0.
+- [mwiede JSch 2.27.3](https://github.com/mwiede/jsch), BSD-3-Clause; [Bouncy Castle 1.83](https://www.bouncycastle.org/), Bouncy Castle License (MIT style).
+- Android additionally retains [Readium Kotlin Toolkit 3.4.0](https://github.com/readium/kotlin-toolkit), BSD-3-Clause, and AndroidX PDF, Room, Lifecycle, DataStore and Window libraries under Apache License 2.0. Google Play services authorization remains subject to Google's SDK terms.
+
 Test-only Kindle and RAR fixtures have separate provenance and retained license texts in `Apps/iOS/CloudReaderTests/KindleFixtures/` and `CBRFixtures/`. The libmobi HUFF/CDIC sample is covered by its retained LGPL-3.0-or-later notice; it is not an app resource or decoder dependency.
