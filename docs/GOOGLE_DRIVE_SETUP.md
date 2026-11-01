@@ -7,9 +7,12 @@ The intended normal flow on Android, Windows and Linux is **Connect Google Drive
 Cloud project or enter client credentials. Google backup remains optional; the
 offline library does not require an account.
 
-This connection/readability repair is currently **unreleased**. The 1.2.0 public
-preview still shows its older manual-credential layout. See
-[current implementation and test status](engineering/evidence/GOOGLE-CONNECT-UI-01.md).
+The [1.2.1 preview](releases/1.2.1-google-connect-preview.md) includes this simpler
+connection/readability flow. The older 1.2.0 preview has the manual-credential
+layout. **The new APK cannot update public 1.2.0 in place; do not uninstall or
+clear app data to bypass the signing mismatch.** See
+[release verification and limits](engineering/evidence/RELEASE-1.2.1.md).
+Live personal-account consent, refresh and backup remain unverified.
 
 If you previously configured a custom Google project, the repair preserves it.
 Choosing **Use standard Google connection** keeps its saved ID/secret, clears only
@@ -38,12 +41,18 @@ requires the user's consent to the requested Drive access.
    scope. It does not require distributing a Web client secret or operating a
    CloudReader backend.
 
-Older and current preview certificates need separate registrations. The current
-reported 1.2.0 APK certificate is
+Older and current preview certificates need separate registrations. The public
+1.2.0 APK certificate is
 `4F:2D:16:4E:E4:43:9D:5E:6A:1F:76:F2:AF:38:EC:6A:A9:77:84:C7`.
 This is evidence for that APK only, not a permanent release identity. Losing its
 private signing key cannot be repaired by extracting the public certificate from
 the APK. A safe in-place Android update requires the matching private signing key.
+
+The locally built 1.2.1 APK uses the retained older preview key:
+`E3:F7:0B:33:F7:71:2E:FC:B3:75:5B:82:59:5F:BF:43:19:1E:11:9B`.
+Its Android registration is retained. The temporary 1.2.0 private key is unavailable;
+the new APK is not a safe update path for that installation. The retained private
+key stays on the maintainer's Mac and is not uploaded to GitHub.
 
 Custom Web-client/server-code exchange remains an advanced compatibility option;
 Google documents server-code exchange for backends. A Web client must belong to
@@ -71,6 +80,11 @@ secret `CLOUDREADER_GOOGLE_DESKTOP_CLIENT_SECRET`. These are **maintainer build
 settings**, never fields an ordinary reader must fill in. Without a configured
 default, the app reports a maintainer-setup problem rather than pretending sign-in
 is ready or forcing users to create projects.
+
+For the official 1.2.1 Windows/Linux packages, protected settings are configured.
+Both actual bundled launchers must prove configuration presence and the expected
+input fingerprint before publication. This is build-input verification, not a
+successful Google account authorization.
 
 The app enables a destination only after successful authorization. Failed Connect
 does not falsely mark it connected. Changed client credentials invalidate only

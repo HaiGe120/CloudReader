@@ -35,3 +35,9 @@ The authorized public prerelease uses a common pinned desktop runtime and keeps
 the existing MIT source license. See [release notes](../releases/1.2.0-unified-preview.md),
 [publication evidence](evidence/OPEN-SOURCE-RELEASE-01.md),
 [contribution guidance](../../CONTRIBUTING.md) and [release procedure](../RELEASING.md).
+
+The 1.2.1 Google connection/readability update has fresh same-revision platform
+checks, locally retained Android signing and configured Desktop defaults. See
+[1.2.1 release notes](../releases/1.2.1-google-connect-preview.md) and
+[exact verification/signing limits](evidence/RELEASE-1.2.1.md). Live Google
+consent/refresh/backup and installed-update acceptance remain unverified.

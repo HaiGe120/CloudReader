@@ -24,33 +24,42 @@ Sync directly with storage destinations you choose. Your books, reading progress
 
 The iOS and macOS apps share their Swift data model and sync implementation. Android is a native Kotlin and Jetpack Compose app that follows the same portable schema. Windows and Linux share a Kotlin/JVM desktop client while keeping OS integrations separate; there is no web app.
 
-## Download the 1.2.0 preview
+## Download the 1.2.1 preview
 
 Android, Windows and Linux are built together from one version and source revision.
-This **October 31, 2026 prerelease** is a convergence preview, not a production
+This **November 1, 2026 prerelease** adds simpler Google connection and readable
+light/dark settings across all three apps. It is a preview, not a production
 release or a claim of complete iOS feature/visual parity.
 
 | Download | Requirements | Distribution status |
 | --- | --- | --- |
-| [All three apps + UI/test evidence](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.0-unified-preview/CloudReader-1.2.0-all-platforms-preview.zip) | Choose your OS package | Includes notices and the progress report |
-| [Android APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.0-unified-preview/CloudReader-1.2.0-android-debug.apk) | Android 12+ | CI debug-signed; not a verified update to existing installations |
-| [Windows MSI](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.0-unified-preview/CloudReader-1.2.0-windows.msi) | Windows x64 | Unsigned preview; bundled Java runtime |
-| [Linux DEB](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.0-unified-preview/CloudReader-1.2.0-linux.deb) | Debian 12 amd64 baseline | Bundled Java runtime; native dependencies required |
+| [All three apps + UI/test evidence](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-all-platforms-preview.zip) | Choose your OS package | Includes notices and labeled build provenance |
+| [Android APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-android-debug.apk) | Android 12+ | Retained preview key; **cannot update public 1.2.0 in place** |
+| [Windows MSI](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-windows.msi) | Windows x64 | Unsigned preview; bundled Java runtime |
+| [Linux DEB](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-linux.deb) | Debian 12 amd64 baseline | Bundled Java runtime; native dependencies required |
 
-See the [release notes](docs/releases/1.2.0-unified-preview.md),
-[SHA-256 checksums](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.0-unified-preview/SHA256SUMS)
+See the [release notes](docs/releases/1.2.1-google-connect-preview.md),
+[SHA-256 checksums](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/SHA256SUMS)
 and [third-party notices](THIRD_PARTY_NOTICES.md). Matching Java/OpenJFX sources
 and a license companion accompany the release. Apple builds have separate
 versions/channels; see [all releases](https://github.com/HaiGe120/CloudReader/releases).
 
-**Keep your existing library.** If the Android signing certificate differs from
-your installed app, do not uninstall it or clear its data to force this APK to
-install. A safe in-place update requires the original matching signing key.
+**Keep your existing library.** The public 1.2.0 APK used a temporary CI key that
+is no longer available. The 1.2.1 APK uses the retained older preview key, kept on
+the maintainer's Mac; it is **not an in-place update over 1.2.0**. Do not uninstall
+CloudReader or clear its data to bypass this mismatch. Older-preview installed
+update/data retention remains untested.
 
-The preview passed 121 Android JVM tests, 29 local isolated-emulator tests,
-15 tests each on Windows and Debian, 20 shared-core tests and four collector
-tests. Windows/Debian bundled launchers also rendered PDF, turned WebKit pages
-and displayed the real shared library UI.
+Normal Google connection no longer asks readers to create projects or enter IDs
+and secrets. Android uses native authorization; the Windows/Linux packages include
+the approved Desktop client. Custom credentials remain optional under Advanced.
+Successful personal-account consent, refresh and backup are still **unverified**.
+
+The release passed 127 Android JVM tests, six real settings UI tests on its
+locally built APK, 53 tests each on Windows and Debian, 20 shared-core tests and
+four collector tests. Both desktop bundled launchers rendered PDF, turned WebKit
+pages and displayed library/light/dark settings UI. Their bundled Google settings
+matched the approved build input. See [release evidence](docs/engineering/evidence/RELEASE-1.2.1.md).
 
 **Still open:** production signing, installed-OS updates/accessibility, physical
 Android behavior, live OAuth/AI/cross-platform sync, desktop export/share and full
@@ -59,11 +68,11 @@ devices sequentially. See the [feature matrix and verification limits](docs/engi
 
 ### Actual preview UI
 
-Running apps with the included sample book—not mockups:
+Actual Android and Windows settings screens—not mockups:
 
 <p>
-  <img src="docs/images/1.2.0/android-library.png" width="220" alt="Android compact library with the sample book">
-  <img src="docs/images/1.2.0/windows-library.png" width="620" alt="Windows library captured from the bundled runtime">
+  <img src="docs/images/1.2.1/android-settings-dark.png" width="220" alt="Android dark settings with the standard Google Connect action">
+  <img src="docs/images/1.2.1/windows-settings-light.png" width="620" alt="Windows light settings captured from the actual bundled runtime">
 </p>
 
 ## Build from source
@@ -128,7 +137,7 @@ No provider account or AI key is required for offline development. See the
 - [Portable sync contract](Contracts/v1/README.md)
 - [iOS setup](docs/IOS_FIRST.md)
 - [Android setup](Apps/Android/README.md)
-- [Google Drive connection and maintainer setup](docs/GOOGLE_DRIVE_SETUP.md) — unreleased simple-connection repair and current limits
+- [Google Drive connection and maintainer setup](docs/GOOGLE_DRIVE_SETUP.md) — standard connection, optional Advanced settings and current limits
 - [Engineering architecture and implementation plan](docs/engineering/README.md)
 - [Changelog](CHANGELOG.md) and [release procedure](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md), [bug reports / feature requests](https://github.com/HaiGe120/CloudReader/issues/new/choose), and [private security reporting](SECURITY.md)

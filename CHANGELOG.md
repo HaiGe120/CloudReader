@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.2.1 Google connection preview — 2026-11-01
+
+Prerelease: `v1.2.1-google-connect-preview`; compiled source `48d8b5e154bc5b101bb85051d869836e02039069`;
+[coordinated run 41315984334](https://github.com/HaiGe120/CloudReader/actions/runs/41315984334). See [release notes](docs/releases/1.2.1-google-connect-preview.md).
+
+### Changed
+
+- Standard Google connection requires no reader-supplied IDs/secrets. Android
+  uses native authorization; Windows/Linux bundle the approved Desktop client.
+- Optional Advanced settings preserve existing custom credentials/grants until
+  an intentional Google mode change. Books and other provider connections stay intact.
+- Shared light/dark destination colors and readable actions/descriptions;
+  Android root colors/protocol chips follow theme; sanitized connection help.
+
+### Verification and distribution
+
+- 127 Android JVM tests in CI and local release build; lint/APK passed. Six actual
+  local-APK API 31 settings UI tests passed, including 1.5× font at 320/360dp.
+- 53 tests per Windows/Debian OS, 20 shared-core tests and four collector tests;
+  zero failures/errors/skips. Both bundled launchers passed reader/library/settings
+  checks and approved Google-default fingerprint comparison. Real screenshots reviewed.
+- APK/MSI/DEB share one version/revision. Public Android APK is locally built with
+  the retained older key, not CI's temporary key; no private signing key is uploaded.
+- **Not an in-place update over public 1.2.0. Do not uninstall or clear data.**
+  Older-preview installed update/data retention also remains untested.
+- Windows unsigned; installed-OS updates, live Google consent/refresh/backup,
+  physical Android, broad accessibility and full iOS parity remain unverified.
+- MIT and dependency terms retained, with notices and matching runtime sources.
+  Native Apple apps, schema, dependencies, SDK minimums and credential identifiers unchanged.
+
 ## 1.2.0 unified preview — 2026-10-31
 
 Prerelease: `v1.2.0-unified-preview`. APK/MSI/DEB compiled from

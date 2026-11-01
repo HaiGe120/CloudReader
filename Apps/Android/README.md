@@ -2,14 +2,23 @@
 
 Native Kotlin and Jetpack Compose application. Android 12 (API 31) or newer.
 
-## 1.2.0 coordinated preview
+## 1.2.1 Google connection preview
 
-Download the APK or all-platform bundle from the
-[unified preview release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.0-unified-preview).
-Read the [release notes](../../docs/releases/1.2.0-unified-preview.md) for exact
-source/runtime provenance and acceptance limits. CI APKs are debug-signed.
-Do not uninstall an existing app or delete its library to bypass a signature
-mismatch; a safe update needs the original matching signing key.
+Download the [1.2.1 prerelease](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.1-google-connect-preview):
+`CloudReader-1.2.1-android-debug.apk` (version 1.2.1, code 5) or the all-platform
+preview ZIP. Compiled revision: `48d8b5e154bc5b101bb85051d869836e02039069`; coordinated run `41315984334`.
+See [release notes and exact hashes](../../docs/releases/1.2.1-google-connect-preview.md).
+Keep the notices companion/source references with redistributions.
+
+The release APK is built **locally from the same frozen source and version** as
+the coordinated packages, with the retained older preview key. Its certificate
+SHA-1 is `E3:F7:0B:33:F7:71:2E:FC:B3:75:5B:82:59:5F:BF:43:19:1E:11:9B`, already
+registered with Google. **No signing private key is uploaded to GitHub or CI.**
+The public 1.2.0 APK's certificate is
+`4F:2D:16:4E:E4:43:9D:5E:6A:1F:76:F2:AF:38:EC:6A:A9:77:84:C7`; its private
+signing key is unavailable. **1.2.1 is not an in-place update over public 1.2.0.**
+Do not uninstall CloudReader or clear app data to bypass the mismatch. The key
+may match some 1.0.x previews, but installed update/data retention is untested.
 
 ## Build
 
@@ -33,7 +42,16 @@ Replace the example serial with the selected device. The script checks that this
 
 Normal users should only tap **Connect**, choose a Google account and approve Drive backup access. They do not need a client ID, client secret or Google Cloud project. Android uses native Google Play services authorization. The app maintainer must register the distributed package and signing certificate once. See [Google Drive connection and maintainer setup](../../docs/GOOGLE_DRIVE_SETUP.md).
 
-The unreleased connection/readability repair hides custom credentials under **Advanced Google settings (optional)** and pairs all settings-card colors with the light/dark theme shared with Windows/Linux. Existing custom connections are preserved until the user explicitly chooses **Use standard Google connection**; that choice retains advanced credentials but requires fresh Google consent. The published 1.2.0 preview still has the older credential-heavy layout. Current repair evidence and remaining configuration/testing limits are [recorded separately](../../docs/engineering/evidence/GOOGLE-CONNECT-UI-01.md).
+The 1.2.1 preview hides custom credentials under **Advanced Google settings (optional)** and pairs destination-card colors with the light/dark theme shared with Windows/Linux. Existing custom grants are preserved until the user explicitly chooses **Use standard Google connection**; that choice retains advanced credentials, invalidates only the old Google grant and requires fresh consent. Books and other provider connections are retained. The public 1.2.0 preview has the older credential-heavy layout. See the [1.2.1 release notes](../../docs/releases/1.2.1-google-connect-preview.md) for publication status and the [prior repair evidence](../../docs/engineering/evidence/GOOGLE-CONNECT-UI-01.md) for its earlier source/tests.
+
+Both approved new Google clients were created and verified in the existing project; the older Android registration remains available for the retained 1.2.1 key. Drive API is enabled and the existing audience is **External / In production**. These registration checks do not establish a successful account connection. The owner has not retried personal-account sign-in; live consent, refresh and Drive sync remain **not verified**.
+
+The final 1.2.1 source passed 127 JVM tests, lint and APK assembly in both CI
+and the local retained-key build. Its actual published APK passed six disposable
+API 31 emulator UI tests: real light/dark standard/Advanced settings and cards
+at 320/360dp with 1.5× font. Screenshots were inspected; contrast tests cover
+17 text pairs. This does not verify live OAuth, physical devices or installed
+updates. See [release evidence](../../docs/engineering/evidence/RELEASE-1.2.1.md).
 
 For optional developer/self-build configuration only, a custom **Web application** client and its secret must belong to the same project as the APK's **Android OAuth registration**. Android clients themselves do not have a secret. Enable the Drive API and configure consent/test users. A Web ID and secret alone cannot replace package/certificate registration. The secret and refresh grant remain encrypted with Android Keystore and excluded from backup/sync manifests. A blank secret retains the saved value only for the same client ID; changed credentials require reconnecting. Custom server-code exchange is an advanced compatibility path, not required for normal native authorization.
 
@@ -43,7 +61,7 @@ build or earlier preview. Use **Android registration details** in the installed
 app or inspect the actual downloaded APK; do not reuse a historical certificate
 fingerprint. The package remains `io.github.haige120.cloudreader`.
 
-No developer Web client secret is bundled in Android. Successful authorization with a real Google account has **not** been verified in this repair. See [Google authorization](https://developer.android.com/identity/authorization).
+No developer Web client secret is bundled in Android. Successful authorization with a real Google account has **not** been verified for this release. See [Google authorization](https://developer.android.com/identity/authorization).
 
 Connection status remains visible below the Google row, with optional expandable diagnostics. Returned intents are parsed even when Android reports a non-OK result; errors retain sanitized provider details. Generic error 8 alone does not establish a registration fault, but the explicit `UNREGISTERED_ON_API_CONSOLE` reason now offers registration help rather than only suggesting retries. The account picker alone does not establish successful authorization.
 
@@ -60,7 +78,7 @@ The app implements the current CloudReader schema-v1 sync format. It uses Founda
 The Android 12 instrumentation test covers document-stream import, duplicate display names, CJK TXT bytes, preservation of the source stream, and unsupported-file rejection. The library, TXT reader, and process-restored reading progress were manually checked offline on Android 12; launch and process recreation were checked on Android 16. The current reader/credentials update also has isolated reader UI tests and Android 17 emulator smoke checks; see its evidence file for exact dimensions and results. Physical folding/hinge behavior, broader accessibility, cross-platform sync, and live provider/OAuth checks still need validation.
 
 
-## Shared Android / Windows / Linux application (1.2.0 work)
+## Shared Android / Windows / Linux application
 
 The app now compiles its responsive library, navigation, assistant and publication
 controls from `Packages/CloudReaderUI`; portable models, remote AI transport and
@@ -80,3 +98,7 @@ APK. `release.properties` controls all three app versions. The **Android, Window
 and Linux** workflow collects APK/MSI/DEB from one revision only after every job
 passes. APKs from this workflow are debug-signed previews; configure stable
 release signing before distributing install-preserving production updates.
+For 1.2.1, the public APK is the separately recorded local build with the retained
+key described above, not the workflow's independently debug-signed APK. Its frozen source/version/signature/digest were verified, and that same APK is
+included in the all-platform bundle. Native Apple apps, schema v1, dependencies, SDK minimums,
+application IDs and credential-storage identifiers are unchanged by this release.
