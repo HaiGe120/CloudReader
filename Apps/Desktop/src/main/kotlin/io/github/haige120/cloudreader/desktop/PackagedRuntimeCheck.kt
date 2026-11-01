@@ -10,11 +10,38 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import javax.swing.JFrame
 import javax.swing.SwingUtilities
+import kotlinx.serialization.json.*
 
 /** Runs only with --runtime-check, in a new temporary library, using the bundled JVM. */
 internal object PackagedRuntimeCheck {
     fun run(output:Path){
         Files.createDirectories(output)
+        val google=DesktopGoogleClient.bundled()
+        val googleConfigured=google.clientId.isNotBlank()&&google.clientSecret.isNotBlank()
+        if(System.getenv("CLOUDREADER_REQUIRE_GOOGLE_DEFAULTS")=="1"){
+            check(googleConfigured){"The official build must include its Desktop Google configuration."}
+            check(google.clientId==System.getenv("CLOUDREADER_GOOGLE_DESKTOP_CLIENT_ID")){"Bundled Google client does not match the configured build input."}
+        }
+        // A fingerprint verifies build input propagation without printing the native
+        // client's secret. No personal account token or provider request is involved.
+        val googleFingerprint=if(googleConfigured)java.security.MessageDigest.getInstance("SHA-256")
+            .digest((google.clientId+"\u0000"+google.clientSecret).toByteArray(Charsets.UTF_8))
+            .joinToString(""){"%02x".format(it)}else ""
+        val appCode=Path.of(DesktopGoogleClient::class.java.protectionDomain.codeSource.location.toURI())
+        val appJars=Files.list(if(Files.isRegularFile(appCode))appCode.parent else appCode).use{files->
+            files.filter{Files.isRegularFile(it)&&it.fileName.toString().endsWith(".jar")}.sorted().toList()
+        }
+        check(appJars.isNotEmpty()){"No packaged JARs were available for the distribution inventory."}
+        val inventory=appJars.map{file->
+            val digest=java.security.MessageDigest.getInstance("SHA-256")
+            Files.newInputStream(file).use{input->
+                val buffer=ByteArray(65536)
+                while(true){val count=input.read(buffer);if(count<0)break;digest.update(buffer,0,count)}
+            }
+            JsonObject(mapOf("file" to JsonPrimitive(file.fileName.toString()),"size" to JsonPrimitive(Files.size(file)),
+                "sha256" to JsonPrimitive(digest.digest().joinToString(""){"%02x".format(it)})))
+        }
+        Files.writeString(output.resolve("runtime-jars.json"),JsonArray(inventory).toString())
         val root=Files.createTempDirectory("cloudreader-runtime-check")
         var host:ReflowDesktopHost?=null;var frame:JFrame?=null
         try{
@@ -108,7 +135,7 @@ internal object PackagedRuntimeCheck {
                     javax.imageio.ImageIO.write(robot.createScreenCapture(bounds.get()),"png",output.resolve(if(dark)"packaged-settings-dark.png"else"packaged-settings-light.png").toFile())
                 }
             }
-            Files.writeString(output.resolve("runtime-check.json"),"""{"pdfRender":true,"webkitLoad":true,"webkitPageTurn":true,"sharedLibraryUI":true,"lightSettingsUI":true,"darkSettingsUI":true,"isolatedLibrary":true}""")
+            Files.writeString(output.resolve("runtime-check.json"),"""{"pdfRender":true,"webkitLoad":true,"webkitPageTurn":true,"sharedLibraryUI":true,"lightSettingsUI":true,"darkSettingsUI":true,"isolatedLibrary":true,"googleDefaultsConfigured":$googleConfigured,"googleDefaultsSHA256":"$googleFingerprint"}""")
         }finally{
             SwingUtilities.invokeAndWait{host?.close();frame?.dispose()}
             root.toFile().deleteRecursively()

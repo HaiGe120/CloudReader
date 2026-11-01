@@ -88,6 +88,7 @@ jobs:
           CLOUDREADER_GUI_TESTS: '1'
           CLOUDREADER_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.CLOUDREADER_GOOGLE_DESKTOP_CLIENT_ID }}
           CLOUDREADER_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.CLOUDREADER_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          CLOUDREADER_REQUIRE_GOOGLE_DEFAULTS: ${{ vars.CLOUDREADER_GOOGLE_DESKTOP_CLIENT_ID != '' && github.event_name != 'pull_request' && '1' || '0' }}
         run: |
           export CLOUDREADER_BUILD_ROOT="$GITHUB_WORKSPACE/Build/Work"
           if [ "${{ matrix.platform }}" = linux ]; then

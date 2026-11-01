@@ -37,6 +37,30 @@ Validate APK identity/signature, MSI architecture, DEB control metadata and each
 hash. Do not re-sign or silently replace a validated package. If runtime/build
 inputs change, regenerate the coordinated set and record its new compiled SHA.
 
+### Android signing kept on the maintainer's Mac
+
+The 1.2.0 CI private debug key was not retained. A public certificate from that
+APK cannot be used to sign an update. Do not upload the retained local signing
+key merely to make CI produce the release APK.
+
+For 1.2.1, require the full coordinated CI gates, then build a **fresh Android
+package from the same frozen revision/version** locally with the retained older
+preview key and pinned JDK 17.0.20+8. Run unit/lint, actual-APK UI and signature
+checks on that local package. Stage it separately from CI's test-only APK; stamp
+and re-collect the three release packages with `collect-apps.py` before verifying
+the final manifests. Never re-sign an already validated CI APK. Record the local
+Android builder, toolchain, certificate and independent checks in provenance.
+
+The retained key matches older E3:F7 previews, **not** the 4F:2D 1.2.0 APK. This
+does not provide an in-place 1.2.0 update. Keep that warning in downloads and
+release notes; do not suggest uninstalling or clearing the user's library.
+
+Official Windows/Linux builds must supply the maintainer-owned Desktop Google
+client through protected build settings. Require the bundled-runtime proof of
+configuration presence and compare its fingerprint with the approved input.
+Never include a raw downloaded credential JSON or a signing keystore in source
+or release assets. A configured client is not evidence of a live OAuth round trip.
+
 ## 3. Prepare publication
 
 - Update the root/platform READMEs, changelog, release notes and engineering evidence.

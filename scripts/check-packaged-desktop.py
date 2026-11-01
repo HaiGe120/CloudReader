@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the actual jpackage launcher/runtime, not the build host's full JDK."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -15,4 +16,6 @@ subprocess.run([str(launchers[0].resolve()), "--runtime-check", str(output)], ch
 proof = json.loads((output / "runtime-check.json").read_text())
 if not all(proof.get(k) is True for k in ("pdfRender", "webkitLoad", "webkitPageTurn", "sharedLibraryUI", "lightSettingsUI", "darkSettingsUI", "isolatedLibrary")):
     raise SystemExit("Packaged runtime verification failed")
+if os.environ.get("CLOUDREADER_REQUIRE_GOOGLE_DEFAULTS") == "1" and proof.get("googleDefaultsConfigured") is not True:
+    raise SystemExit("The official desktop build is missing its Google configuration")
 print("Bundled runtime: library and light/dark settings accessible; PDF rendered; WebKit loaded and turned a page in an isolated library.")
