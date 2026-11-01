@@ -1,8 +1,9 @@
 # Google connection and settings readability repair — 2026-11-01
 
 Status: implementation, isolated Android checks and coordinated Windows/Linux
-target-OS build/runtime/UI checks passed. **Not released; live Google authorization,
-Google Cloud setup and safe Android update signing are not complete.**
+target-OS build/runtime/UI checks passed. Google Cloud registrations were then
+created and verified with the owner's approval. **Not released; live Google
+authorization, deployed Desktop defaults and safe Android update signing remain open.**
 
 Compiled revision: `3bdbcfa06666b0fe1e56879c373c9c2ceb3acb9a` on
 `codex/google-connect-readability-20261101`. Coordinated run `41307122651`
@@ -58,14 +59,53 @@ not an Android-flow Web client. The existing project's consent name is Rclone.
 No secret from the owner's screenshot was copied into source, logs or requests.
 
 A separate project form was prepared but **not submitted**. The owner chose the
-existing project. No client, branding, consent status, account permission, billing
-setting or existing grant has been changed. Browser control then encountered a
+existing project. At that initial checkpoint, no client, branding, consent status,
+account permission, billing setting or existing grant had been changed. Browser control then encountered a
 user tab change to an unrelated credential manager; the safety check blocked a
 stale click. A later read-only tab inventory still identified the correct Google
 tab, but its browser connection was detached; no tab-specific writes were made.
-Further browser changes await the owner restoring control of the Google Cloud
-tab and confirming continuation. No alternative route was used to bypass the
-blocked click. Existing Rclone settings and library data are untouched.
+Further browser changes were paused until the owner explicitly requested Chrome
+control again. No alternative route was used to bypass the blocked stale click.
+The subsequent approved registration work is recorded below. Existing Rclone
+settings and library data remain untouched.
+
+### Approved Google registration correction — 2026-11-01
+
+The owner explicitly approved **Create both registrations** after reviewing the
+prepared Android and Desktop forms in the existing project. Google confirmed
+both creations; the client list was rechecked with both the original Android
+registration and Rclone client still present.
+
+- Android: the new registration is for package `io.github.haige120.cloudreader`
+  and SHA-1 `4F:2D:16:4E:E4:43:9D:5E:6A:1F:76:F2:AF:38:EC:6A:A9:77:84:C7`.
+  The published 1.2.0 APK was independently re-inspected with `apksigner`/`aapt`,
+  and Google's saved client-detail fields match that APK exactly. The older
+  certificate registration was not edited or deleted.
+- Desktop: a separate **CloudReader Windows and Linux** client of type
+  **Desktop app** was created, not a reused Rclone or Web-server credential.
+  The owner downloaded its JSON; its `installed` shape, project/client identity,
+  required secret and official Google endpoints were validated without printing
+  the secret. The original download is retained; an owner-readable-only build
+  copy is under ignored `Build/GoogleRegistration/2026-11-01/google-oauth-local.json`.
+- The Google Drive API is already listed among **Enabled APIs & Services**.
+  The audience is **External** with publishing status **In production**. Those
+  existing settings were inspected, not changed. No API, billing, branding,
+  consent-publishing or existing-client credential changes were made.
+- The installed 1.2.0 app must stop using its saved Rclone Desktop credentials:
+  save blank Google app-credential fields, then Connect using native authorization.
+  No new Android client ID needs to be pasted into the app. This clears only the
+  old Google authorization configuration, not the app's library or other providers.
+- The owner reported that they **have not retried Android Connect yet**. Do not
+  treat client creation, the console's last-used date or the preceding build/UI
+  tests as successful account authorization. Actual Android consent/connection,
+  Desktop consent/refresh and backup acceptance remain unverified. The new
+  Desktop client also still needs to be supplied to the official build pipeline.
+
+Sanitized receipts and private screenshots are under
+`Build/GoogleRegistration/2026-11-01/`, including `registration-verified.json`,
+`android-registration-verified.png`, `registrations-created.png`,
+`drive-api-enabled.txt`, `audience-status.txt` and `desktop-config-verified.json`.
+No downloaded credential file or secret is included in tracked source or logs.
 
 The exact 1.2.0 CI signing key is not configured for reuse. The local older debug
 key is a different certificate; it cannot safely update the reported installed
@@ -108,10 +148,11 @@ release gates, separate from registration and UI verification.
   Google credential fields were absent. This is app-image/runtime evidence, not
   installed MSI/DEB, update, vault, broad display/accessibility or physical-device
   acceptance. Existing action-version deprecation warnings did not fail any gate.
-- Live Google sign-in, refresh and backup remain unverified. No Google Cloud
-  client was created and no default Desktop registration was supplied for this
-  repair. A safe public Android update also needs signing continuity; none of
-  those gates is implied by passing compilation or rendering checks.
+- Live Google sign-in, refresh and backup remain unverified. The approved Google
+  registrations and local Desktop configuration were verified after these code
+  checks, but are not a deployed/bundled client or an account round trip. A safe
+  public Android update also needs signing continuity; none of those gates is
+  implied by client creation, compilation or rendering checks.
 
 Final logs are `android-final-build.log`, `desktop-final-build.log` and
 `android-final-ui.txt` under `Build/AuthReadability/2026-11-01/`. Complete settings
