@@ -102,7 +102,28 @@ default-branch documentation are verified in the final publication receipt below
 
 ### Publication receipt
 
-Prepared for the authorized publication; append live results after publishing.
+Published [CloudReader 1.2.1 preview](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.1-google-connect-preview) at
+**2026-11-01T14:53:54Z**. Release ID `430649133`; public, prerelease,
+not draft; published with `latest=false`.
+
+- All **18 draft asset sizes and GitHub SHA-256 digests** matched the local
+  validated manifest before publication. No public asset was overwritten.
+- After publication, **all 18 public assets were downloaded without authentication**
+  and independently SHA-256/size-verified at `2026-11-01T14:55:59.671964+00:00`.
+- Public tag resolves to compiled revision `48d8b5e154bc5b101bb85051d869836e02039069`.
+- Public `main` was safely fast-forwarded (no force) to publication documentation
+  `f7df10e71d4e78c93e4d1c750b56476374dabfd5`; this receipt is a later
+  documentation-only commit. Public README and original MIT license were fetched
+  without authentication and compared byte-for-byte; private security reporting
+  remains enabled.
+- All-platform ZIP SHA-256:
+  `6483b83a1477f87e00cc1fde1d2b867ae1286df0b53ec952ea35d4db00ee7fe1`.
+  Its APK digest matches the individually published locally signed APK.
+- Raw credentials, signing private keys, personal books and account tokens were
+  excluded. Eight unrelated tracked diffs remain byte-for-byte preserved.
+
+Download assets retain the frozen pre-publication evidence/provenance; this live
+receipt does not rewrite those verified bytes or imply new live OAuth acceptance.
 
 ## Remaining acceptance limits
 
