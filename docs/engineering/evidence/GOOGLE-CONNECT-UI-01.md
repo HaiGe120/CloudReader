@@ -1,8 +1,14 @@
 # Google connection and settings readability repair — 2026-11-01
 
-Status: implementation and isolated Android/desktop checks passed. **Not released;
-Windows/Linux target-OS checks, live Google authorization and Google Cloud setup
-are not complete.**
+Status: implementation, isolated Android checks and coordinated Windows/Linux
+target-OS build/runtime/UI checks passed. **Not released; live Google authorization,
+Google Cloud setup and safe Android update signing are not complete.**
+
+Compiled revision: `3bdbcfa06666b0fe1e56879c373c9c2ceb3acb9a` on
+`codex/google-connect-readability-20261101`. Coordinated run `41307122651`
+completed successfully; the repository API records its final update at
+2026-11-01 12:40:43 UTC (20:40:43 Asia/Shanghai). This branch does not replace
+default `main`, the existing release tag or any public release asset.
 
 ## Assigned scope and preservation
 
@@ -55,9 +61,11 @@ A separate project form was prepared but **not submitted**. The owner chose the
 existing project. No client, branding, consent status, account permission, billing
 setting or existing grant has been changed. Browser control then encountered a
 user tab change to an unrelated credential manager; the safety check blocked a
-stale click. Further browser changes await the owner bringing the Google Cloud
-tab forward and confirming continuation. No alternative route was used to bypass
-that rejection. Existing Rclone settings and library data are untouched.
+stale click. A later read-only tab inventory still identified the correct Google
+tab, but its browser connection was detached; no tab-specific writes were made.
+Further browser changes await the owner restoring control of the Google Cloud
+tab and confirming continuation. No alternative route was used to bypass the
+blocked click. Existing Rclone settings and library data are untouched.
 
 The exact 1.2.0 CI signing key is not configured for reuse. The local older debug
 key is a different certificate; it cannot safely update the reported installed
@@ -86,15 +94,31 @@ release gates, separate from registration and UI verification.
   relaxed. Four compact/large-font cases also passed twice independently;
   temporary wrong-background, low-contrast and clipping controls correctly failed
   and were removed. No personal stores or Google account were used.
-- Four collector tests, authored whitespace checks and 29 local documentation
+- Four collector tests, authored whitespace checks and local documentation
   links passed. The eight unrelated tracked diffs still match the starting bytes.
-- Windows/Linux coordinated CI with real bundled-runtime light/dark settings
-  screenshots is pending. Live Google sign-in, refresh and backup are unverified.
+- Coordinated CI: core, Android, Windows, Debian and final collection all passed
+  for the compiled revision above. Android ran **127 JVM tests**; Windows and
+  Debian ran **53 tests each**, including the four real native-reader tests, with
+  **zero failures/errors/skips** on every target. APK/MSI/DEB were collected with
+  one version and revision. They are validation artifacts, not a new public release.
+- Both Windows/Linux bundled runtimes reported true for PDF render, WebKit load
+  and page turn, actual library UI, **light settings UI**, **dark settings UI** and
+  isolated-library checks. All four target-OS settings screenshots were visually
+  inspected; no blank or white-on-white settings surfaces remained, and normal
+  Google credential fields were absent. This is app-image/runtime evidence, not
+  installed MSI/DEB, update, vault, broad display/accessibility or physical-device
+  acceptance. Existing action-version deprecation warnings did not fail any gate.
+- Live Google sign-in, refresh and backup remain unverified. No Google Cloud
+  client was created and no default Desktop registration was supplied for this
+  repair. A safe public Android update also needs signing continuity; none of
+  those gates is implied by passing compilation or rendering checks.
 
 Final logs are `android-final-build.log`, `desktop-final-build.log` and
 `android-final-ui.txt` under `Build/AuthReadability/2026-11-01/`. Complete settings
 screenshots are under `android-screenshots/cache/auth-readability/` as
 `real-settings-dark.png` and `real-settings-light.png`; older failed diagnostic
-runs are retained separately and are not the final result. The emulator uses
-a new temporary data directory, not the owner's existing AVD/library. No package
-has been published and the existing 1.2.0 release assets are unchanged.
+runs are retained separately and are not the final result. Target-OS reports and
+screenshots are in `ci-windows/`, `ci-linux/` and `ci-android/`; the run receipt is
+`coordinated-run-final.json`. The emulator used a new temporary data directory,
+not the owner's existing AVD/library, and was shut down after the checks. No
+updated GitHub release has been published; the existing 1.2.0 assets are unchanged.
