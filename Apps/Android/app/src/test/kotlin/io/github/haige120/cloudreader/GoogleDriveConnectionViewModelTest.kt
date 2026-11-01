@@ -1,5 +1,6 @@
 package io.github.haige120.cloudreader
 
+import io.github.haige120.cloudreader.sync.GoogleAuthorizationException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -13,6 +14,22 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GoogleDriveConnectionViewModelTest {
+    @Test fun registrationFailureOffersHelpAndRetryWithoutSavingAToken() = runTest {
+        val saved = mutableListOf<String>()
+        val model = GoogleDriveConnectionViewModel({ saved += it }, backgroundScope)
+        model.complete(cancelled = true, hasData = true) {
+            throw GoogleAuthorizationException("Android registration needs attention", true, IllegalStateException("synthetic registration failure"))
+        }
+        assertTrue(model.state.value.requiresSetup)
+        assertTrue(model.state.value.failed)
+        assertFalse(model.state.value.busy)
+        assertTrue(saved.isEmpty())
+        model.connect { token, _ -> token("retry-access") }
+        runCurrent()
+        assertFalse(model.state.value.requiresSetup)
+        assertFalse(model.state.value.failed)
+        assertEquals(listOf("retry-access"), saved)
+    }
     @Test fun asynchronousCodeExchangeStaysPendingAndSavesOnlyTheResultingAccessToken() = runTest {
         val exchange = CompletableDeferred<String>()
         val saved = mutableListOf<String>()

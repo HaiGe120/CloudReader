@@ -128,6 +128,7 @@ No provider account or AI key is required for offline development. See the
 - [Portable sync contract](Contracts/v1/README.md)
 - [iOS setup](docs/IOS_FIRST.md)
 - [Android setup](Apps/Android/README.md)
+- [Google Drive connection and maintainer setup](docs/GOOGLE_DRIVE_SETUP.md) — unreleased simple-connection repair and current limits
 - [Engineering architecture and implementation plan](docs/engineering/README.md)
 - [Changelog](CHANGELOG.md) and [release procedure](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md), [bug reports / feature requests](https://github.com/HaiGe120/CloudReader/issues/new/choose), and [private security reporting](SECURITY.md)

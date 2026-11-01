@@ -61,6 +61,10 @@ internal class GoogleDriveAuthorizationSnapshot(private val accessToken: String?
 }
 
 internal object GoogleOAuthConfiguration {
+    /** Keep previously configured custom grants usable; new installs use native authorization. */
+    fun useCustomCredentials(setting: String?, savedClientID: String?): Boolean =
+        setting?.toBooleanStrictOrNull() ?: !savedClientID.isNullOrBlank()
+
     fun credentials(clientID: String?, clientSecret: String?): GoogleOAuthClientCredentials? {
         val id = clientID?.trim().orEmpty()
         val secret = clientSecret?.trim().orEmpty()

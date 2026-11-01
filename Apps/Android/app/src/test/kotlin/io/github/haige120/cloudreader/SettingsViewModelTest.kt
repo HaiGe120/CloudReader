@@ -16,6 +16,50 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
+    @Test fun newInstallDefaultsToStandardGoogleWithoutCredentials() = runTest {
+        val store = FakeSettingsStore()
+        val model = SettingsViewModel(store, backgroundScope)
+        runCurrent()
+        assertFalse(model.state.value.googleUseCustomCredentials)
+        assertFalse(model.state.value.googleSecretSaved)
+        assertTrue(store.values.isEmpty())
+        assertTrue(store.secrets.isEmpty())
+    }
+
+    @Test fun existingCustomGrantIsPreservedUntilAnIntentionalModeChange() = runTest {
+        val store = FakeSettingsStore().apply { existingGoogleConnection(); secrets["webdav.password"] = "dav-test-password" }
+        val before = store.secrets.toMap()
+        val model = SettingsViewModel(store, backgroundScope)
+        runCurrent()
+        assertTrue(model.state.value.googleUseCustomCredentials)
+        assertTrue(model.state.value.googleSecretSaved)
+        assertEquals(before, store.secrets)
+        model.setCustomGoogleCredentials(false)
+        runCurrent()
+        assertFalse(model.state.value.googleUseCustomCredentials)
+        assertEquals("false", store.values["googleDrive.useCustomCredentials"])
+        assertEquals("123-custom.apps.googleusercontent.com", store.values["googleDrive.clientID"])
+        assertEquals("saved-secret", store.secrets["googleDrive.clientSecret"])
+        assertEquals("dav-test-password", store.secrets["webdav.password"])
+        assertNull(store.secrets["googleDrive.accessToken"])
+        assertEquals(setOf("webDAV"), store.selected.value)
+        assertTrue(model.state.value.message!!.contains("no client ID or secret"))
+        val again = SettingsViewModel(store, backgroundScope)
+        runCurrent()
+        assertFalse(again.state.value.googleUseCustomCredentials)
+        assertTrue(again.state.value.googleSecretSaved)
+    }
+
+    @Test fun selectingTheCurrentGoogleModeDoesNotInvalidateAGrant() = runTest {
+        val store = FakeSettingsStore().apply { existingGoogleConnection() }
+        val model = SettingsViewModel(store, backgroundScope)
+        runCurrent()
+        val before = store.secrets.toMap()
+        model.setCustomGoogleCredentials(true)
+        runCurrent()
+        assertEquals(before, store.secrets)
+        assertEquals(setOf("googleDrive", "webDAV"), store.selected.value)
+    }
     @Test fun googleSaveIsBusyImmediatelySnapshotsDraftAndIgnoresDuplicatesWhileStorageSuspends() = runTest {
         val gate = CompletableDeferred<Unit>()
         val store = FakeSettingsStore().apply { beforeGoogleSet = { gate.await() } }

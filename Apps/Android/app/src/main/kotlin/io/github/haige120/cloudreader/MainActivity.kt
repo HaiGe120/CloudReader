@@ -5,6 +5,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -71,12 +72,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.launch
 
-private val Cream = Color(0xFFF7F3E9)
-private val Paper = Color(0xFFFFFDF7)
-private val Ink = Color(0xFF292621)
-private val Leaf = Color(0xFF536D59)
-private val Brown = Color(0xFF80654B)
-
 class MainActivity : FragmentActivity() {
     private val cloudApp get() = application as CloudReaderApp
     var incomingImport by mutableStateOf<Pair<Long, List<android.net.Uri>>?>(null)
@@ -98,6 +93,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         if (savedInstanceState == null) receiveImport(intent)
         setContent { CloudReaderRoot(this, cloudApp) }
     }
@@ -223,7 +219,7 @@ private fun CloudReaderRoot(activity: MainActivity, app: CloudReaderApp) {
     }
 
     io.github.haige120.cloudreader.ui.CloudReaderTheme {
-        Surface(Modifier.fillMaxSize(), color = Cream) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground) {
             BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { rootWindowOffset = it.positionInWindow() }) {
                 val expanded = maxWidth >= 840.dp
                 val textBook = readerContext?.book?.takeIf { it.format == "txt" && destination != MainDestination.ASSISTANT }
@@ -287,7 +283,7 @@ private fun CloudReaderRoot(activity: MainActivity, app: CloudReaderApp) {
                     val width = with(density) { hinge.width().toDp() }
                     val height = with(density) { hinge.height().toDp() }
                     androidx.compose.foundation.layout.Box(
-                        Modifier.offset(x = x, y = y).size(width, height).background(Cream)
+                        Modifier.offset(x = x, y = y).size(width, height).background(MaterialTheme.colorScheme.background)
                     )
                 }
             }

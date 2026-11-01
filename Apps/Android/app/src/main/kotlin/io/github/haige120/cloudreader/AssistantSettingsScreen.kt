@@ -31,6 +31,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +61,8 @@ import io.github.haige120.cloudreader.ai.AIProfile
 import io.github.haige120.cloudreader.ai.readBoundedBookContext
 import io.github.haige120.cloudreader.data.toDomain
 import io.github.haige120.cloudreader.sync.OAuthConnector
+import io.github.haige120.cloudreader.ui.ConnectionStatus
+import io.github.haige120.cloudreader.ui.SyncDestinationCard
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -142,12 +145,14 @@ fun SettingsScreen(
     onConnectGoogle: () -> Unit,
     onMessage: (String) -> Unit,
     onGoogleCredentialsSaved: () -> Unit = {},
+    settingsModel: SettingsViewModel? = null,
 ) {
     val scope = rememberCoroutineScope()
-    val model: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(app))
+    val model: SettingsViewModel = settingsModel ?: viewModel(factory = SettingsViewModel.factory(app))
     val state by model.state.collectAsStateWithLifecycle()
     val selected = state.selectedProviders
     var showGoogleSetup by remember { mutableStateOf(false) }
+    var showAdvancedGoogle by remember { mutableStateOf(false) }
     val googleRegistration = remember(app) { OAuthConnector(app, app.preferences, app.vault).googleOAuthRegistration() }
     val providerIDs = listOf("googleDrive", "dropbox", "pCloud", "webDAV", "sftp", "filesFolder")
     val providerNames = mapOf("googleDrive" to "Google Drive", "dropbox" to "Dropbox", "pCloud" to "pCloud", "webDAV" to "HTTPS WebDAV", "sftp" to "SFTP", "filesFolder" to "Android folder")
@@ -160,17 +165,22 @@ fun SettingsScreen(
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Settings", fontFamily = FontFamily.Serif, fontSize = 29.sp, fontWeight = FontWeight.SemiBold)
-        Text("Your connection details stay on this device. Sync copies books, progress, favorites, deletions, and saved conversations.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+        Text("Your connection details stay on this device. Sync copies books, progress, favorites, deletions, and saved conversations.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SectionTitle("Sync destinations")
+        Text("Connect Google Drive, choose your account and allow backup access. No client ID or secret is needed for the standard connection.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.googleUseCustomCredentials) {
+            Text("This device is using a custom Google project. Your saved credentials are retained.", style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { model.setCustomGoogleCredentials(false) }, enabled = !googleConnection.busy && !state.googleCredentialsSaving) { Text("Use standard Google connection") }
+        }
         providerIDs.forEach { id ->
             val folderReady = id != "filesFolder" || state.folderName.isNotBlank()
             val providerReady = folderReady && (id != "googleDrive" || !state.googleCredentialsSaving)
-            Row(Modifier.fillMaxWidth().background(Color(0xFFFFFDF7), RoundedCornerShape(14.dp)).clickable(enabled = providerReady) { model.selectProvider(id, id !in selected) }.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = id in selected, onCheckedChange = { checked -> if (providerReady) model.selectProvider(id, checked) }, enabled = providerReady)
-                Column(Modifier.weight(1f)) {
-                    Text(providerNames.getValue(id), fontWeight = FontWeight.SemiBold)
-                    Text(if (id == "filesFolder" && !folderReady) "Choose a folder below" else if (id in selected) "Selected for foreground sync" else "Not selected", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                }
+            SyncDestinationCard(
+                title = providerNames.getValue(id),
+                subtitle = if (id == "filesFolder" && !folderReady) "Choose a folder to enable sync" else if (id in selected) "Selected for foreground sync" else "Not selected",
+                selected = id in selected, enabled = providerReady,
+                onSelected = { model.selectProvider(id, it) },
+            ) {
                 when (id) {
                     "googleDrive" -> TextButton(onClick = onConnectGoogle, enabled = !googleConnection.busy && !state.googleCredentialsSaving) {
                         Text(if (googleConnection.busy) "Connecting…" else if (id in selected) "Reconnect" else "Connect")
@@ -187,16 +197,32 @@ fun SettingsScreen(
             }
             if (id == "googleDrive") {
                 val status = if (googleConnection.busy) "Waiting for Google authorization…" else googleConnection.message
-                if (status != null) Text(status, style = MaterialTheme.typography.bodySmall)
+                if (status != null) ConnectionStatus(
+                    status, needsAttention = googleConnection.failed,
+                    onSetup = if (googleConnection.requiresSetup) ({ showGoogleSetup = true }) else null,
+                )
             }
         }
-        SectionTitle("Google Drive app credentials")
-        Text("Use your own Google Cloud project's Web application OAuth client ID and secret. That project also needs an Android OAuth client registered for this app's package and signing certificate. Android client IDs do not have a secret.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
-        TextButton(onClick = { showGoogleSetup = true }) { Text("Android registration details") }
+        TextButton(onClick = { showAdvancedGoogle = !showAdvancedGoogle }) { Text(if (showAdvancedGoogle) "Hide advanced Google settings" else "Advanced Google settings (optional)") }
+        if (showAdvancedGoogle) {
+        SectionTitle("Advanced Google settings")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = state.googleUseCustomCredentials, onCheckedChange = model::setCustomGoogleCredentials, enabled = !googleConnection.busy && !state.googleCredentialsSaving)
+            Text("Use my own Google Cloud project", modifier = Modifier.padding(start = 12.dp))
+        }
+        TextButton(onClick = { showGoogleSetup = true }) { Text("Google connection help and registration") }
+        if (state.googleUseCustomCredentials) {
+        Text("Android needs two OAuth clients in the same Google Cloud project: an Android registration for this installed app, and a Web application client for the ID and secret below. A Web ID and secret alone cannot register the app.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = { showGoogleSetup = true }) { Text("Google setup and Android registration") }
         Field("Google OAuth client ID (Web application)", state.googleClientId, { model.update(SettingsField.GOOGLE_CLIENT_ID, it) }, placeholder = "…apps.googleusercontent.com")
         SecretField("Google OAuth client secret", state.googleClientSecret, { model.update(SettingsField.GOOGLE_CLIENT_SECRET, it) }, "Leave blank to keep the saved secret for this ID")
+        if (state.googleSecretSaved && state.googleClientId.trim() == state.googleSavedClientId.trim()) {
+            Text("A secret is saved on this device for this client ID. The empty field does not erase it.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Button(onClick = { model.saveGoogleCredentials() }, enabled = !googleConnection.busy && !state.googleCredentialsSaving) { Text(if (state.googleCredentialsSaving) "Saving…" else "Save Google app credentials") }
-        Text("Save first, then tap Google Drive Connect above. Changing credentials requires reconnecting. Clear the client ID and leave the secret blank to return to built-in Google sign-in.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+        Text("Save first, then tap Connect above. Changing credentials requires reconnecting. Turn off custom setup to use standard Google connection without erasing these credentials.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        }
 
         SectionTitle("Other provider app IDs")
         Field("Dropbox app key", state.dropboxKey, { model.update(SettingsField.DROPBOX_KEY, it) })
@@ -220,11 +246,11 @@ fun SettingsScreen(
 
         SectionTitle("Remote AI profile")
         Field("Profile name", state.aiName, { model.update(SettingsField.AI_NAME, it) })
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("openAIResponses", "openAIChatCompletions", "anthropicMessages").forEach { choice ->
-                TextButton(onClick = { model.update(SettingsField.AI_PROTOCOL, choice) }, modifier = Modifier.background(if (state.aiProtocol == choice) Color(0xFFE4EADF) else Color.Transparent, RoundedCornerShape(16.dp))) {
-                    Text(when (choice) { "openAIResponses" -> "Responses"; "openAIChatCompletions" -> "Chat Completions"; else -> "Anthropic" }, fontSize = 12.sp)
-                }
+                FilterChip(selected = state.aiProtocol == choice, onClick = { model.update(SettingsField.AI_PROTOCOL, choice) }, label = {
+                    Text(when (choice) { "openAIResponses" -> "Responses"; "openAIChatCompletions" -> "Chat Completions"; else -> "Anthropic" })
+                })
             }
         }
         Field("Model", state.aiModel, { model.update(SettingsField.AI_MODEL, it) }, placeholder = "Model ID")
@@ -240,7 +266,23 @@ fun SettingsScreen(
             title = { Text("Google Drive setup") },
             text = {
                 androidx.compose.foundation.text.selection.SelectionContainer {
-                    Text("Create Android and Web application OAuth clients in the same Google Cloud project, enable the Drive API, and configure the consent audience. Use the Web client ID and secret below.\n\n$googleRegistration\n\nGoogle allows this package and certificate pair in only one project. Web credentials from a different project will not work with that Android registration.")
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(if (state.googleUseCustomCredentials) "Custom setup: open the project that owns your Web client ID, enable the Google Drive API, and create an Android OAuth client with this registration." else "You do not need your own client ID or secret. If Google does not recognize this build, CloudReader's maintainer must register its package and signing certificate in the app's Google Cloud project. Send the maintainer these details:")
+                        Text(googleRegistration, style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = {
+                            val clipboard = activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("CloudReader Android OAuth registration", googleRegistration))
+                        }) { Text("Copy package and SHA-1") }
+                        if (state.googleUseCustomCredentials) {
+                        Text("3. In that same project, create a Web application OAuth client. Save its ID and secret in CloudReader. Android client IDs have no secret.")
+                        Text("4. Configure the Google Auth consent audience. If the project is in Testing, add your Google account as a test user. Return here and tap Connect.")
+                        Text("UNREGISTERED_ON_API_CONSOLE means the Android package/certificate is not registered for this project. Retrying or replacing the Web secret alone does not fix that. A different APK signing key needs its own matching registration; never uninstall or clear your library to work around it.")
+                        Text("Windows and Linux instead need an OAuth client of type Desktop app. Do not reuse the Android Web client there.")
+                        TextButton(onClick = { activity.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://console.cloud.google.com/apis/credentials"))) }) { Text("Open Google Cloud credentials") }
+                        } else {
+                            Text("A Web client secret cannot replace Android registration. Keep your library intact: do not uninstall or clear data to work around this error. Contact the app maintainer, then retry Connect after the registration is corrected.")
+                        }
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = { showGoogleSetup = false }) { Text("Done") } },

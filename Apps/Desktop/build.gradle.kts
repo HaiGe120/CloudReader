@@ -44,12 +44,48 @@ kotlin {
     sourceSets.main { kotlin.srcDir("../../Packages/CloudReaderUI/src/main/kotlin") }
 }
 
+// Maintainer-owned Desktop-app OAuth registration; never embed a Web-server client secret.
+// The optional downloaded Google JSON stays outside tracked source. No credential values are logged.
+val googleDefaultsDir = layout.buildDirectory.dir("generated/googleOAuth")
+val googleDefaults = tasks.register("generateGoogleOAuthDefaults") {
+    val credentialsFile = providers.environmentVariable("CLOUDREADER_GOOGLE_DESKTOP_CREDENTIALS")
+    val clientId = providers.environmentVariable("CLOUDREADER_GOOGLE_DESKTOP_CLIENT_ID").orElse("")
+    val clientSecret = providers.environmentVariable("CLOUDREADER_GOOGLE_DESKTOP_CLIENT_SECRET").orElse("")
+    inputs.property("clientID", clientId)
+    inputs.property("clientSecret", clientSecret)
+    if (credentialsFile.isPresent) inputs.file(credentialsFile.get())
+    outputs.dir(googleDefaultsDir)
+    doLast {
+        val values = Properties()
+        if (credentialsFile.isPresent) {
+            val installed = try {
+                val json = groovy.json.JsonSlurper().parse(file(credentialsFile.get())) as? Map<*, *>
+                json?.get("installed") as? Map<*, *>
+            } catch (_: Exception) { null }
+            check(installed != null) { "Supply a Google OAuth JSON file of type Desktop app (installed), not a Web client." }
+            values.setProperty("clientID", installed["client_id"] as? String ?: "")
+            values.setProperty("clientSecret", installed["client_secret"] as? String ?: "")
+        } else {
+            values.setProperty("clientID", clientId.get().trim())
+            values.setProperty("clientSecret", clientSecret.get().trim())
+        }
+        check(values.getProperty("clientID").isBlank() || values.getProperty("clientID").matches(Regex("[A-Za-z0-9][A-Za-z0-9_-]*\\.apps\\.googleusercontent\\.com"))) {
+            "The configured Google Desktop OAuth client ID is invalid."
+        }
+        val output = googleDefaultsDir.get().file("cloudreader-google-oauth.properties").asFile
+        output.parentFile.mkdirs()
+        output.writer().use { values.store(it, "Desktop public-client OAuth configuration; use PKCE") }
+    }
+}
+
 tasks.test {
     useJUnit()
     timeout.set(Duration.ofMinutes(5))
 }
 
 tasks.processResources {
+    dependsOn(googleDefaults)
+    from(googleDefaultsDir)
     from("../Android/app/src/main/assets/CloudReader_Field_Guide.txt")
     from("../../THIRD_PARTY_NOTICES.md")
 }

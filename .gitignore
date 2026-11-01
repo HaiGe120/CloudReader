@@ -26,3 +26,8 @@ __pycache__/
 .env.*
 !.env.example
 **/local.properties
+
+# Downloaded OAuth configuration; supply through maintainer build inputs.
+**/client_secret_*.json
+**/google-oauth-local.json
+**/cloudreader-google-oauth.properties

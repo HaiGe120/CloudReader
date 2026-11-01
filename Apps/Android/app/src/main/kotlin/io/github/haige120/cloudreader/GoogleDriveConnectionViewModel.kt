@@ -2,6 +2,7 @@ package io.github.haige120.cloudreader
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.haige120.cloudreader.sync.GoogleAuthorizationException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +14,8 @@ import kotlinx.coroutines.launch
 data class GoogleDriveConnectionState(
     val busy: Boolean = false,
     val message: String? = null,
+    val requiresSetup: Boolean = false,
+    val failed: Boolean = false,
 )
 
 /** Keeps the connection pending while Google's account and consent screens are open. */
@@ -72,6 +75,7 @@ class GoogleDriveConnectionViewModel(
                 } else {
                     "Google Drive did not return a sign-in result. Please try again."
                 },
+                failed = !cancelled,
             )
         }
     }
@@ -84,6 +88,8 @@ class GoogleDriveConnectionViewModel(
         mutableState.value = GoogleDriveConnectionState(
             message = error.localizedMessage?.takeIf { it.isNotBlank() }
                 ?: "Google Drive connection failed. Please try again.",
+            requiresSetup = (error as? GoogleAuthorizationException)?.requiresSetup == true,
+            failed = true,
         )
     }
 

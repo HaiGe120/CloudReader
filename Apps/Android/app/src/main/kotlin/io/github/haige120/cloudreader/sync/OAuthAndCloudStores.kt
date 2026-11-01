@@ -228,9 +228,11 @@ class OAuthConnector(private val context: Context, private val preferences: Clou
         throw googleAuthorizationFailure(error, GoogleAuthorizationStage.CALLBACK)
     }
 
-    private suspend fun googleClientCredentials(): GoogleOAuthClientCredentials? = GoogleOAuthConfiguration.credentials(
-        preferences.get("googleDrive.clientID"), vault.get("googleDrive.clientSecret"),
-    )
+    private suspend fun googleClientCredentials(): GoogleOAuthClientCredentials? {
+        val savedClientID = preferences.get("googleDrive.clientID")
+        if (!GoogleOAuthConfiguration.useCustomCredentials(preferences.get("googleDrive.useCustomCredentials"), savedClientID)) return null
+        return GoogleOAuthConfiguration.credentials(savedClientID, vault.get("googleDrive.clientSecret"))
+    }
 
     private suspend fun googleAccessToken(result: AuthorizationResult, credentials: GoogleOAuthClientCredentials?): String {
         if (credentials != null) {
@@ -275,14 +277,15 @@ class OAuthConnector(private val context: Context, private val preferences: Clou
 
     private fun googleAuthorizationFailure(error: Exception, stage: GoogleAuthorizationStage): IllegalStateException {
         val code = (error as? ApiException)?.statusCode
-        return IllegalStateException(
+        return GoogleAuthorizationException(
             GoogleAuthorizationDiagnostics.message(
                 code = code,
                 providerMessage = error.message,
                 stage = stage,
-                registration = if (code in listOf(8, 10, 12500)) googleOAuthRegistration() else null,
+                registration = if (code == 8 || GoogleAuthorizationDiagnostics.requiresSetup(code, error.message)) googleOAuthRegistration() else null,
             ),
-            error,
+            requiresSetup = GoogleAuthorizationDiagnostics.requiresSetup(code, error.message),
+            cause = error,
         )
     }
 

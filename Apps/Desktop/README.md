@@ -49,8 +49,14 @@ Folder, Google Drive, Dropbox, pCloud, HTTPS WebDAV and pinned-host-key SFTP use
 the same v1 object names and provider namespaces as Apple/Android. A selected
 folder contains a `CloudReader/` subdirectory. Google uses `appDataFolder`, not
 My Drive. Browser authorization is user-initiated and receives callbacks only on
-127.0.0.1. Register Desktop credentials for Google, and a permitted loopback
-redirect for Dropbox/pCloud. Actual provider consent/refresh requires a configured
+127.0.0.1. The unreleased Google connection repair uses a maintainer-configured
+Desktop OAuth client, so normal users only choose **Connect Google Drive** and
+approve consent. Optional custom Google credentials are hidden under Advanced;
+existing configured grants are retained until an intentional mode/credential change.
+The published 1.2.0 preview still uses the older manual-credential layout.
+See [Google setup for users and maintainers](../../docs/GOOGLE_DRIVE_SETUP.md)
+and [repair status](../../docs/engineering/evidence/GOOGLE-CONNECT-UI-01.md).
+Dropbox/pCloud registrations need a permitted loopback redirect. Actual consent/refresh requires a configured
 application/account and remains a separate live check.
 
 The assistant supports Responses, Chat Completions and Anthropic Messages with

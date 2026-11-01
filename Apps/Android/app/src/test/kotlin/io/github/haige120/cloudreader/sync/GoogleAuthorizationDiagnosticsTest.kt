@@ -7,6 +7,25 @@ import org.junit.Test
 class GoogleAuthorizationDiagnosticsTest {
     private val registration = "Package: io.github.haige120.cloudreader\nSHA-1: E3:F7:0B:33"
 
+    @Test fun unregisteredApiConsoleIsAnActionableSetupFailureNotAGenericRetry() {
+        val provider = "[8] Unknown error [status=UNREGISTERED_ON_API_CONSOLE]."
+        val message = GoogleAuthorizationDiagnostics.message(8, provider, GoogleAuthorizationStage.CALLBACK, registration)
+        assertTrue(GoogleAuthorizationDiagnostics.requiresSetup(8, provider))
+        assertTrue(message.startsWith("Google does not recognize CloudReader's Android registration"))
+        assertTrue(message.contains("Google project owner"))
+        assertTrue(message.contains("same project"))
+        assertTrue(message.contains(registration))
+        assertTrue(message.contains("UNREGISTERED_ON_API_CONSOLE"))
+        assertFalse(message.contains("internal authorization error"))
+    }
+
+    @Test fun onlyKnownRegistrationReasonsGetSetupRecovery() {
+        assertFalse(GoogleAuthorizationDiagnostics.requiresSetup(8, "Service temporarily unavailable"))
+        assertFalse(GoogleAuthorizationDiagnostics.requiresSetup(7, "Network unavailable"))
+        assertTrue(GoogleAuthorizationDiagnostics.requiresSetup(10, null))
+        assertTrue(GoogleAuthorizationDiagnostics.requiresSetup(null, "unregistered_on_api_console"))
+    }
+
     @Test fun internalErrorRetainsProviderReasonAndRegistrationWithoutClaimingACause() {
         val message = GoogleAuthorizationDiagnostics.message(
             8, "8: [28444] Authorization service is temporarily unavailable", GoogleAuthorizationStage.CALLBACK, registration,

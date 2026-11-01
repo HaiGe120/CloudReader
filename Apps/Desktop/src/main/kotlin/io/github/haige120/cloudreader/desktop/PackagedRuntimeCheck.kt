@@ -1,6 +1,7 @@
 package io.github.haige120.cloudreader.desktop
 
 import io.github.haige120.cloudreader.core.reader.*
+import io.github.haige120.cloudreader.core.application.AppDestination
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -83,10 +84,39 @@ internal object PackagedRuntimeCheck {
                 val robot=java.awt.Robot();robot.waitForIdle();Thread.sleep(250)
                 javax.imageio.ImageIO.write(robot.createScreenCapture(bounds.get()),"png",output.resolve("packaged-library.png").toFile())
             }
-            Files.writeString(output.resolve("runtime-check.json"),"""{"pdfRender":true,"webkitLoad":true,"webkitPageTurn":true,"sharedLibraryUI":true,"isolatedLibrary":true}""")
+            // Render the real settings screen in both palettes, not a mockup or a color-only test.
+            listOf(false,true).forEach{dark->
+                SwingUtilities.invokeAndWait{
+                    frame!!.contentPane.removeAll()
+                    val panel=androidx.compose.ui.awt.ComposePanel().apply{
+                        setContent{CloudReaderDesktopApp(repository,SwingFilePicker(),root.resolve("library"),initialDestination=AppDestination.SETTINGS,darkTheme=dark)}
+                    }
+                    frame!!.add(panel);frame!!.validate()
+                }
+                val settingsDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(25)
+                while(System.nanoTime()<settingsDeadline){
+                    SwingUtilities.invokeAndWait{names.set(accessibleText(frame!!))}
+                    if(names.get().contains("Connect Google Drive")&&names.get().contains("Advanced Google settings (optional)"))break
+                    Thread.sleep(50)
+                }
+                check(names.get().contains("Connect Google Drive")&&names.get().contains("Advanced Google settings (optional)")){"Bundled settings UI did not become accessible."}
+                check(!names.get().contains("Google OAuth client ID (Desktop app)")){"Advanced Google credentials must be hidden by default."}
+                if(System.getenv("CI")=="true"){
+                    val bounds=AtomicReference<java.awt.Rectangle>()
+                    SwingUtilities.invokeAndWait{bounds.set(frame!!.bounds)}
+                    val robot=java.awt.Robot();robot.waitForIdle();Thread.sleep(250)
+                    javax.imageio.ImageIO.write(robot.createScreenCapture(bounds.get()),"png",output.resolve(if(dark)"packaged-settings-dark.png"else"packaged-settings-light.png").toFile())
+                }
+            }
+            Files.writeString(output.resolve("runtime-check.json"),"""{"pdfRender":true,"webkitLoad":true,"webkitPageTurn":true,"sharedLibraryUI":true,"lightSettingsUI":true,"darkSettingsUI":true,"isolatedLibrary":true}""")
         }finally{
             SwingUtilities.invokeAndWait{host?.close();frame?.dispose()}
             root.toFile().deleteRecursively()
         }
+    }
+
+    private fun accessibleText(accessible:javax.accessibility.Accessible):String{
+        val context=accessible.accessibleContext?:return ""
+        return context.accessibleName.orEmpty()+" "+(0 until context.accessibleChildrenCount).joinToString(" "){index->context.getAccessibleChild(index)?.let(::accessibleText).orEmpty()}
     }
 }

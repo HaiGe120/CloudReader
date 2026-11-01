@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
 import io.github.haige120.cloudreader.data.CloudReaderPreferences
 import io.github.haige120.cloudreader.data.SecureVault
+import io.github.haige120.cloudreader.sync.GoogleOAuthConfiguration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +21,9 @@ data class SettingsUiState(
     val folderName: String = "",
     val googleClientId: String = "",
     val googleClientSecret: String = "",
+    val googleSavedClientId: String = "",
+    val googleSecretSaved: Boolean = false,
+    val googleUseCustomCredentials: Boolean = false,
     val googleCredentialsSaving: Boolean = false,
     val googleCredentialsSavedRevision: Int = 0,
     val dropboxKey: String = "",
@@ -74,8 +78,12 @@ class SettingsViewModel(
             store.folderName.collect { folder -> mutableState.value = mutableState.value.copy(folderName = folder) }
         }
         scope.launch {
+            val savedGoogleClientId = store.get("googleDrive.clientID").orEmpty()
             mutableState.value = mutableState.value.copy(
-                googleClientId = store.get("googleDrive.clientID").orEmpty(),
+                googleClientId = savedGoogleClientId,
+                googleSavedClientId = savedGoogleClientId,
+                googleSecretSaved = !store.getSecret("googleDrive.clientSecret").isNullOrBlank(),
+                googleUseCustomCredentials = GoogleOAuthConfiguration.useCustomCredentials(store.get("googleDrive.useCustomCredentials"), savedGoogleClientId),
                 dropboxKey = store.get("dropbox.appKey").orEmpty(),
                 pcloudKey = store.get("pcloud.appKey").orEmpty(),
                 webdavUrl = store.get("webdav.url").orEmpty(),
@@ -117,6 +125,30 @@ class SettingsViewModel(
     }
 
     fun selectProvider(id: String, selected: Boolean) = scope.launch { store.selectProvider(id, selected) }
+
+    fun setCustomGoogleCredentials(enabled: Boolean) {
+        if (state.value.googleCredentialsSaving || state.value.googleUseCustomCredentials == enabled) return
+        mutableState.value = state.value.copy(googleCredentialsSaving = true)
+        scope.launch {
+            try {
+                store.set("googleDrive.useCustomCredentials", enabled.toString())
+                // An intentional mode change requires fresh consent, never a library reset.
+                listOf("googleDrive.accessToken", "googleDrive.expiresAt", "googleDrive.refreshToken", "googleDrive.refreshTokenClientID", "googleDrive.accessTokenGrant").forEach(store::removeSecret)
+                store.selectProvider("googleDrive", false)
+                mutableState.value = mutableState.value.copy(
+                    googleUseCustomCredentials = enabled,
+                    googleCredentialsSavedRevision = state.value.googleCredentialsSavedRevision + 1,
+                    message = if (enabled) "Custom Google setup selected. Save your app credentials, then Connect." else "Standard Google connection selected. Tap Connect; no client ID or secret is needed.",
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                mutableState.value = mutableState.value.copy(message = "Could not change Google connection mode. Check settings and reconnect.")
+            } finally {
+                mutableState.value = mutableState.value.copy(googleCredentialsSaving = false)
+            }
+        }
+    }
 
     fun saveGoogleCredentials() {
         val submitted = state.value
@@ -160,6 +192,8 @@ class SettingsViewModel(
                 mutableState.value = current.copy(
                     googleClientId = if (current.googleClientId == submitted.googleClientId) clientId else current.googleClientId,
                     googleClientSecret = if (current.googleClientSecret == submitted.googleClientSecret) "" else current.googleClientSecret,
+                    googleSavedClientId = clientId,
+                    googleSecretSaved = !secret.isNullOrBlank(),
                     googleCredentialsSavedRevision = current.googleCredentialsSavedRevision + 1,
                     message = "Google app credentials saved. Tap Connect to sign in.",
                 )

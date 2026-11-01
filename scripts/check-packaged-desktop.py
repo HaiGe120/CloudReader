@@ -11,8 +11,8 @@ names = {"CloudReader", "CloudReader.exe"}
 launchers = [p for p in root.rglob("*") if p.is_file() and p.name in names]
 if len(launchers) != 1:
     raise SystemExit(f"Expected one packaged launcher, found {launchers}")
-subprocess.run([str(launchers[0].resolve()), "--runtime-check", str(output)], check=True, timeout=100)
+subprocess.run([str(launchers[0].resolve()), "--runtime-check", str(output)], check=True, timeout=150)
 proof = json.loads((output / "runtime-check.json").read_text())
-if not all(proof.get(k) is True for k in ("pdfRender", "webkitLoad", "webkitPageTurn", "sharedLibraryUI", "isolatedLibrary")):
+if not all(proof.get(k) is True for k in ("pdfRender", "webkitLoad", "webkitPageTurn", "sharedLibraryUI", "lightSettingsUI", "darkSettingsUI", "isolatedLibrary")):
     raise SystemExit("Packaged runtime verification failed")
-print("Bundled runtime: shared library UI accessible; PDF rendered; WebKit loaded and turned a page in an isolated library.")
+print("Bundled runtime: library and light/dark settings accessible; PDF rendered; WebKit loaded and turned a page in an isolated library.")

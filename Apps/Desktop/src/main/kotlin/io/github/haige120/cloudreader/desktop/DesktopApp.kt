@@ -1,6 +1,7 @@
 package io.github.haige120.cloudreader.desktop
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -40,13 +41,15 @@ class SwingFilePicker : FilePicker {
 
 @Composable
 @OptIn(kotlinx.coroutines.FlowPreview::class)
-fun CloudReaderDesktopApp(repository: FileLibraryRepository, picker: SwingFilePicker, root:Path, externalImports:Pair<Long,List<Path>>? = null) {
+fun CloudReaderDesktopApp(repository: FileLibraryRepository, picker: SwingFilePicker, root:Path, externalImports:Pair<Long,List<Path>>? = null,
+    initialDestination:AppDestination=AppDestination.LIBRARY, darkTheme:Boolean?=null) {
     val scope=rememberCoroutineScope()
     val settings=remember{DesktopSettings(root.resolve("settings.properties"))}
     val secrets=remember{DesktopSecrets(root,settings)}
     val aiService=remember{RemoteAssistant({secrets.read("ai.apiKey")})}
     val sync=remember{DesktopSync(repository,root.resolve("recovery/merge-candidates.jsonl"))}
-    var destination by rememberSaveable { mutableStateOf(AppDestination.LIBRARY) }
+    var destination by rememberSaveable { mutableStateOf(initialDestination) }
+    var oauthBusy by remember { mutableStateOf(false) }
     var books by remember{mutableStateOf(repository.books())}
     var chats by remember{mutableStateOf(repository.chats())}
     var selected by remember{mutableStateOf<BookRecord?>(null)}
@@ -100,7 +103,7 @@ fun CloudReaderDesktopApp(repository: FileLibraryRepository, picker: SwingFilePi
     }
     LaunchedEffect(externalImports?.first){externalImports?.second?.takeIf{it.isNotEmpty()}?.let(::imports)}
     DisposableEffect(Unit){onDispose{requestJob?.cancel()}}
-    CloudReaderTheme {
+    CloudReaderTheme(darkTheme = darkTheme ?: isSystemInDarkTheme()) {
         val reader=selected
         if(reader!=null){
             DesktopReader(reader,root.resolve("reader-cache"),settings,onClose={selected=null;refresh()},
@@ -132,45 +135,101 @@ fun CloudReaderDesktopApp(repository: FileLibraryRepository, picker: SwingFilePi
                         }
                     },onCancel={requestJob?.cancel()},onRetry={active?.let(::request)},onDelete={active?.let{chat->task{repository.removeChat(chat.id);withContext(Dispatchers.Main){activeId=null}}}})
             }
-            AppDestination.SETTINGS->DesktopSettingsScreen(settings,secrets,onConnect={provider,updates,passwords->task{
-                settings.save(updates);passwords.filterValues{it.isNotBlank()}.forEach{(key,value)->secrets.write(key,value)}
-                DesktopOAuth(settings,secrets).connect(provider)
-                withContext(Dispatchers.Main){snackbar.showSnackbar("Storage connected. Enable it and Save settings if needed.")}
-            }},onSave={updates,passwords->task{
-                settings.save(updates);passwords.filterValues{it.isNotBlank()}.forEach{(key,value)->secrets.write(key,value)}
-                withContext(Dispatchers.Main){snackbar.showSnackbar("Settings saved on this device")}
-            }})
+            AppDestination.SETTINGS->DesktopSettingsScreen(settings,secrets,oauthBusy,onConnect={provider,updates,passwords,result->
+                if(!oauthBusy){oauthBusy=true;scope.launch{
+                    try{
+                        withContext(Dispatchers.IO){
+                            if(provider=="googleDrive")saveDesktopSettings(settings,secrets,updates.filterKeys{it.startsWith("googleDrive.")},passwords.filterKeys{it.startsWith("googleDrive.")})
+                            else settings.save(mapOf("$provider.appKey" to updates["$provider.appKey"].orEmpty().trim()))
+                            DesktopOAuth(settings,secrets).connect(provider)
+                        }
+                        result(true,"Storage connected. Backup is enabled for this destination.");changes.tryEmit(Unit)
+                    }catch(cancelled:CancellationException){throw cancelled}
+                    catch(failure:Exception){result(false,failure.message?:"Storage connection failed. Try Connect again.")}
+                    finally{oauthBusy=false}
+                }}
+            },onSave={updates,passwords,result->
+                scope.launch{
+                    try{
+                        withContext(Dispatchers.IO){saveDesktopSettings(settings,secrets,updates,passwords)}
+                        result(true,"Settings saved on this device");changes.tryEmit(Unit)
+                    }catch(cancelled:CancellationException){throw cancelled}
+                    catch(failure:Exception){result(false,failure.message?:"Settings could not be saved")}
+                }
+            })
         }}
     }
 }
 
+internal fun saveDesktopSettings(settings:DesktopSettings,secrets:DesktopSecrets,updates:Map<String,String>,passwords:Map<String,String>){
+    val google=DesktopOAuth(settings,secrets)
+    val useCustom=updates["googleDrive.useCustomCredentials"]?.toBooleanStrictOrNull()?:google.useCustomGoogleCredentials()
+    val modeChanged=google.setGoogleConnectionMode(useCustom)
+    val credentialsChanged=if(useCustom)google.saveGoogleCredentials(updates["googleDrive.clientID"].orEmpty(),passwords["googleDrive.clientSecret"].orEmpty())else false
+    val preserved=updates.filterKeys{it !in setOf("googleDrive.clientID","googleDrive.useCustomCredentials","googleDrive.enabled")}
+    settings.save(preserved+mapOf("googleDrive.enabled" to if(modeChanged||credentialsChanged)"false"else updates["googleDrive.enabled"].orEmpty()))
+    passwords.filterKeys{it!="googleDrive.clientSecret"}.filterValues{it.isNotBlank()}.forEach{(key,value)->secrets.write(key,value)}
+}
+
 @Composable
-private fun DesktopSettingsScreen(settings:DesktopSettings,secrets:DesktopSecrets,onConnect:(String,Map<String,String>,Map<String,String>)->Unit,onSave:(Map<String,String>,Map<String,String>)->Unit){
+internal fun DesktopSettingsScreen(settings:DesktopSettings,secrets:DesktopSecrets,busy:Boolean=false,
+    onConnect:(String,Map<String,String>,Map<String,String>,(Boolean,String)->Unit)->Unit,
+    onSave:(Map<String,String>,Map<String,String>,(Boolean,String)->Unit)->Unit){
     val fields=listOf("folder.path","folder.enabled","webdav.url","webdav.user","webdav.enabled","ai.name","ai.protocol","ai.model","ai.endpoint",
-        "credentials.plaintext","googleDrive.clientID","googleDrive.enabled","dropbox.appKey","dropbox.enabled","pcloud.appKey","pcloud.enabled",
+        "credentials.plaintext","googleDrive.clientID","googleDrive.enabled","googleDrive.useCustomCredentials","dropbox.appKey","dropbox.enabled","pcloud.appKey","pcloud.enabled",
         "sftp.enabled","sftp.host","sftp.port","sftp.username","sftp.directory","sftp.hostKey")
-    var values by remember{mutableStateOf(fields.associateWith{settings.get(it,when(it){"ai.name"->"My AI";"ai.protocol"->"openAIResponses";else->""})})}
+    var values by remember{mutableStateOf(fields.associateWith{settings.get(it,when(it){"ai.name"->"My AI";"ai.protocol"->"openAIResponses";"googleDrive.useCustomCredentials"->DesktopOAuth(settings,secrets).useCustomGoogleCredentials().toString();else->""})})}
     var passwords by remember{mutableStateOf(mapOf("ai.apiKey" to "","webdav.password" to "","googleDrive.clientSecret" to "","sftp.password" to ""))}
+    var advancedGoogle by remember{mutableStateOf(false)}
+    var feedback by remember{mutableStateOf<Pair<Boolean,String>?>(null)}
+    var saving by remember{mutableStateOf(false)}
     fun edit(key:String,value:String){values=values+(key to value)}
+    val useCustomGoogle=values["googleDrive.useCustomCredentials"]=="true"
+    fun result(success:Boolean,message:String,clearPasswords:Boolean=false){
+        feedback=success to message;saving=false
+        edit("googleDrive.enabled",settings.get("googleDrive.enabled"))
+        if(success&&clearPasswords)passwords=passwords.mapValues{""}
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         Text("Settings",fontFamily=FontFamily.Serif,fontSize=30.sp)
         Text("No account required. Storage connections and AI are optional.")
+        feedback?.let{(success,message)->ConnectionStatus(message,needsAttention=!success)}
         Text("Sync destinations",fontFamily=FontFamily.Serif,fontSize=22.sp)
-        listOf("googleDrive" to "Google Drive","dropbox" to "Dropbox","pcloud" to "pCloud").forEach{(id,name)->
-            Row{Checkbox(values["$id.enabled"]=="true",{edit("$id.enabled",it.toString())});Text(name)}
-            val key=if(id=="googleDrive")"googleDrive.clientID" else "$id.appKey"
-            OutlinedTextField(values[key].orEmpty(),{edit(key,it)},label={Text("$name desktop OAuth client ID / app key")},modifier=Modifier.fillMaxWidth())
-            if(id=="googleDrive")OutlinedTextField(passwords["googleDrive.clientSecret"].orEmpty(),{passwords=passwords+("googleDrive.clientSecret" to it)},label={Text("Google client secret (if required)")},visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
-            TextButton(onClick={onConnect(id,values,passwords);edit("$id.enabled","true")}){Text("Connect $name")}
+        Text("Connect Google Drive, choose your account and allow backup access. No client ID or secret is needed for the standard connection.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+        if(useCustomGoogle){
+            Text("This device uses a custom Google project. Its saved credentials are retained.")
+            TextButton(onClick={edit("googleDrive.useCustomCredentials","false")},enabled=!busy&&!saving){Text("Use standard Google connection")}
         }
-        Text("Register a Desktop client for Google Drive. Dropbox and pCloud registrations must permit a loopback redirect on 127.0.0.1. Authorization runs only when you choose Connect.",style=MaterialTheme.typography.bodySmall)
-        Row{Checkbox(values["folder.enabled"]=="true",{edit("folder.enabled",it.toString())});Text("Sync to a folder")}
+        listOf("googleDrive" to "Google Drive","dropbox" to "Dropbox","pcloud" to "pCloud").forEach{(id,name)->
+            SyncDestinationCard(name,if(values["$id.enabled"]=="true")"Selected for backup"else"Not selected",values["$id.enabled"]=="true",enabled=!busy&&!saving,
+                onSelected={edit("$id.enabled",it.toString())}){
+                TextButton(onClick={feedback=null;onConnect(id,values.toMap(),passwords.toMap()){success,message->
+                    result(success,message)
+                    edit("$id.enabled",settings.get("$id.enabled"))
+                    if(success&&id=="googleDrive")passwords=passwords+("googleDrive.clientSecret" to "")
+                }},enabled=!busy&&!saving){Text(if(busy)"Connecting…"else"Connect $name")}
+            }
+            val key=if(id=="googleDrive")"googleDrive.clientID" else "$id.appKey"
+            if(id!="googleDrive")OutlinedTextField(values[key].orEmpty(),{edit(key,it)},label={Text("$name app key")},modifier=Modifier.fillMaxWidth())
+        }
+        TextButton(onClick={advancedGoogle=!advancedGoogle}){Text(if(advancedGoogle)"Hide advanced Google settings"else"Advanced Google settings (optional)")}
+        if(advancedGoogle){
+            Row{Switch(useCustomGoogle,{edit("googleDrive.useCustomCredentials",it.toString())},enabled=!busy&&!saving);Text("Use my own Google Cloud project",modifier=Modifier.padding(12.dp))}
+            Text("Standard connection uses CloudReader's app registration. A custom project is optional for developers and self-built apps. Changing modes needs a new connection; your library and saved custom credentials are kept.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+            if(useCustomGoogle){
+                OutlinedTextField(values["googleDrive.clientID"].orEmpty(),{edit("googleDrive.clientID",it)},label={Text("Google OAuth client ID (Desktop app)")},singleLine=true,modifier=Modifier.fillMaxWidth())
+                OutlinedTextField(passwords["googleDrive.clientSecret"].orEmpty(),{passwords=passwords+("googleDrive.clientSecret" to it)},label={Text("Desktop client secret (blank keeps saved value for this ID)")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth())
+                Text("Use a Desktop app client, not a Web application or Android client. Enable the Drive API and configure consent/test users in that project. Save or Connect to apply.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text("Dropbox/pCloud registrations must permit a loopback redirect on 127.0.0.1. Authorization opens only when you choose Connect.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        SyncDestinationCard("Folder","Back up to a folder on this computer",values["folder.enabled"]=="true",onSelected={edit("folder.enabled",it.toString())})
         OutlinedTextField(values["folder.path"].orEmpty(),{edit("folder.path",it)},label={Text("Folder path")},modifier=Modifier.fillMaxWidth())
-        Row{Checkbox(values["webdav.enabled"]=="true",{edit("webdav.enabled",it.toString())});Text("Sync to HTTPS WebDAV")}
+        SyncDestinationCard("HTTPS WebDAV","Use your own HTTPS server",values["webdav.enabled"]=="true",onSelected={edit("webdav.enabled",it.toString())})
         listOf("webdav.url" to "HTTPS WebDAV URL","webdav.user" to "WebDAV username").forEach{(key,label)->OutlinedTextField(values[key].orEmpty(),{edit(key,it)},label={Text(label)},modifier=Modifier.fillMaxWidth())}
         OutlinedTextField(passwords["webdav.password"].orEmpty(),{passwords=passwords+("webdav.password" to it)},label={Text("WebDAV password (blank keeps saved value)")},visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
         Text("Sync transfers books, progress, favorites, deletions and saved conversations. With schema v1, sync your devices sequentially; simultaneous writers can overwrite unseen changes.",style=MaterialTheme.typography.bodySmall)
-        Row{Checkbox(values["sftp.enabled"]=="true",{edit("sftp.enabled",it.toString())});Text("Pinned-host-key SFTP")}
+        SyncDestinationCard("SFTP","Connect with a pinned server public key",values["sftp.enabled"]=="true",onSelected={edit("sftp.enabled",it.toString())})
         listOf("sftp.host" to "SFTP host","sftp.port" to "Port (22)","sftp.username" to "SFTP username","sftp.directory" to "Remote directory (CloudReader)","sftp.hostKey" to "OpenSSH host public key").forEach{(key,label)->OutlinedTextField(values[key].orEmpty(),{edit(key,it)},label={Text(label)},modifier=Modifier.fillMaxWidth())}
         OutlinedTextField(passwords["sftp.password"].orEmpty(),{passwords=passwords+("sftp.password" to it)},label={Text("SFTP password (blank keeps saved value)")},visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
         Text("Remote AI",fontFamily=FontFamily.Serif,fontSize=22.sp)
@@ -180,6 +239,6 @@ private fun DesktopSettingsScreen(settings:DesktopSettings,secrets:DesktopSecret
         Row{Checkbox(values["credentials.plaintext"]=="true",{edit("credentials.plaintext",it.toString())});Text("Allow plaintext credential fallback on this device")}
         Text("Off by default. Enable only if no OS secret service is available and you accept credentials being readable in your local credential file. Restart after changing this option.",style=MaterialTheme.typography.bodySmall)
         Text(secrets.description,style=MaterialTheme.typography.bodySmall)
-        Button(onClick={onSave(values,passwords);passwords=passwords.mapValues{""}}){Text("Save settings")}
+        Button(onClick={saving=true;onSave(values.toMap(),passwords.toMap()){success,message->result(success,message,clearPasswords=true)}},enabled=!busy&&!saving){Text(if(saving)"Saving…"else"Save settings")}
     }
 }

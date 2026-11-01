@@ -26,17 +26,29 @@ import io.github.haige120.cloudreader.core.application.*
 import io.github.haige120.cloudreader.core.model.BookRecord
 
 @Composable
-fun CloudReaderTheme(content: @Composable () -> Unit) {
-    val palette = if (isSystemInDarkTheme()) darkColorScheme(
+fun CloudReaderTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = cloudReaderColorScheme(darkTheme), content = content)
+}
+
+/** Keep foreground/background pairs together on every Kotlin platform. */
+fun cloudReaderColorScheme(darkTheme: Boolean): ColorScheme =
+    if (darkTheme) darkColorScheme(
         primary = Color(0xFFB9CDB9), secondary = Color(0xFFD4BA9E), background = Color(0xFF20211E), surface = Color(0xFF292A26),
+        onPrimary = Color(0xFF203425), onSecondary = Color(0xFF382B1D),
+        onBackground = Color(0xFFF0EEE6), onSurface = Color(0xFFF0EEE6), onSurfaceVariant = Color(0xFFD2D5C9),
         secondaryContainer = Color(0xFF354438), onSecondaryContainer = Color(0xFFE0EBDD), surfaceVariant = Color(0xFF33372F),
+        primaryContainer = Color(0xFF354438), onPrimaryContainer = Color(0xFFE0EBDD),
+        error = Color(0xFFFFB4AB), onError = Color(0xFF690005), errorContainer = Color(0xFF63312D), onErrorContainer = Color(0xFFFFDAD6),
+        outline = Color(0xFF969B8F),
     ) else lightColorScheme(
         primary = Color(0xFF536D59), secondary = Color(0xFF80654B), background = Color(0xFFF7F3E9), surface = Color(0xFFFFFDF7),
-        onSurface = Color(0xFF292621), onBackground = Color(0xFF292621),
+        onPrimary = Color.White, onSecondary = Color.White,
+        onSurface = Color(0xFF292621), onBackground = Color(0xFF292621), onSurfaceVariant = Color(0xFF4D5549),
         secondaryContainer = Color(0xFFE1E8DC), onSecondaryContainer = Color(0xFF29382D), surfaceVariant = Color(0xFFEAE8DE),
+        primaryContainer = Color(0xFFE1E8DC), onPrimaryContainer = Color(0xFF29382D),
+        error = Color(0xFF9C3229), onError = Color.White, errorContainer = Color(0xFFFFDAD6), onErrorContainer = Color(0xFF410002),
+        outline = Color(0xFF70786A),
     )
-    MaterialTheme(colorScheme = palette, content = content)
-}
 
 @Composable
 fun CloudReaderShell(destination: AppDestination, onDestination: (AppDestination) -> Unit,
