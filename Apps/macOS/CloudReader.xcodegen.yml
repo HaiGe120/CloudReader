@@ -11,11 +11,13 @@ settings:
     PRODUCT_NAME: CloudReader
     MARKETING_VERSION: "1.1.0"
     CURRENT_PROJECT_VERSION: "2"
+    DEVELOPMENT_TEAM: W6DM8CHQA7
     SWIFT_VERSION: "5.0"
     MACOSX_DEPLOYMENT_TARGET: "15.0"
     GENERATE_INFOPLIST_FILE: YES
     INFOPLIST_KEY_CFBundleDisplayName: CloudReader
     INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.books
+    INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Tianhai Zhu"
     CODE_SIGN_ENTITLEMENTS: CloudReader/CloudReader.entitlements
     ENABLE_APP_SANDBOX: YES
 targets:
@@ -34,6 +36,8 @@ targets:
               - cloudreader
     sources:
       - path: CloudReader
+        excludes:
+          - "Info [0-9]*.plist"
       - path: ../Shared
         excludes:
           - AppleSyncPipeline 2.swift
@@ -43,6 +47,7 @@ targets:
         buildPhase: resources
     resources:
       - path: CloudReader/Resources/CloudReader_Field_Guide.txt
+      - path: ../Shared/PrivacyInfo.xcprivacy
     dependencies:
       - package: CloudReaderKit
         product: CloudReaderCore

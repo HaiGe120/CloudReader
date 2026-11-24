@@ -4,23 +4,10 @@ import CloudReaderCore
 struct MacAIAssistantView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var library: BookLibrary
-    @State private var conversation: [AIConversationMessage] = []
-    @State private var conversationID = UUID()
-    @State private var conversationCreatedAt = Date.now
-    @State private var draft = ""
-    @State private var isThinking = false
-    @State private var includeBookContext: Bool
-    @State private var errorMessage: String?
+    @State private var chat: ReaderChatSession
     @State private var isShowingHistory = false
     @State private var profile = AIProfileStore.load()
     @FocusState private var isPromptFocused: Bool
-
-    @State private var bookID: UUID?
-    @State private var bookTitle: String?
-    @State private var bookContext: String?
-    @State private var bookDescription: String?
-    @State private var selectedText: String?
-    @State private var contextDescription: String?
 
     init(
         bookID: UUID? = nil,
@@ -30,13 +17,9 @@ struct MacAIAssistantView: View {
         selectedText: String? = nil,
         contextDescription: String? = nil
     ) {
-        _bookID = State(initialValue: bookID)
-        _bookTitle = State(initialValue: bookTitle)
-        _bookContext = State(initialValue: bookContext)
-        _bookDescription = State(initialValue: bookDescription)
-        _selectedText = State(initialValue: selectedText)
-        _contextDescription = State(initialValue: contextDescription)
-        _includeBookContext = State(initialValue: bookContext != nil || selectedText != nil)
+        _chat = State(initialValue: ReaderChatSession(bookID: bookID, bookTitle: bookTitle,
+            bookDescription: bookDescription, bookContext: bookContext, selectedText: selectedText,
+            contextDescription: contextDescription))
     }
 
     private var remoteAIIsConfigured: Bool {
@@ -53,7 +36,7 @@ struct MacAIAssistantView: View {
                     .frame(width: 46, height: 46)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 15))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(bookTitle.map { "Ask about \($0)" } ?? "Ask CloudReader")
+                    Text(chat.context.bookTitle.map { "Ask about \($0)" } ?? "Ask CloudReader")
                         .font(.system(size: 20, weight: .semibold, design: .serif))
                     Text(profile.modelSource == .appleOnDevice
                          ? "Apple Intelligence · processed on this Mac"
@@ -63,8 +46,8 @@ struct MacAIAssistantView: View {
                 }
                 Spacer()
                 Menu {
-                    Button("New conversation", systemImage: "square.and.pencil", action: startNewConversation)
-                    Button("Conversation history (\(library.aiConversations.count))", systemImage: "clock.arrow.circlepath") {
+                    Button("New conversation", systemImage: "square.and.pencil", action: chat.startNew)
+                    Button("Conversation history (\(library.conversations(for: chat.launchContext.bookID).count))", systemImage: "clock.arrow.circlepath") {
                         isShowingHistory = true
                     }
                 } label: {
@@ -73,31 +56,17 @@ struct MacAIAssistantView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .accessibilityLabel("Conversation options")
+                .disabled(chat.isThinking)
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
 
-            if let selectedText, !selectedText.isEmpty {
-                Toggle(isOn: $includeBookContext) {
+            if chat.context.bookTitle != nil || chat.context.bookContext != nil || chat.context.selectedText != nil {
+                Toggle(isOn: $chat.includeBookContext) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Include the selected passage")
-                            .font(.callout.weight(.medium))
-                        Text("The passage is sent with your question as context.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .toggleStyle(.checkbox)
-                .padding(13)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
-            } else if let bookContext {
-                Toggle(isOn: $includeBookContext) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Include text from \(bookTitle ?? "this book")")
-                            .font(.callout.weight(.medium))
-                        Text("Up to \(min(bookContext.count, profile.modelSource == .appleOnDevice ? AIService.onDeviceContextCharacterLimit : bookContext.count).formatted()) characters are included in this question.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text("Include book details and reading context").font(.callout.weight(.medium))
+                        Text(chat.context.contextDescription ?? "Includes available book details and highlighted text.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .toggleStyle(.checkbox)
@@ -126,7 +95,7 @@ struct MacAIAssistantView: View {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
             }
 
-            if conversation.isEmpty {
+            if chat.record.messages.isEmpty {
                 ContentUnavailableView {
                     Label("What would you like to explore?", systemImage: "text.book.closed")
                 } description: {
@@ -137,10 +106,10 @@ struct MacAIAssistantView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 15) {
-                            ForEach(conversation) { message in
+                            ForEach(chat.record.messages) { message in
                                 HStack(alignment: .top) {
                                     if message.role == .user { Spacer(minLength: 100) }
-                                    Text(message.text)
+                                    AssistantMessageText(message: message)
                                         .font(.system(size: 15, design: .serif))
                                         .lineSpacing(4)
                                         .textSelection(.enabled)
@@ -160,13 +129,13 @@ struct MacAIAssistantView: View {
                         }
                         .padding(.vertical, 8)
                     }
-                    .onChange(of: conversation.count) { _, _ in
-                        if let latest = conversation.last { proxy.scrollTo(latest.id, anchor: .bottom) }
+                    .onChange(of: chat.record.messages.count) { _, _ in
+                        if let latest = chat.record.messages.last { proxy.scrollTo(latest.id, anchor: .bottom) }
                     }
                 }
             }
 
-            if isThinking {
+            if chat.isThinking {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text("Thinking with \(profile.assistantName)…")
@@ -177,7 +146,7 @@ struct MacAIAssistantView: View {
             }
 
             HStack(alignment: .bottom, spacing: 12) {
-                TextField(selectedText == nil ? "Ask a question…" : "Ask about this passage…", text: $draft, axis: .vertical)
+                TextField(chat.context.selectedText == nil ? "Ask a question…" : "Ask about this passage…", text: $chat.draft, axis: .vertical)
                     .lineLimit(1...6)
                     .textFieldStyle(.plain)
                     .onSubmit(sendQuestion)
@@ -189,7 +158,7 @@ struct MacAIAssistantView: View {
                     Label("Ask", systemImage: "arrow.up")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isThinking || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(chat.isThinking || chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .keyboardShortcut(.return, modifiers: [.command])
             }
 
@@ -206,98 +175,25 @@ struct MacAIAssistantView: View {
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             profile = AIProfileStore.load()
         }
+        .onAppear { chat.open(in: library) }
+        .onChange(of: library.aiConversations) { _, records in chat.refresh(from: records) }
         .sheet(isPresented: $isShowingHistory) {
-            AIConversationHistoryView(onSelect: restoreConversation)
+            AIConversationHistoryView(bookID: chat.launchContext.bookID, onSelect: chat.restore)
                 .environmentObject(library)
                 .frame(minWidth: 540, minHeight: 420)
         }
         .alert("AI assistant", isPresented: errorIsPresented) {
-            Button("OK", role: .cancel) { errorMessage = nil }
+            Button("OK", role: .cancel) { chat.errorMessage = nil }
         } message: {
-            Text(errorMessage ?? "")
+            Text(chat.errorMessage ?? "")
         }
     }
 
     private var errorIsPresented: Binding<Bool> {
-        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+        Binding(get: { chat.errorMessage != nil }, set: { if !$0 { chat.errorMessage = nil } })
     }
 
     private func sendQuestion() {
-        let question = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !question.isEmpty, !isThinking else { return }
-        guard profile.modelSource != .remoteAPI || remoteAIIsConfigured else {
-            errorMessage = AIServiceError.notConfigured.localizedDescription
-            return
-        }
-        draft = ""
-        conversation.append(.user(question))
-        persistConversation()
-        isThinking = true
-        Task {
-            defer { isThinking = false }
-            do {
-                let answer = try await AIService.ask(
-                    messages: conversation,
-                    bookTitle: bookTitle,
-                    bookDescription: includeBookContext ? bookDescription : nil,
-                    selectedText: includeBookContext ? selectedText : nil,
-                    bookContext: includeBookContext ? bookContext : nil
-                )
-                conversation.append(.assistant(answer))
-                persistConversation()
-            } catch {
-                persistConversation()
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func persistConversation() {
-        guard !conversation.isEmpty else { return }
-        var record = AIConversationRecord(
-            id: conversationID,
-            messages: conversation,
-            bookID: bookID,
-            bookTitle: bookTitle,
-            bookDescription: includeBookContext ? bookDescription : nil,
-            selectedText: includeBookContext ? selectedText : nil,
-            bookContext: includeBookContext ? bookContext : nil,
-            contextDescription: includeBookContext ? contextDescription : nil,
-            includeBookContext: includeBookContext,
-            createdAt: conversationCreatedAt,
-            modifiedAt: .now
-        )
-        if let firstQuestion = conversation.first(where: { $0.role == .user })?.text {
-            record.title = AIConversationRecord.suggestedTitle(for: firstQuestion)
-        }
-        library.saveAIConversation(record)
-    }
-
-    private func restoreConversation(_ record: AIConversationRecord) {
-        conversationID = record.id
-        conversationCreatedAt = record.createdAt
-        conversation = record.messages
-        bookID = record.bookID
-        bookTitle = record.bookTitle
-        bookDescription = record.bookDescription
-        selectedText = record.selectedText
-        bookContext = record.bookContext
-        contextDescription = record.contextDescription
-        includeBookContext = record.includeBookContext
-        draft = ""
-    }
-
-    private func startNewConversation() {
-        conversationID = UUID()
-        conversationCreatedAt = .now
-        conversation = []
-        draft = ""
-        bookID = nil
-        bookTitle = nil
-        bookDescription = nil
-        selectedText = nil
-        bookContext = nil
-        contextDescription = nil
-        includeBookContext = false
+        Task { await chat.send(in: library) }
     }
 }

@@ -2,6 +2,56 @@ import XCTest
 @testable import CloudReader
 
 final class KindlePublicationTests: XCTestCase {
+    #if os(iOS)
+    func testMOBIAndAZW3ResolveDeclaredCoverOrThumbnailIncludingOffsetZero() throws {
+        for (version, ext) in [(UInt32(6), "mobi"), (UInt32(8), "azw3")] {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID()).\(ext)")
+            defer { try? FileManager.default.removeItem(at: url) }
+            for tag: UInt32 in [201, 202] {
+                let book = mobi6Fixture(version: version, imageTag: tag)
+                try book.write(to: url)
+                let cover = try XCTUnwrap(KindleCoverSource.imageData(at: url))
+                XCTAssertEqual(Array(cover.prefix(8)), [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+                XCTAssertEqual(cover, Data(book.suffix(cover.count)))
+            }
+        }
+    }
+
+    func testKindleDoesNotUseAnUntaggedIllustrationOrAnInvalidCoverOffset() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID()).mobi")
+        defer { try? FileManager.default.removeItem(at: url) }
+        for book in [mobi6Fixture(), mobi6Fixture(imageTag: 201, imageOffset: 5),
+                     mobi6Fixture(imageTag: 201, imageOffset: .max)] {
+            try book.write(to: url)
+            XCTAssertNil(try KindleCoverSource.imageData(at: url))
+        }
+        try fixture(encryption: 1).write(to: url)
+        XCTAssertThrowsError(try KindleCoverSource.imageData(at: url)) { error in
+            XCTAssertEqual(error as? KindleDecodeError, .drmProtected)
+        }
+    }
+
+    func testComboBookUsesFullCoverAndFallsBackToThumbnailWhenCoverIsDamaged() throws {
+        let source = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "huffdic-unicode", withExtension: "mobi"))
+        // This independently generated sample has an illustration in record 35,
+        // the full cover in record 36, and a smaller thumbnail in record 38.
+        var book = try Data(contentsOf: source)
+        func recordStart(_ index: Int) -> Int {
+            let offset = 78 + index * 8
+            return book[offset..<(offset + 4)].reduce(0) { $0 << 8 | Int($1) }
+        }
+        let coverRange = recordStart(36)..<recordStart(37)
+        let thumbRange = recordStart(38)..<recordStart(39)
+        XCTAssertEqual(try KindleCoverSource.imageData(at: source), book.subdata(in: coverRange))
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID()).mobi")
+        defer { try? FileManager.default.removeItem(at: url) }
+        book.resetBytes(in: coverRange)
+        try book.write(to: url)
+        XCTAssertEqual(try KindleCoverSource.imageData(at: url), book.subdata(in: thumbRange))
+    }
+    #endif
+
     func testRecognizesMOBI6AndSupportedCompressionVariants() throws {
         for compression: UInt16 in [1, 2, 17480] {
             let info = try KindlePreflight.inspect(fixture(version: 6, compression: compression))
@@ -213,7 +263,8 @@ final class KindlePublicationTests: XCTestCase {
         return Data(data)
     }
 
-    private func mobi6Fixture(content: String? = nil) -> Data {
+    private func mobi6Fixture(content: String? = nil, version: UInt32 = 6,
+                              imageTag: UInt32? = nil, imageOffset: UInt32 = 0) -> Data {
         let prefix = "<html><head><title>Local test</title></head><body><p>Hello Kindle</p>"
         let filePosition = prefix.utf8.count
         let html = prefix + "<a filepos=\"\(filePosition)\">jump</a><img recindex=\"1\"><a href=\"https://example.com\">remote</a></body></html>"
@@ -234,9 +285,19 @@ final class KindlePublicationTests: XCTestCase {
         put16(3, at: 76); put32(UInt32(record0), at: 78); put32(UInt32(record1), at: 86); put32(UInt32(record2), at: 94)
         put16(1, at: record0); put16(1, at: record0 + 8); put16(4096, at: record0 + 10)
         Array("MOBI".utf8).enumerated().forEach { data[record0 + 16 + $0.offset] = $0.element }
-        put32(232, at: record0 + 20); put32(2, at: record0 + 24); put32(65001, at: record0 + 28); put32(6, at: record0 + 36)
-        put32(2, at: record0 + 108); put32(248, at: record0 + 84); put32(10, at: record0 + 88)
-        Array("Local test".utf8.prefix(10)).enumerated().forEach { data[record0 + 248 + $0.offset] = $0.element }
+        let headerLength = version == 8 ? 248 : 232
+        put32(UInt32(headerLength), at: record0 + 20); put32(2, at: record0 + 24); put32(65001, at: record0 + 28); put32(version, at: record0 + 36)
+        var titleOffset = 16 + headerLength
+        if let imageTag {
+            put32(0x40, at: record0 + 128)
+            let exth = record0 + titleOffset
+            data.replaceSubrange(exth..<(exth + 4), with: "EXTH".utf8)
+            put32(24, at: exth + 4); put32(1, at: exth + 8)
+            put32(imageTag, at: exth + 12); put32(12, at: exth + 16); put32(imageOffset, at: exth + 20)
+            titleOffset += 24
+        }
+        put32(2, at: record0 + 108); put32(UInt32(titleOffset), at: record0 + 84); put32(10, at: record0 + 88)
+        Array("Local test".utf8.prefix(10)).enumerated().forEach { data[record0 + titleOffset + $0.offset] = $0.element }
         data.replaceSubrange(record1..<(record1 + text.count), with: text)
         data.replaceSubrange(record2..<(record2 + png.count), with: png)
         return Data(data)

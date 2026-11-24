@@ -38,6 +38,7 @@ struct CloudReaderApp: App {
         } else {
             uiTestDefaults = nil
             uiTestBookID = nil
+            ReaderTranslationTarget.initializePreference(in: .standard)
             _library = StateObject(wrappedValue: BookLibrary.shared)
             _cloudSync = StateObject(wrappedValue: CloudSyncCoordinator())
         }

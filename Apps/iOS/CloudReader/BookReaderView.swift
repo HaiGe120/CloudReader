@@ -15,13 +15,12 @@ struct BookReaderView: View {
     @State private var loadError: String?
     @State private var loadedTextURL: URL?
     @State private var textLoadAttempt = 0
-    @State private var isShowingAssistant = false
+    @State private var pageSource = ReaderPageSource()
+    @State private var preparingChat = false
+    @AppStorage(ReaderTranslationTarget.enabledKey) private var translateWords = false
+    @State private var assistantRequest: ReaderChatRequest?
     @State private var isShowingAppearance = false
     @State private var selectedPassage = ""
-    @State private var assistantContext: String?
-    @State private var assistantSelectedText: String?
-    @State private var assistantBookDescription: String?
-    @State private var assistantContextDescription: String?
     @State private var isChromeVisible = true
     @State private var navigationRequest: ReaderNavigationRequest?
     @State private var navigationState: ReaderNavigationState?
@@ -66,64 +65,88 @@ struct BookReaderView: View {
                 ContentUnavailableView("Book unavailable", systemImage: "book.closed", description: Text("The imported copy could not be found on this device."))
             }
         }
+        .environment(\.readerPageSource, pageSource)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(uiColor: readerPalette.background))
+        .clipped()
+        .overlay(alignment: .top) {
+            if isChromeVisible { readerToolbar }
+        }
         .overlay(alignment: .bottom) {
-            if isChromeVisible && capabilities.supportsSelection && !selectedPassage.isEmpty {
-                selectedPassageActions.padding(.bottom, 16)
-            }
-        }
-        .navigationTitle(isChromeVisible ? book.title : "")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(isChromeVisible ? .visible : .hidden, for: .navigationBar)
-        .toolbar(isChromeVisible ? .visible : .hidden, for: .tabBar)
-        .toolbar {
-            if isChromeVisible {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { openAssistant() } label: { Image(systemName: "sparkles") }
-                        .accessibilityLabel("Ask AI about this book")
-                        .accessibilityIdentifier("reader.askAI")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { library.toggleBookmark(currentBook) } label: {
-                        Image(systemName: currentBook.isBookmarked ? "bookmark.fill" : "bookmark")
+            VStack(spacing: 12) {
+                if isChromeVisible {
+                    if capabilities.supportsSelection && !selectedPassage.isEmpty {
+                        selectedPassageActions
                     }
-                    .accessibilityLabel(currentBook.isBookmarked ? "Remove bookmark" : "Bookmark book")
-                    .accessibilityIdentifier("reader.favorite")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { isShowingAppearance = true } label: { Image(systemName: "textformat.size") }
-                        .accessibilityLabel("Reading appearance")
-                        .accessibilityIdentifier("reader.appearance")
+                    ReaderChromeControls(
+                        state: currentNavigationState,
+                        capabilities: capabilities,
+                        onNavigate: sendNavigationRequest
+                    )
                 }
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isChromeVisible {
-                ReaderChromeControls(
-                    state: currentNavigationState,
-                    capabilities: capabilities,
-                    onNavigate: sendNavigationRequest
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+        .overlay {
+            if translateWords, let word = ReaderWordTranslation.englishWord(selectedPassage), assistantRequest == nil {
+                SelectionTranslationOverlay(word: word, selectionRect: pageSource.selectionRect)
+                    .id(word)
             }
         }
-        .statusBarHidden(!isChromeVisible)
+        .toolbar(.hidden, for: .navigationBar, .tabBar)
+        .statusBarHidden(true)
         .onAppear { library.markOpened(book) }
         .onDisappear { library.flushPendingChanges() }
         .task(id: "\(bookURL?.absoluteString ?? "")|\(textLoadAttempt)") { await loadTextIfNeeded() }
-        .sheet(isPresented: $isShowingAssistant) {
+        .onDisappear { pageSource.capture = nil }
+        .sheet(item: $assistantRequest) { request in
             AIAssistantView(
-                bookID: book.id,
-                bookTitle: book.title,
-                bookContext: assistantContext,
-                bookDescription: assistantBookDescription,
-                selectedText: assistantSelectedText,
-                contextDescription: assistantContextDescription
+                bookID: request.book.id,
+                bookTitle: request.book.title,
+                bookContext: request.excerpt,
+                bookDescription: request.description,
+                selectedText: request.passage,
+                contextDescription: request.location
             )
         }
         .sheet(isPresented: $isShowingAppearance) {
             ReaderAppearanceSheet(capabilities: capabilities)
         }
+    }
+
+    private var readerToolbar: some View {
+        HStack(spacing: 0) {
+            Button { dismiss() } label: { toolbarIcon("chevron.backward") }
+                .accessibilityLabel("Back to library")
+            Text(book.title)
+                .font(.headline)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+            Button { openAssistant() } label: {
+                if preparingChat { ProgressView().frame(width: 44, height: 44) }
+                else { toolbarIcon("sparkles") }
+            }
+                .disabled(preparingChat)
+                .accessibilityLabel(preparingChat ? "Preparing reading context" : "Ask AI about this book")
+                .accessibilityIdentifier("reader.askAI")
+            Button { library.toggleBookmark(currentBook) } label: {
+                toolbarIcon(currentBook.isBookmarked ? "bookmark.fill" : "bookmark")
+            }
+            .accessibilityLabel(currentBook.isBookmarked ? "Remove bookmark" : "Bookmark book")
+            .accessibilityIdentifier("reader.favorite")
+            Button { isShowingAppearance = true } label: { toolbarIcon("textformat.size") }
+                .accessibilityLabel("Reading appearance")
+                .accessibilityIdentifier("reader.appearance")
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+        .background(.regularMaterial)
+    }
+
+    private func toolbarIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -132,19 +155,19 @@ struct BookReaderView: View {
             switch book.format {
             case .pdf:
                 GeometryReader { geometry in
+                    let layout = ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll
                     let metrics = ReaderLayoutMetrics.resolve(
                         viewport: geometry.size,
-                        pageLayout: ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll,
+                        pageLayout: layout,
                         font: readerFont,
                         fontSize: CGFloat(fontSize)
                     )
                     PDFBookReader(
                         url: url,
                         progress: currentBook.progress,
-                        twoPage: metrics.effectiveColumnCount == 2,
+                        pageLayout: layout == .facingPages && metrics.effectiveColumnCount == 1 ? .singlePage : layout,
                         palette: readerPalette,
                         onProgressChanged: { library.updateProgress(for: book.id, to: $0) },
-                        isChromeVisible: isChromeVisible,
                         navigationRequest: navigationRequest,
                         onNavigationStateChanged: navigationChanged,
                         onContentTap: toggleChrome,
@@ -164,7 +187,6 @@ struct BookReaderView: View {
                         palette: readerPalette,
                         onProgressChanged: { library.updateProgress(for: book.id, to: $0) },
                         onAskAI: { openAssistant(about: $0) },
-                        isChromeVisible: isChromeVisible,
                         navigationRequest: navigationRequest,
                         onNavigationStateChanged: navigationChanged,
                         onContentTap: toggleChrome,
@@ -189,7 +211,6 @@ struct BookReaderView: View {
                     font: readerFont,
                     fontSize: CGFloat(fontSize),
                     palette: readerPalette,
-                    isChromeVisible: isChromeVisible,
                     navigationRequest: navigationRequest,
                     onNavigationStateChanged: navigationChanged,
                     onContentTap: toggleChrome,
@@ -203,7 +224,6 @@ struct BookReaderView: View {
                     progress: currentBook.progress,
                     pageLayout: ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll,
                     palette: readerPalette,
-                    isChromeVisible: isChromeVisible,
                     navigationRequest: navigationRequest,
                     onNavigationStateChanged: navigationChanged,
                     onContentTap: toggleChrome
@@ -264,29 +284,16 @@ struct BookReaderView: View {
     }
 
     private func toggleChrome() {
-        setChromeVisible(!isChromeVisible)
-    }
-
-    private func setChromeVisible(_ visible: Bool) {
-        guard visible != isChromeVisible else { return }
-        withAnimation(.easeInOut(duration: 0.2)) { isChromeVisible = visible }
+        isChromeVisible.toggle()
     }
 
     private func openAssistant(about passage: String? = nil) {
-        assistantBookDescription = library.briefDescription(for: currentBook)
-            ?? "No extractable description is available for this book."
-        if let passage, !passage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            assistantContext = nil
-            assistantSelectedText = passage
-            assistantContextDescription = "The highlighted passage, book title, and brief description will be sent only when you ask."
-        } else {
-            assistantContext = library.readingContext(for: currentBook)
-            assistantSelectedText = nil
-            assistantContextDescription = assistantContext == nil
-                ? "The book title and brief description will be sent only when you ask."
-                : "The book title, brief description, and a short book excerpt will be sent only when you ask."
+        guard !preparingChat else { return }
+        preparingChat = true
+        Task { @MainActor in
+            defer { preparingChat = false }
+            assistantRequest = await pageSource.chatRequest(for: currentBook, selection: passage, library: library)
         }
-        isShowingAssistant = true
     }
 
     private func loadTextIfNeeded() async {

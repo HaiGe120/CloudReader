@@ -191,6 +191,10 @@ struct MacSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Reading") {
+                ReaderTranslationSettings()
+            }
+
             Section("AI assistant") {
                 Picker("AI provider", selection: $aiProfile.modelSource) {
                     ForEach(AIModelSource.allCases) { source in
@@ -206,16 +210,24 @@ struct MacSettingsView: View {
                             Text(kind.title).tag(kind)
                         }
                     }
-                    TextField("Model ID (e.g. \(aiProfile.endpointKind.placeholderModel))", text: $aiProfile.model)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Full endpoint URL (optional)", text: $aiProfile.endpointURL)
+                    TextField("API endpoint or /v1 base URL (optional)", text: $aiProfile.endpointURL)
+                        .accessibilityIdentifier("ai.endpointURL")
                         .textFieldStyle(.roundedBorder)
                     SecureField(aiHasSavedKey ? "Replace saved API key (optional)" : "API key", text: $aiAPIKey)
+                        .accessibilityIdentifier("ai.apiKey")
                         .textFieldStyle(.roundedBorder)
                     if aiHasSavedKey {
                         Label("API key is stored in this Mac’s Keychain", systemImage: "lock.shield")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    }
+                    AIModelPicker(profile: $aiProfile, enteredKey: aiAPIKey)
+                    Toggle("Allow web search", isOn: $aiProfile.webSearchEnabled)
+                    if aiProfile.webSearchEnabled {
+                        Text(aiProfile.endpointKind == .openAIChatCompletions
+                             ? "Choose a search-capable Chat Completions model. Provider search charges may apply."
+                             : "The model can search the web when answering. Your provider may charge for searches.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 } else {
                     Label(AIService.onDeviceAvailabilityDescription, systemImage: "cpu")

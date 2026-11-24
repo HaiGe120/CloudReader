@@ -17,6 +17,25 @@ final class FB2PublicationTests: XCTestCase {
         try FileManager.default.removeItem(at: directory)
     }
 
+    #if os(iOS)
+    func testCoverUsesTitleInfoReferenceWithArbitraryXLinkPrefix() throws {
+        let cover = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/WQ0AAAAASUVORK5CYII=")!
+        let xml = """
+        <FictionBook xmlns:xlink="http://www.w3.org/1999/xlink"><description><title-info>
+        <coverpage><image xlink:href="#jacket"/></coverpage></title-info></description>
+        <body><image xlink:href="#illustration"/></body>
+        <binary id="illustration">d3Jvbmc=</binary>
+        <binary id="jacket">\(cover.base64EncodedString(options: .lineLength64Characters))</binary></FictionBook>
+        """
+        XCTAssertEqual(try IllustratedCoverSource.fb2(at: source(xml).0), cover)
+    }
+
+    func testBodyIllustrationAloneDoesNotBecomeCover() throws {
+        let (url, _) = try source(Self.document(body: "<image l:href=\"#icon\"/>", extra: "<binary id=\"icon\">aWNvbg==</binary>"))
+        XCTAssertNil(try IllustratedCoverSource.fb2(at: url))
+    }
+    #endif
+
     func testUTF8PreservesMixedInlineOrderAndEscapesText() async throws {
         let xml = Self.document(title: "A & B", body: "<p>Before <emphasis>middle &amp; more</emphasis> after &lt;safe&gt;.</p>")
         let (url, original) = try source(xml)

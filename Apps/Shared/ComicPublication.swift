@@ -61,27 +61,8 @@ actor CBZLoader {
         let archive: Archive
         do { archive = try Archive(url: url, accessMode: .read) }
         catch { throw CBZError.invalidArchive }
-        let declaredEntryCount = try Self.validateCentralDirectory(at: url)
-        var entries: [Entry] = []
-        var total: UInt64 = 0
-        var seenPaths = Set<String>()
+        let entries = try Self.checkedEntries(in: archive, at: url)
         do {
-            for entry in archive {
-                try Task.checkCancellation()
-                entries.append(entry)
-                guard entries.count <= 10_000 else { throw CBZError.tooLarge }
-                guard entry.type != .symlink else { throw CBZError.unsafePath }
-                let checkedPath = entry.type == .directory && entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
-                guard Self.isSafePath(checkedPath) else { throw CBZError.unsafePath }
-                let canonicalPath = checkedPath.precomposedStringWithCanonicalMapping.lowercased()
-                guard seenPaths.insert(canonicalPath).inserted else { throw CBZError.unsafePath }
-                guard entry.uncompressedSize <= 64 * 1_024 * 1_024 else { throw CBZError.tooLarge }
-                let (sum, overflow) = total.addingReportingOverflow(entry.uncompressedSize)
-                guard !overflow, sum <= 1_024 * 1_024 * 1_024 else { throw CBZError.tooLarge }
-                total = sum
-            }
-            guard entries.count == declaredEntryCount else { throw CBZError.invalidArchive }
-            guard !entries.isEmpty else { throw CBZError.invalidArchive }
             // ZIPFoundation rejects encrypted entries while opening the central directory. A
             // missing/unsupported entry therefore fails extraction and is reported as a bad archive.
             var pages: [CBZPage] = []
@@ -109,6 +90,48 @@ actor CBZLoader {
             return CBZPublication(rootURL: cache, pages: pages)
         } catch let error as CBZError { throw error }
         catch { throw CBZError.invalidArchive }
+    }
+
+    static func coverData(at url: URL) throws -> Data? {
+        let archive = try Archive(url: url, accessMode: .read)
+        let entries = try checkedEntries(in: archive, at: url)
+        let pages = entries.lazy.filter {
+            $0.type == .file && imageExtensions.contains(URL(fileURLWithPath: $0.path).pathExtension.lowercased())
+                && isVisiblePage($0.path)
+        }
+        guard let first = pages.min(by: { naturalLess($0.path, $1.path) }) else { return nil }
+        var bytes = Data()
+        let checksum = try archive.extract(first) { chunk in
+            try Task.checkCancellation()
+            guard UInt64(bytes.count) + UInt64(chunk.count) <= first.uncompressedSize else { throw CBZError.tooLarge }
+            bytes.append(chunk)
+        }
+        guard UInt64(bytes.count) == first.uncompressedSize, checksum == first.checksum else { throw CBZError.invalidArchive }
+        return bytes
+    }
+
+    private static func checkedEntries(in archive: Archive, at url: URL) throws -> [Entry] {
+        let declaredEntryCount = try Self.validateCentralDirectory(at: url)
+        var entries: [Entry] = []
+        var total: UInt64 = 0
+        var seenPaths = Set<String>()
+        for entry in archive {
+            try Task.checkCancellation()
+            entries.append(entry)
+            guard entries.count <= 10_000 else { throw CBZError.tooLarge }
+            guard entry.type != .symlink else { throw CBZError.unsafePath }
+            let checkedPath = entry.type == .directory && entry.path.hasSuffix("/") ? String(entry.path.dropLast()) : entry.path
+            guard Self.isSafePath(checkedPath) else { throw CBZError.unsafePath }
+            let canonicalPath = checkedPath.precomposedStringWithCanonicalMapping.lowercased()
+            guard seenPaths.insert(canonicalPath).inserted else { throw CBZError.unsafePath }
+            guard entry.uncompressedSize <= 64 * 1_024 * 1_024 else { throw CBZError.tooLarge }
+            let (sum, overflow) = total.addingReportingOverflow(entry.uncompressedSize)
+            guard !overflow, sum <= 1_024 * 1_024 * 1_024 else { throw CBZError.tooLarge }
+            total = sum
+        }
+        guard entries.count == declaredEntryCount else { throw CBZError.invalidArchive }
+        guard !entries.isEmpty else { throw CBZError.invalidArchive }
+        return entries
     }
 
     static let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp"]
@@ -218,6 +241,10 @@ actor CBZLoader {
         guard offset >= 0, offset + 8 <= data.count,
               let low = readUInt32(data, at: offset), let high = readUInt32(data, at: offset + 4) else { return nil }
         return UInt64(low) | (UInt64(high) << 32)
+    }
+
+    static func isVisiblePage(_ path: String) -> Bool {
+        !path.split(separator: "/").contains { $0 == "__MACOSX" || $0.hasPrefix(".") }
     }
 
     static func isSafePath(_ path: String) -> Bool {

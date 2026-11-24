@@ -26,7 +26,8 @@ final class EPUBPublicationTests: XCTestCase {
             <item id="second" href="second.xhtml" media-type="application/xhtml+xml"/>
             <item id="navigation" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
             """,
-            spine: "<itemref idref=\"second\"/><itemref idref=\"bonus\" linear=\"no\"/><itemref idref=\"first\"/>"
+            spine: "<itemref idref=\"second\"/><itemref idref=\"bonus\" linear=\"no\"/><itemref idref=\"first\"/>",
+            extraMetadata: "<dc:description>A concise book synopsis.</dc:description>"
         )
         let url = try archive([
             ("OPS/first.xhtml", Self.chapter("First archive entry")),
@@ -44,6 +45,7 @@ final class EPUBPublicationTests: XCTestCase {
         let publication = try await open(url)
 
         XCTAssertEqual(publication.title, "A Test Book")
+        XCTAssertEqual(publication.briefDescription, "A concise book synopsis.")
         XCTAssertEqual(publication.chapters.map(\.path), ["OPS/second.xhtml", "OPS/first.xhtml"])
         XCTAssertEqual(publication.chapters.map(\.title), ["Second chapter", "First & Opening"])
         XCTAssertTrue(try String(contentsOf: publication.url(for: 0), encoding: .utf8).contains("Second archive entry"))
@@ -91,6 +93,104 @@ final class EPUBPublicationTests: XCTestCase {
         let publication = try await open(url)
 
         XCTAssertEqual(publication.chapters, [EPUBChapter(path: "OPS/chapter.xhtml", title: "Older book chapter")])
+    }
+
+    func testEPUB3DeclaredCoverTakesPriorityOverCoverFilename() throws {
+        let url = try archive([
+            ("META-INF/container.xml", Self.container()),
+            ("OPS/package.opf", Self.package(manifest: """
+                <item id="cover" href="cover.jpg" media-type="image/jpeg"/>
+                <item id="chosen" href="../Media/a%20b.png" media-type="image/png" properties="other cover-image"/>
+                """, spine: "")),
+            ("OPS/cover.jpg", "unselected")
+        ], binaryEntries: [("Media/a b.png", Self.coverPNG)])
+        XCTAssertEqual(try EPUBLoader.coverData(at: url), Self.coverPNG)
+    }
+
+    func testEPUB2MetadataAndGuideResolveCoverPagesWithSVGImage() throws {
+        for usesMetadata in [true, false] {
+            let package = Self.package(manifest: """
+                <item id="front" href="Text/front.xhtml" media-type="application/xhtml+xml"/>
+                <item id="picture" href="Media/figure.png" media-type="image/png"/>
+                """, spine: "", version: "2.0",
+                extraMetadata: usesMetadata ? #"<meta name="cover" content="front"/>"# : "",
+                guide: usesMetadata ? "" : #"<guide><reference type="cover" href="Text/front.xhtml#front"/></guide>"#)
+            let url = try archive([
+                ("META-INF/container.xml", Self.container()), ("OPS/package.opf", package),
+                ("OPS/Text/front.xhtml", """
+                    <html><body><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+                    <image xlink:href="../Media/figure.png"/></svg></body></html>
+                    """)
+            ], binaryEntries: [("OPS/Media/figure.png", Self.coverPNG)])
+            XCTAssertEqual(try EPUBLoader.coverData(at: url), Self.coverPNG)
+        }
+    }
+
+    func testUndeclaredImageOnlyFirstPageIsUsedButChapterIllustrationsAreSkipped() throws {
+        for isCover in [true, false] {
+            let url = try archive([
+                ("META-INF/container.xml", Self.container()),
+                ("OPS/package.opf", Self.package(manifest: #"<item id="a" href="first.xhtml" media-type="application/xhtml+xml"/>"#,
+                                                  spine: #"<itemref idref="a"/>"#)),
+                ("OPS/first.xhtml", "<html><body>\(isCover ? "" : "<p>Chapter one</p>")<img src=\"image.png\"/></body></html>")
+            ], binaryEntries: [("OPS/image.png", Self.coverPNG)])
+            XCTAssertEqual(try EPUBLoader.coverData(at: url), isCover ? Self.coverPNG : nil)
+        }
+    }
+
+    func testEPUBCoverPageIgnoresExternalAndEscapingImageReferences() throws {
+        for href in ["https://example.com/cover.png", "%2e%2e/%2e%2e/private.png"] {
+            let url = try archive([
+                ("META-INF/container.xml", Self.container()),
+                ("OPS/package.opf", Self.package(manifest: #"<item id="cover" href="front.xhtml" media-type="application/xhtml+xml"/>"#, spine: "")),
+                ("OPS/front.xhtml", "<html><body><img src=\"\(href)\"/></body></html>")
+            ])
+            XCTAssertNil(try EPUBLoader.coverData(at: url))
+        }
+    }
+
+    func testInlineVectorFirstPagePreservesDrawingAndInheritedNamespaces() throws {
+        let url = try archive([
+            ("META-INF/container.xml", Self.container()),
+            ("OPS/package.opf", Self.package(manifest: #"<item id="front" href="first.xhtml" media-type="application/xhtml+xml"/>"#,
+                                              spine: #"<itemref idref="front"/>"#)),
+            ("OPS/first.xhtml", """
+                <html xmlns="http://www.w3.org/1999/xhtml" xmlns:xlink="http://www.w3.org/1999/xlink"><head><title>Title</title></head>
+                <body><svg viewBox="0 0 100 200"><defs><rect id="r" width="100" height="200"/></defs>
+                <use xlink:href="#r"/><text>A &amp; <tspan>B</tspan> C</text></svg></body></html>
+                """)
+        ])
+        let data = try XCTUnwrap(EPUBLoader.coverData(at: url))
+        let svg = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertTrue(svg.hasPrefix("<svg"))
+        XCTAssertTrue(svg.contains(#"viewBox="0 0 100 200""#))
+        XCTAssertTrue(svg.contains(#"xmlns="http://www.w3.org/2000/svg""#))
+        XCTAssertTrue(svg.contains(#"xmlns:xlink="http://www.w3.org/1999/xlink""#))
+        XCTAssertTrue(svg.contains("<text>A &amp; <tspan>B</tspan> C</text>"))
+        XCTAssertTrue(XMLParser(data: data).parse())
+    }
+
+    func testCompositeSVGCoverKeepsEmbeddedBitmapAndTitle() throws {
+        let bitmap = Self.coverPNG.base64EncodedString()
+        let drawing = """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200">
+            <image href="data:image/png;base64,\(bitmap)" width="100" height="200"/>
+            <text x="5" y="20">Overlay title</text></svg>
+            """
+        for inline in [false, true] {
+            let filename = inline ? "cover.xhtml" : "cover.svg"
+            let type = inline ? "application/xhtml+xml" : "image/svg+xml"
+            let url = try archive([
+                ("META-INF/container.xml", Self.container()),
+                ("OPS/package.opf", Self.package(manifest: #"<item id="front" href="\#(filename)" media-type="\#(type)" properties="cover-image"/>"#, spine: "")),
+                ("OPS/" + filename, inline ? "<html><body>\(drawing)</body></html>" : drawing)
+            ])
+            let cover = try XCTUnwrap(EPUBLoader.coverData(at: url))
+            let svg = try XCTUnwrap(String(data: cover, encoding: .utf8))
+            XCTAssertTrue(svg.hasPrefix("<svg"))
+            XCTAssertTrue(svg.contains(bitmap))
+            XCTAssertTrue(svg.contains("Overlay title"))
+        }
     }
 
     func testOpeningAgainReusesPreparedCacheAndReplacementInvalidatesIt() async throws {
@@ -271,12 +371,13 @@ final class EPUBPublicationTests: XCTestCase {
         return try await EPUBLoader.shared.open(url: url, bookID: id)
     }
 
-    private func archive(_ entries: [(String, String)], at existingURL: URL? = nil) throws -> URL {
+    private static let coverPNG = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGM44aEEAAMOATOfGcKvAAAAAElFTkSuQmCC")!
+
+    private func archive(_ entries: [(String, String)], at existingURL: URL? = nil, binaryEntries: [(String, Data)] = []) throws -> URL {
         let url = existingURL ?? directory.appendingPathComponent("\(UUID().uuidString).epub")
         let archive = try Archive(url: url, accessMode: .create)
         let entries = entries.contains(where: { $0.0 == "mimetype" }) ? entries : [("mimetype", "application/epub+zip")] + entries
-        for (path, contents) in entries {
-            let data = Data(contents.utf8)
+        for (path, data) in entries.map({ ($0.0, Data($0.1.utf8)) }) + binaryEntries {
             try archive.addEntry(with: path, type: .file, uncompressedSize: Int64(data.count), compressionMethod: path == "mimetype" ? .none : .deflate) { position, count in
                 data.subdata(in: Int(position)..<(Int(position) + count))
             }
@@ -297,8 +398,8 @@ final class EPUBPublicationTests: XCTestCase {
         "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\" version=\"1.0\"><rootfiles><rootfile full-path=\"OPS/package.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>"
     }
 
-    private static func package(manifest: String, spine: String, title: String = "A Test Book", version: String = "3.0") -> String {
-        "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"\(version)\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>\(title)</dc:title></metadata><manifest>\(manifest)</manifest><spine>\(spine)</spine></package>"
+    private static func package(manifest: String, spine: String, title: String = "A Test Book", version: String = "3.0", extraMetadata: String = "", guide: String = "") -> String {
+        "<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"\(version)\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>\(title)</dc:title>\(extraMetadata)</metadata><manifest>\(manifest)</manifest><spine>\(spine)</spine>\(guide)</package>"
     }
 
     private static func chapter(_ text: String) -> String {

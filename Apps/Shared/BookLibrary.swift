@@ -15,6 +15,9 @@ final class BookLibrary: ObservableObject {
     static let shared = BookLibrary()
 
     @Published private(set) var books: [Book] = []
+    // A sync can atomically replace the bytes at the same URL with identical book metadata.
+    // Views observing books can use this local token to refresh file-derived content.
+    private(set) var contentRevisions: [UUID: UUID] = [:]
     @Published private(set) var deletedBooks: [BookDeletion] = []
     @Published private(set) var aiConversations: [AIConversationRecord] = []
     @Published private(set) var deletedAIConversations: [AIConversationDeletion] = []
@@ -160,6 +163,23 @@ final class BookLibrary: ObservableObject {
         update(book.id) { $0.isBookmarked.toggle() }
     }
 
+    @discardableResult
+    func rename(_ book: Book, to title: String) -> Bool {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, let index = books.firstIndex(where: { $0.id == book.id }) else { return false }
+        let current = books[index]
+        guard current.title != title else { return true }
+
+        var renamedBooks = books
+        renamedBooks[index].title = title
+        // A synced timestamp can be ahead of this device's clock. Keep the edit newer than its source.
+        let nextRevision = Date(timeIntervalSinceReferenceDate: current.modifiedAt.timeIntervalSinceReferenceDate.nextUp)
+        renamedBooks[index].modifiedAt = max(.now, nextRevision)
+        guard save([.books], bookSnapshot: renamedBooks) else { return false }
+        books = renamedBooks
+        return true
+    }
+
     func updateProgress(for bookID: UUID, to progress: Double) {
         guard progress.isFinite else { return }
         let progress = min(max(progress, 0), 1)
@@ -205,6 +225,7 @@ final class BookLibrary: ObservableObject {
             return
         }
         // Keep the only managed copy until both metadata files have been saved.
+        contentRevisions.removeValue(forKey: book.id)
         if let managedURL { try? contentStore?.removeItem(at: managedURL) }
     }
 
@@ -288,6 +309,7 @@ final class BookLibrary: ObservableObject {
             let destination = directory.appendingPathComponent(localBook.fileName)
             let destinationExisted = contentStore.fileExists(at: destination)
             try contentStore.write(contents, to: destination)
+            contentRevisions[book.id] = UUID()
             if let index = books.firstIndex(where: { $0.id == localBook.id }) {
                 books[index] = localBook
             } else {
@@ -341,8 +363,9 @@ final class BookLibrary: ObservableObject {
         }
         // Keep the managed bytes until the updated library index is durable. A failed
         // repository write must not leave a still-indexed book with no local copy.
-        if let bookToRemove, let url = fileURL(for: bookToRemove) {
-            try? contentStore?.removeItem(at: url)
+        if let bookToRemove {
+            contentRevisions.removeValue(forKey: bookToRemove.id)
+            if let url = fileURL(for: bookToRemove) { try? contentStore?.removeItem(at: url) }
         }
     }
 
@@ -440,19 +463,19 @@ final class BookLibrary: ObservableObject {
     }
 
     @discardableResult
-    private func save(_ collections: Set<LibraryCollection>) -> Bool {
-        if collections.contains(.books) {
-            progressSaveTask?.cancel()
-            progressSaveTask = nil
-        }
+    private func save(_ collections: Set<LibraryCollection>, bookSnapshot: [Book]? = nil) -> Bool {
         do {
             guard let repository else { throw LibraryRepositoryUnavailable() }
-            try repository.save(LibrarySnapshot(books: books, deletions: deletedBooks, conversations: aiConversations,
+            try repository.save(LibrarySnapshot(books: bookSnapshot ?? books, deletions: deletedBooks, conversations: aiConversations,
                                                 conversationDeletions: deletedAIConversations), collections: collections)
-            if collections.contains(.books) { hasPendingBookChanges = false }
+            if collections.contains(.books) {
+                progressSaveTask?.cancel()
+                progressSaveTask = nil
+                hasPendingBookChanges = false
+            }
             return true
         } catch {
-            if collections.contains(.books) { hasPendingBookChanges = true }
+            if collections.contains(.books), bookSnapshot == nil { hasPendingBookChanges = true }
             alertMessage = "CloudReader couldn't save your library. Check the available storage on this device."
             return false
         }

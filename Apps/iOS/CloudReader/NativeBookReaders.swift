@@ -4,6 +4,7 @@ import UIKit
 import CloudReaderCore
 
 struct TextBookReader: View {
+    @Environment(\.readerPageSource) private var pageSource
     let title: String
     let text: String
     let progress: Double
@@ -13,7 +14,6 @@ struct TextBookReader: View {
     let palette: ReaderPalette
     let onProgressChanged: (Double) -> Void
     let onAskAI: (String) -> Void
-    var isChromeVisible = true
     var navigationRequest: ReaderNavigationRequest? = nil
     var onNavigationStateChanged: (ReaderNavigationState) -> Void = { _ in }
     var onContentTap: () -> Void = {}
@@ -167,6 +167,7 @@ struct TextBookReader: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
         .accessibilityLabel(pagesPerSpread == 2 ? "Two-page reading layout" : "One-page reading layout")
         .accessibilityHint("Swipe horizontally to turn pages.")
         .background(Color(uiColor: palette.background))
@@ -249,6 +250,11 @@ struct TextBookReader: View {
     }
 
     private func publishNavigationState(pageCount: Int, pagesPerGroup: Int) {
+        pageSource?.capture = {
+            .pages(count: paginatedPages.count, first: spreadIndex * pagesPerGroup, visibleCount: pagesPerGroup) {
+                paginatedPages[$0]
+            }
+        }
         let count = ReaderPagination.pageGroupCount(pageCount: pageCount, pagesPerGroup: pagesPerGroup)
         let first = spreadIndex * pagesPerGroup + 1
         let last = min(first + pagesPerGroup - 1, pageCount)
@@ -330,6 +336,7 @@ struct TextPaginationRequest: Hashable, Sendable {
 }
 
 struct SelectableBookTextView: UIViewRepresentable {
+    @Environment(\.readerPageSource) private var pageSource
     let text: String
     let font: UIFont
     let foreground: UIColor
@@ -373,8 +380,12 @@ struct SelectableBookTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: ReadingTextView, context: Context) {
+        if isScrollable {
+            pageSource?.capture = { [weak view] in view?.pageContext() }
+        }
         let coordinator = context.coordinator
         coordinator.onProgressChanged = onProgressChanged
+        coordinator.pageSource = pageSource
         coordinator.onAskAI = onAskAI
         coordinator.onContentTap = onContentTap
         coordinator.onSelectedTextChanged = onSelectedTextChanged
@@ -462,6 +473,21 @@ struct SelectableBookTextView: UIViewRepresentable {
             onDidRestoreProgress?()
         }
 
+        func pageContext() -> ReaderPageContext? {
+            guard bounds.height > 0, attributedText.length > 0 else { return nil }
+            let top = max(contentOffset.y, 0)
+            func excerpt(from y: CGFloat, to endY: CGFloat) -> String? {
+                let start = textOffset(at: y)
+                let end = endY >= contentSize.height ? attributedText.length : textOffset(at: endY)
+                guard end > start else { return nil }
+                return (attributedText.string as NSString).substring(with: NSRange(location: start, length: end - start))
+            }
+            return ReaderPageContext(previous: excerpt(from: max(0, top - bounds.height), to: top),
+                current: excerpt(from: top, to: top + bounds.height),
+                next: top + bounds.height < contentSize.height ? excerpt(from: top + bounds.height, to: top + 2 * bounds.height) : nil,
+                location: "Current reading position")
+        }
+
         func textOffset(at verticalOffset: CGFloat) -> Int {
             let textLength = (text as NSString).length
             guard textLength > 0 else { return 0 }
@@ -471,6 +497,7 @@ struct SelectableBookTextView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
+        weak var pageSource: ReaderPageSource?
         var onProgressChanged: (Double) -> Void
         var onAskAI: (String) -> Void
         var onContentTap: () -> Void
@@ -521,20 +548,17 @@ struct SelectableBookTextView: UIViewRepresentable {
                 }
                 touchedView = candidate.superview
             }
-            let point = touch.location(in: view)
-            let layoutPoint = CGPoint(
-                x: point.x + view.contentOffset.x - view.textContainerInset.left,
-                y: point.y + view.contentOffset.y - view.textContainerInset.top
-            )
-            let index = view.layoutManager.characterIndex(for: layoutPoint, in: view.textContainer, fractionOfDistanceBetweenInsertionPoints: nil)
-            let textLength = ((view.text ?? "") as NSString).length
-            guard index < textLength else { return true }
+            // Asking for UITextView.layoutManager switches a modern text view to
+            // TextKit 1. Hit-test the link without changing the layout engine.
+            guard let range = view.characterRange(at: touch.location(in: view)) else { return true }
+            let index = view.offset(from: view.beginningOfDocument, to: range.start)
+            guard index >= 0, index < view.attributedText.length else { return true }
             let attributes = view.attributedText.attributes(at: index, effectiveRange: nil)
             return attributes[.link] == nil && attributes[NSAttributedString.Key("NSLink")] == nil
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            guard !isRestoringProgress else { return }
+            guard scrollView.isScrollEnabled, !isRestoringProgress else { return }
             let distance = max(scrollView.contentSize.height - scrollView.bounds.height, 0)
             guard distance > 0 else { return }
             let progress = min(max(scrollView.contentOffset.y / distance, 0), 1)
@@ -589,6 +613,9 @@ struct SelectableBookTextView: UIViewRepresentable {
                 onSelectedTextChanged("")
                 return
             }
+            if let selection = textView.selectedTextRange {
+                pageSource?.selectionRect = textView.convert(textView.firstRect(for: selection), to: nil)
+            }
             onSelectedTextChanged(text.substring(with: range))
         }
 
@@ -607,12 +634,12 @@ struct SelectableBookTextView: UIViewRepresentable {
 }
 
 struct PDFBookReader: UIViewRepresentable {
+    @Environment(\.readerPageSource) private var pageSource
     let url: URL
     let progress: Double
-    let twoPage: Bool
+    let pageLayout: ReaderPageLayout
     let palette: ReaderPalette
     let onProgressChanged: (Double) -> Void
-    var isChromeVisible = true
     var navigationRequest: ReaderNavigationRequest? = nil
     var onNavigationStateChanged: (ReaderNavigationState) -> Void = { _ in }
     var onContentTap: () -> Void = {}
@@ -640,6 +667,8 @@ struct PDFBookReader: UIViewRepresentable {
     }
 
     func updateUIView(_ view: PDFView, context: Context) {
+        pageSource?.usePDF(view)
+        context.coordinator.pageSource = pageSource
         let coordinator = context.coordinator
         coordinator.onProgressChanged = onProgressChanged
         coordinator.onNavigationStateChanged = onNavigationStateChanged
@@ -657,14 +686,21 @@ struct PDFBookReader: UIViewRepresentable {
     }
 
     private func configure(_ view: PDFView) {
-        let mode: PDFDisplayMode = twoPage ? .twoUp : .singlePageContinuous
-        let direction: PDFDisplayDirection = twoPage ? .horizontal : .vertical
+        let usesPager = pageLayout == .singlePage
+        let mode: PDFDisplayMode = pageLayout == .facingPages ? .twoUp : .singlePageContinuous
+        let direction: PDFDisplayDirection = pageLayout == .scroll ? .vertical : .horizontal
         // Updating progress must not reset a reader's pinch-to-zoom level.
+        guard view.isUsingPageViewController != usesPager || view.displayMode != mode || view.displayDirection != direction else { return }
+        let page = view.currentPage
+        if view.isUsingPageViewController && !usesPager { view.usePageViewController(false, withViewOptions: nil) }
         if view.displayMode != mode { view.displayMode = mode }
         if view.displayDirection != direction { view.displayDirection = direction }
+        if !view.isUsingPageViewController && usesPager { view.usePageViewController(true, withViewOptions: nil) }
+        if let page, view.currentPage !== page { view.go(to: page) }
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        weak var pageSource: ReaderPageSource?
         var onProgressChanged: (Double) -> Void
         var onNavigationStateChanged: (ReaderNavigationState) -> Void
         var onContentTap: () -> Void
@@ -800,9 +836,15 @@ struct PDFBookReader: UIViewRepresentable {
                 object: view,
                 queue: .main
             ) { [weak view, weak self] _ in
-                guard let view, let self else { return }
-                let passage = view.currentSelection?.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                self.onSelectedTextChanged(passage)
+                // PDFKit can change selection while SwiftUI is updating the view.
+                DispatchQueue.main.async {
+                    guard let view, let self else { return }
+                    let selection = view.currentSelection
+                    if let selection, let page = selection.pages.first {
+                        self.pageSource?.selectionRect = view.convert(view.convert(selection.bounds(for: page), from: page), to: nil)
+                    }
+                    self.onSelectedTextChanged(selection?.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+                }
             })
         }
 

@@ -69,6 +69,60 @@ final class BookLibraryTests: XCTestCase {
         library.remove(book)
     }
 
+    func testRenamePersistsCurrentRecordAndAdvancesSyncedTimestamp() throws {
+        let isolated = makeIsolatedLibrary()
+        var remote = try XCTUnwrap(nestedUnknownManifest().books.first?.book)
+        let stale = remote
+        remote.modifiedAt = Date(timeIntervalSinceReferenceDate: 4_000_000_000)
+        remote.isBookmarked = true
+        remote.progress = 0.625
+        let bytes = Data("Managed text".utf8)
+        XCTAssertTrue(isolated.library.applySyncedBook(remote, contents: bytes))
+        let current = try XCTUnwrap(isolated.library.books.first)
+        let file = try XCTUnwrap(isolated.library.fileURL(for: current))
+
+        XCTAssertTrue(isolated.library.rename(stale, to: "  新书名 / Part One\n"))
+
+        let reopened = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults)
+        let renamed = try XCTUnwrap(reopened.books.first)
+        XCTAssertGreaterThan(renamed.modifiedAt, current.modifiedAt)
+        var expected = current
+        expected.title = "新书名 / Part One"
+        expected.modifiedAt = renamed.modifiedAt
+        XCTAssertEqual(renamed, expected)
+        XCTAssertEqual(reopened.fileURL(for: renamed), file)
+        XCTAssertEqual(try Data(contentsOf: file), bytes)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(renamed)) as? [String: Any])
+        XCTAssertNotNil(object["futureBook"])
+    }
+
+    func testRenameSkipsInvalidAndUnchangedTitlesAndRollsBackSaveFailure() throws {
+        let isolated = makeIsolatedLibrary()
+        let repository = SelectiveFailingRepository(root: isolated.storageDirectory)
+        let library = BookLibrary(storageDirectory: isolated.storageDirectory, defaults: isolated.defaults, repository: repository)
+        let book = Book(title: "Original", fileName: "test.txt", format: .txt)
+        XCTAssertTrue(library.applySyncedBook(book, contents: Data("Text".utf8)))
+        let original = try XCTUnwrap(library.books.first)
+        repository.failNextBooksSave = true
+
+        XCTAssertFalse(library.rename(original, to: " \n\t "))
+        var missing = original
+        missing.id = UUID()
+        XCTAssertFalse(library.rename(missing, to: "Deleted while editing"))
+        XCTAssertTrue(library.rename(original, to: " Original "))
+        XCTAssertEqual(library.books, [original])
+        XCTAssertTrue(repository.failNextBooksSave)
+
+        library.updateProgress(for: original.id, to: 0.5)
+        let beforeFailedRename = library.books
+        XCTAssertFalse(library.rename(original, to: "Unsaved title"))
+        XCTAssertEqual(library.books, beforeFailedRename)
+        XCTAssertEqual(repository.load().books, [original])
+        XCTAssertNotNil(library.alertMessage)
+        library.flushPendingChanges()
+        XCTAssertEqual(repository.load().books, beforeFailedRename)
+    }
+
     func testInjectedRepositoryFailureRollsBackImportAndDelete() throws {
         let isolated = makeIsolatedLibrary()
         try FileManager.default.createDirectory(at: isolated.storageDirectory, withIntermediateDirectories: true)

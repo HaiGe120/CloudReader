@@ -35,7 +35,6 @@ struct CBZBookReader: View {
     let progress: Double
     let pageLayout: ReaderPageLayout
     let palette: ReaderPalette
-    var isChromeVisible = true
     var navigationRequest: ReaderNavigationRequest? = nil
     var onNavigationStateChanged: (ReaderNavigationState) -> Void = { _ in }
     var onContentTap: () -> Void = {}
@@ -79,6 +78,7 @@ struct CBZBookReader: View {
                             }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
+                        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
                         .onChange(of: pageIndex) { _, _ in emit(publication) }
                         .onChange(of: navigationRequest) { _, request in consume(request, publication: publication, proxy: nil) }
                     }

@@ -18,33 +18,54 @@ struct ReaderChromeControls: View {
 
     var body: some View {
         VStack(spacing: 8) {
+#if os(iOS)
+            if capabilities.supportsChapters, !state.chapterTitles.isEmpty {
+                HStack {
+                    previousChapterButton
+                    chapterControl
+                    nextChapterButton
+                }
+                .buttonStyle(.plain)
+            }
+            HStack {
+                if capabilities.supportsPaging { previousPageButton }
+                progressControl
+                if capabilities.supportsPaging { nextPageButton }
+            }
+            .buttonStyle(.plain)
+#else
             if capabilities.supportsChapters, !state.chapterTitles.isEmpty {
                 chapterControl
             }
             if capabilities.supportsPaging {
                 pagingControls
             }
-            HStack(spacing: 10) {
-                Text(pageDescription ?? "\(Int(state.progress * 100))%")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .accessibilityIdentifier("reader.pageStatus")
-                Slider(value: progressBinding, in: 0...1) { editing in
-                    if !editing, let progress = scrubbedProgress {
-                        onNavigate(.seek(progress))
-                        scrubbedProgress = nil
-                    }
-                }
-                .accessibilityLabel("Reading progress")
-                .accessibilityValue("\(Int((scrubbedProgress ?? state.progress) * 100)) percent")
-            }
+            progressControl
+#endif
         }
         .padding(.horizontal, 18)
         .padding(.top, 10)
         .padding(.bottom, 8)
         .background(.regularMaterial)
         .overlay(alignment: .top) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 0.5) }
+    }
+
+    private var progressControl: some View {
+        HStack(spacing: 10) {
+            Text(pageDescription ?? "\(Int(state.progress * 100))%")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .accessibilityIdentifier("reader.pageStatus")
+            Slider(value: progressBinding, in: 0...1) { editing in
+                if !editing, let progress = scrubbedProgress {
+                    onNavigate(.seek(progress))
+                    scrubbedProgress = nil
+                }
+            }
+            .accessibilityLabel("Reading progress")
+            .accessibilityValue("\(Int((scrubbedProgress ?? state.progress) * 100)) percent")
+        }
     }
 
     private var chapterControl: some View {
@@ -70,6 +91,9 @@ struct ReaderChromeControls: View {
             }
             .font(.subheadline.weight(.medium))
             .frame(maxWidth: .infinity)
+#if os(iOS)
+            .frame(minHeight: 44)
+#endif
             .contentShape(Rectangle())
         }
         .accessibilityLabel("Chapters")
@@ -86,32 +110,53 @@ struct ReaderChromeControls: View {
 
     private var pagingControls: some View {
         HStack {
-            Button { onNavigate(.previous) } label: {
-                Label("Previous", systemImage: "chevron.left").labelStyle(.iconOnly)
-            }
-            .disabled(!state.canNavigatePrevious)
-            .accessibilityLabel("Previous page")
-            .accessibilityIdentifier("reader.previous")
+            previousPageButton
             Spacer()
             if capabilities.supportsChapters {
-                Button { onNavigate(.previousChapter) } label: { Image(systemName: "backward.end") }
-                    .disabled(state.chapterIndex.map { $0 == 0 } ?? true)
-                    .accessibilityLabel("Previous chapter")
-                Button { onNavigate(.nextChapter) } label: { Image(systemName: "forward.end") }
-                    .disabled(state.chapterIndex.flatMap { index in state.chapterCount.map { index >= $0 - 1 } } ?? true)
-                    .accessibilityLabel("Next chapter")
+                previousChapterButton
+                nextChapterButton
             }
             Spacer()
-            Button { onNavigate(.next) } label: {
-                Label("Next", systemImage: "chevron.right").labelStyle(.iconOnly)
-            }
-            .disabled(!state.canNavigateNext)
-            .accessibilityLabel("Next page")
-            .accessibilityIdentifier("reader.next")
+            nextPageButton
         }
         .buttonStyle(.plain)
         .font(.system(size: 15, weight: .semibold))
         .padding(.horizontal, 8)
+    }
+
+    private var previousPageButton: some View {
+        Button { onNavigate(.previous) } label: { navigationIcon("chevron.left") }
+            .disabled(!state.canNavigatePrevious)
+            .accessibilityLabel("Previous page")
+            .accessibilityIdentifier("reader.previous")
+    }
+
+    private var nextPageButton: some View {
+        Button { onNavigate(.next) } label: { navigationIcon("chevron.right") }
+            .disabled(!state.canNavigateNext)
+            .accessibilityLabel("Next page")
+            .accessibilityIdentifier("reader.next")
+    }
+
+    private var previousChapterButton: some View {
+        Button { onNavigate(.previousChapter) } label: { navigationIcon("backward.end") }
+            .disabled(state.chapterIndex.map { $0 == 0 } ?? true)
+            .accessibilityLabel("Previous chapter")
+    }
+
+    private var nextChapterButton: some View {
+        Button { onNavigate(.nextChapter) } label: { navigationIcon("forward.end") }
+            .disabled(state.chapterIndex.flatMap { index in state.chapterCount.map { index >= $0 - 1 } } ?? true)
+            .accessibilityLabel("Next chapter")
+    }
+
+    private func navigationIcon(_ name: String) -> some View {
+        Image(systemName: name)
+#if os(iOS)
+            .font(.system(size: 15, weight: .semibold))
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+#endif
     }
 
     private var progressBinding: Binding<Double> {

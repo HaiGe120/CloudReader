@@ -69,6 +69,7 @@ struct CloudReaderApp: App {
             _cloudSync = StateObject(wrappedValue: CloudSyncCoordinator(defaults: suite))
         } else {
             uiTestDefaults = nil
+            ReaderTranslationTarget.initializePreference(in: .standard)
             _library = StateObject(wrappedValue: BookLibrary.shared)
             _cloudSync = StateObject(wrappedValue: CloudSyncCoordinator())
             CloudReaderShortcuts.updateAppShortcutParameters()
@@ -83,6 +84,12 @@ struct CloudReaderApp: App {
                 RootTabView(isUITestMode: isUITestMode)
                     .environmentObject(library)
                     .environmentObject(cloudSync)
+                    .environment(\.readerChatReply, isUITestMode ? { record in
+                        [record.bookTitle, record.bookContext].compactMap { $0 }.joined(separator: "\n")
+                    } : ReaderChatSession.answer)
+                    #if targetEnvironment(simulator)
+                    .environment(\.readerTranslationLanguages, isUITestMode ? { ["fr", "ja", "zh-Hans"] } : ReaderTranslationTarget.supportedIdentifiers)
+                    #endif
                     .defaultAppStorage(uiTestDefaults ?? .standard)
                     .tint(Color(red: 0.40, green: 0.34, blue: 0.28))
             }
@@ -139,13 +146,14 @@ private enum ReaderUITestFixture {
             return ("OEBPS/chapter\(index).xhtml", "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Chapter \(index)</title></head><body><h1>Chapter \(index)</h1>\(body)</body></html>")
         }
         let navigation = """
-        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="chapter1.xhtml">First chapter</a></li><li><a href="chapter2.xhtml">Second chapter</a></li><li><a href="chapter3.xhtml">Third chapter</a></li></ol></nav></body></html>
+        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="cover.xhtml">Cover</a></li><li><a href="chapter1.xhtml">First chapter</a></li><li><a href="chapter2.xhtml">Second chapter</a></li><li><a href="chapter3.xhtml">Third chapter</a></li></ol></nav></body></html>
         """
         let package = """
-        <package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Reader Swipe Test Book</dc:title></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/><item id="c3" href="chapter3.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/></spine></package>
+        <package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Reader Swipe Test Book</dc:title></metadata><manifest><item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/><item id="c3" href="chapter3.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="cover"/><itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/></spine></package>
         """
         let entries = [("mimetype", "application/epub+zip"),
                        ("META-INF/container.xml", "<container xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>"),
+                       ("OEBPS/cover.xhtml", "<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><title>Cover</title></head><body><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"120\" height=\"160\"><rect width=\"120\" height=\"160\" fill=\"navy\"/></svg></body></html>"),
                        ("OEBPS/content.opf", package), ("OEBPS/nav.xhtml", navigation)] + chapters
         for (path, contents) in entries {
             let data = Data(contents.utf8)

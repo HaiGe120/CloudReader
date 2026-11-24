@@ -30,9 +30,10 @@ struct MacBookReaderView: View {
     @State private var text: String?
     @State private var textLoadError: String?
     @State private var selectedPassage = ""
-    @State private var assistantContext = ""
-    @State private var assistantSelectedText: String?
-    @State private var isShowingAssistant = false
+    @State private var pageSource = ReaderPageSource()
+    @State private var preparingChat = false
+    @AppStorage(ReaderTranslationTarget.enabledKey) private var translateWords = false
+    @State private var assistantRequest: ReaderChatRequest?
     @State private var isShowingAppearance = false
     @State private var isChromeVisible = true
     @State private var navigationState = ReaderNavigationState(progress: 0, canNavigatePrevious: false, canNavigateNext: false)
@@ -106,6 +107,7 @@ struct MacBookReaderView: View {
                 ContentUnavailableView("Book file not found", systemImage: "doc.questionmark", description: Text("Remove this entry and import the book again."))
             }
         }
+        .environment(\.readerPageSource, pageSource)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reader.content")
         .background(readerBackground)
@@ -126,9 +128,7 @@ struct MacBookReaderView: View {
                     .help("Look up the selected passage in Dictionary")
 
                     Button {
-                        assistantContext = ""
-                        assistantSelectedText = selectedPassage
-                        isShowingAssistant = true
+                        openAssistant(about: selectedPassage)
                     } label: {
                         Label("Ask AI", systemImage: "sparkles")
                     }
@@ -143,17 +143,22 @@ struct MacBookReaderView: View {
                 .padding(.bottom, 22)
             }
         }
+        .overlay {
+            if translateWords, let word = ReaderWordTranslation.englishWord(selectedPassage), assistantRequest == nil {
+                SelectionTranslationOverlay(word: word, selectionRect: pageSource.selectionRect).id(word)
+            }
+        }
         .navigationTitle(book.title)
         .toolbar {
             if isChromeVisible {
               ToolbarItemGroup(placement: .primaryAction) {
                 Button {
-                    assistantContext = library.readingContext(for: book, maximumCharacters: 8_000) ?? ""
-                    assistantSelectedText = nil
-                    isShowingAssistant = true
+                    openAssistant()
                 } label: {
-                    Label("Ask AI", systemImage: "sparkles")
+                    if preparingChat { ProgressView().controlSize(.small) }
+                    else { Label("Ask AI", systemImage: "sparkles") }
                 }
+                .disabled(preparingChat)
                 .labelStyle(.titleAndIcon)
                 .help("Ask AI about this book")
                 .accessibilityLabel("Ask AI about this book")
@@ -235,14 +240,15 @@ struct MacBookReaderView: View {
             navigation: navigationState, chromeVisible: isChromeVisible,
             appearanceAvailable: MacReaderBehaviorPolicy.supportsAppearance(for: book.format)
         ))
-        .sheet(isPresented: $isShowingAssistant) {
+        .onDisappear { pageSource.capture = nil }
+        .sheet(item: $assistantRequest) { request in
             MacAIAssistantView(
-                bookID: book.id,
-                bookTitle: book.title,
-                bookContext: assistantContext.isEmpty ? nil : assistantContext,
-                bookDescription: library.briefDescription(for: book),
-                selectedText: assistantSelectedText,
-                contextDescription: assistantSelectedText == nil ? nil : "Selected passage from \(book.title)"
+                bookID: request.book.id,
+                bookTitle: request.book.title,
+                bookContext: request.excerpt,
+                bookDescription: request.description,
+                selectedText: request.passage,
+                contextDescription: request.location
             )
                 .frame(minWidth: 620, minHeight: 500)
         }
@@ -254,6 +260,15 @@ struct MacBookReaderView: View {
 
     private func capabilities(for format: BookFormat) -> ReaderCapabilities {
         MacReaderBehaviorPolicy.capabilities(for: format)
+    }
+
+    private func openAssistant(about passage: String? = nil) {
+        guard !preparingChat else { return }
+        preparingChat = true
+        Task { @MainActor in
+            defer { preparingChat = false }
+            assistantRequest = await pageSource.chatRequest(for: currentBook, selection: passage, library: library)
+        }
     }
 
     private func submitNavigation(_ command: ReaderNavigationCommand) {

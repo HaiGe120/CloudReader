@@ -270,6 +270,7 @@ private struct EPUBMacLoadRequest: Hashable {
 }
 
 struct MacEPUBWebView: NSViewRepresentable {
+    @Environment(\.readerPageSource) private var pageSource
     let publication: EPUBPublication
     let chapter: Int
     let initialProgress: Double
@@ -331,6 +332,9 @@ struct MacEPUBWebView: NSViewRepresentable {
             context.coordinator.nonSpineDocumentPath = nil
         }
         let path = context.coordinator.nonSpineDocumentPath ?? publication.chapters[chapter].path
+        pageSource?.useHTML(view, chapter: chapter, publication: publication) { [weak coordinator = context.coordinator] in
+            coordinator?.isReady == true && coordinator?.loadedPath == publication.chapters[chapter].path
+        }
         if context.coordinator.loadedPath != path {
             context.coordinator.loadDocument(path: path, fraction: initialProgress, fragment: targetFragment)
         } else {
@@ -590,6 +594,11 @@ struct MacEPUBWebView: NSViewRepresentable {
                 parent.onChapterBoundary(direction > 0 ? 1 : -1)
             }
             if let selection = payload["selection"] as? String {
+                if let rect = payload["rect"] as? [CGFloat], rect.count == 4, let view {
+                    let y = view.isFlipped ? rect[1] : view.bounds.height - rect[1] - rect[3]
+                    let native = CGRect(x: rect[0], y: y, width: rect[2], height: rect[3])
+                    parent.pageSource?.locateSelection(in: view.window, windowRect: view.convert(native, to: nil))
+                }
                 parent.onSelection(String(selection.prefix(18_000)))
             }
             if payload["kind"] as? String == "tap" { parent.onContentTap() }
@@ -781,6 +790,12 @@ struct MacEPUBWebView: NSViewRepresentable {
         const rect = range.getBoundingClientRect();
         return {text:quote, occurrence, x:rect.left, y:rect.top};
       };
+      // WebKit can pause animation frames when the reader is behind another
+      // window. Layout and the page context must still become available.
+      const nextLayoutFrame = callback => {
+        const frame = requestAnimationFrame(() => { clearTimeout(timerID); callback(); });
+        const timerID = setTimeout(() => { cancelAnimationFrame(frame); callback(); }, 80);
+      };
       const requestRestore = (fraction, fragment, passageAnchor = null, reflow = false) => {
         const request = {fraction:Math.max(0, Math.min(1, fraction)), fragment, passageAnchor, version:++restoreVersion};
         desired = request;
@@ -791,6 +806,7 @@ struct MacEPUBWebView: NSViewRepresentable {
         suppressScrollUntil = Date.now() + 180;
         clearTimeout(timer);
         let lastMetrics = '', stableFrames = 0, attempts = 0;
+        const deadline = performance.now() + 1500;
         const step = () => {
           if (request.version !== restoreVersion) return;
           // Initial images/fonts can settle after configure's first measurement.
@@ -814,15 +830,15 @@ struct MacEPUBWebView: NSViewRepresentable {
           const reachedTarget = anchor || passageRange || distance() <= 1 || Math.abs(position() - request.fraction) < 0.005;
           stableFrames = metrics === lastMetrics && reachedTarget ? stableFrames + 1 : 0;
           lastMetrics = metrics;
-          if ((innerWidth > 0 && innerHeight > 0 && stableFrames >= 3) || ++attempts >= 90) {
+          if ((innerWidth > 0 && innerHeight > 0 && stableFrames >= 3) || ++attempts >= 90 || (attempts >= 4 && performance.now() >= deadline)) {
             previous = anchor || passageRange ? position() : request.fraction;
             desired = null;
             restoring = false;
             report();
             waiters.splice(0).forEach(resolve => resolve());
-          } else requestAnimationFrame(step);
+          } else nextLayoutFrame(step);
         };
-        requestAnimationFrame(() => requestAnimationFrame(step));
+        nextLayoutFrame(() => nextLayoutFrame(step));
       };
       const report = () => {
         const extent = distance(), progress = position(), pages = pageCount();
@@ -839,7 +855,13 @@ struct MacEPUBWebView: NSViewRepresentable {
         if (target < -1 || target > maximum + 1) { post({kind:'boundary', direction:Math.sign(direction)}); return; }
         scrollInstantly(Math.min(Math.max(target, 0), maximum), 0);
       };
-      window.cloudReader = { turnPage, report,
+      const collectPageText = \(ReaderPageSource.htmlPageFunction);
+      const pageContext = () => {
+        const offset = paged ? scrollX : scrollY;
+        return collectPageText(paged, columnPitch, paged ? pagesPerView : 1,
+          offset <= 1, offset >= distance() - 1);
+      };
+      window.cloudReader = { pageContext, turnPage, report,
         navigate(fraction, fragment, identifier) {
           configurationID = identifier;
           const ready = new Promise(resolve => waiters.push(resolve));
@@ -850,7 +872,7 @@ struct MacEPUBWebView: NSViewRepresentable {
           if (configurationID !== identifier) return;
           document.getElementById('cloudreader-pending-layout')?.remove();
           // Let WebKit composite the restored content before removing its native cover.
-          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          await new Promise(resolve => nextLayoutFrame(() => nextLayoutFrame(resolve)));
         },
         configure(css, horizontal, fraction, fragment, measuredWidth, columnCount, measuredGap, identifier) {
         configurationID = identifier;
@@ -891,7 +913,11 @@ struct MacEPUBWebView: NSViewRepresentable {
         clearTimeout(timer);
         timer = setTimeout(() => { if (!restoring) { post({progress:position()}); report(); } }, 100);
       }, {passive:true});
-      document.addEventListener('selectionchange', () => post({selection:String(getSelection())}));
+      document.addEventListener('selectionchange', () => {
+        const selection = getSelection();
+        const r = selection.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null;
+        post({selection:String(selection), rect:r ? [r.x,r.y,r.width,r.height] : []});
+      });
       document.addEventListener('keydown', event => { if(!paged||!getSelection().isCollapsed||event.metaKey||event.ctrlKey||event.altKey)return;let d=0;if(event.key==='ArrowRight'||event.key==='PageDown'||event.key===' ')d=1;else if(event.key==='ArrowLeft'||event.key==='PageUp')d=-1;else return;event.preventDefault();turnPage(d);});
       let tapTimer=null;
       document.addEventListener('click', event => {

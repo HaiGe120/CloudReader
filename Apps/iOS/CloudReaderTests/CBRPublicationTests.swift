@@ -14,6 +14,16 @@ final class CBRPublicationTests: XCTestCase {
 
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: directory) }
 
+    func testCoverExtractsFirstPageInRAR4AndRAR5IncludingSolidArchives() throws {
+        for name in ["rar4-pages", "rar4-solid-pages", "rar5-pages", "rar5-solid-pages"] {
+            let bytes = try XCTUnwrap(CBRLoader.coverData(at: fixture(name)), name)
+            XCTAssertTrue(bytes.starts(with: [0xff, 0xd8, 0xff]), name)
+            XCTAssertNotNil(CGImageSourceCreateWithData(bytes as CFData, nil), name)
+        }
+        XCTAssertNil(try CBRLoader.coverData(at: fixture("rar5-no-image")))
+        XCTAssertThrowsError(try CBRLoader.coverData(at: fixture("encrypted-rar4")))
+    }
+
     func testCorruptInputDoesNotCreateCompletedCache() async throws {
         let source = directory.appendingPathComponent("broken.cbr")
         try Data("not a RAR archive".utf8).write(to: source)

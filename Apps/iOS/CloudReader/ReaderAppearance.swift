@@ -177,13 +177,13 @@ struct ReaderAppearanceSheet: View {
                     Section("Page layout") {
                         HStack(spacing: 4) {
                             layoutButton(.scroll, title: capabilities == .pdf ? "Continuous" : "Scrolling")
-                            if capabilities != .pdf { layoutButton(.singlePage) }
+                            layoutButton(.singlePage)
                             if capabilities.supportsSpreads { layoutButton(.facingPages) }
                         }
                         .padding(4)
                         .background(.quaternary, in: Capsule())
                         Text(capabilities == .pdf
-                             ? "PDF pages keep their original artwork. Choose continuous flow or a two-page spread."
+                             ? "Swipe up in continuous flow or sideways in one-page mode. Two-page spreads use wide screens."
                              : "Scrolling flows vertically. One-page mode turns horizontally. Two-page spreads use wide screens and fall back to one page on compact screens.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -236,7 +236,7 @@ struct ReaderAppearanceSheet: View {
     }
 
     private func layoutButton(_ layout: ReaderPageLayout, title: String? = nil) -> some View {
-        let selected = pageLayoutRaw == layout.rawValue || (capabilities == .pdf && layout == .scroll && pageLayoutRaw == ReaderPageLayout.singlePage.rawValue)
+        let selected = pageLayoutRaw == layout.rawValue
         return Button {
             pageLayoutRaw = layout.rawValue
         } label: {

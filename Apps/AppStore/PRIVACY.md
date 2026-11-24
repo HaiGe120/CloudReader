@@ -1,6 +1,6 @@
 # CloudReader Privacy Policy
 
-**Effective date: October 22, 2026**
+**Effective date: November 24, 2026**
 
 CloudReader is an offline-first book library. It does not require a CloudReader account, and the developer does not operate a server that stores your library or AI conversations.
 
@@ -16,7 +16,9 @@ CloudReader does not operate these storage services. Copies stored there are gov
 
 ## Optional AI features
 
-Apple’s Foundation Model runs on device when supported by the device and available in the user’s system settings. If you configure a remote AI API, CloudReader sends your submitted question to the endpoint you configure. Book text is included only if you choose to attach a passage before sending. Requests go directly from your device to that endpoint; the developer does not receive them. The provider’s terms and retention practices apply to remote requests.
+Apple’s Foundation Model runs on device when supported by the device and available in the user’s system settings. If you configure a remote AI API, CloudReader sends your submitted question to the endpoint you configure. In a book chat, book context is enabled by default. It can include the title, a brief description, your selected passage, and readable text from the current and adjacent pages. You can turn off book context before sending a question. Requests go directly from your device to that endpoint; the developer does not receive them. The provider’s terms and retention practices apply to remote requests.
+
+Choosing Browse models contacts your configured endpoint to fetch its model list, using your API key when provided. If you enable web search, your remote AI provider may send search queries to its search service. Optional word translation uses Apple Translation.
 
 CloudReader saves AI conversations to your local library after you ask a question. If sync is enabled, those conversations and any included book context are synchronized to your selected storage destinations.
 

@@ -15,6 +15,15 @@ final class CBZPublicationTests: XCTestCase {
 
     override func tearDownWithError() throws { try? FileManager.default.removeItem(at: directory) }
 
+    func testCoverExtractsOnlyFirstVisiblePageInNaturalOrder() throws {
+        let source = try makeArchive([
+            ("__MACOSX/._page1.png", Data("metadata".utf8)), ("pages/page10.jpg", Data("later".utf8)),
+            ("pages/page2.png", Self.pixel), ("ComicInfo.xml", Data("<ComicInfo/>".utf8))
+        ])
+        XCTAssertEqual(try CBZLoader.coverData(at: source), Self.pixel)
+        XCTAssertNil(try CBZLoader.coverData(at: makeArchive([("notes.txt", Data("notes".utf8))])))
+    }
+
     func testNaturalOrderingUsesNumericPageNumbers() {
         let values = ["page10.jpg", "page2.jpg", "page1.jpg", "Page02.jpg"]
             .sorted(by: CBZLoader.naturalLess)

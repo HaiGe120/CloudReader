@@ -9,6 +9,7 @@ struct KindleContainerInfo: Equatable {
     let compression: UInt16
     let textRecordCount: UInt16
     let recordCount: UInt16
+    let coverRecordRanges: [Range<Int>]
 }
 
 enum KindleDecodeError: LocalizedError, Equatable {
@@ -32,7 +33,20 @@ enum KindlePreflight {
 
     static func inspect(_ data: Data) throws -> KindleContainerInfo {
         guard data.count >= 86, data.count <= maximumInputBytes else { throw KindleDecodeError.invalidContainer }
-        let bytes = [UInt8](data)
+        return try data.withUnsafeBytes { try inspect(bytes: $0) }
+    }
+
+    private struct Header {
+        let compression: UInt16
+        let textCount: UInt16
+        let version: UInt32
+        let resourceStart: Int
+        var boundary: Int?
+        var coverOffset: Int?
+        var thumbnailOffset: Int?
+    }
+
+    private static func inspect(bytes: UnsafeRawBufferPointer) throws -> KindleContainerInfo {
         func u16(_ offset: Int) -> UInt16 { UInt16(bytes[offset]) << 8 | UInt16(bytes[offset + 1]) }
         func u32(_ offset: Int) -> UInt32 {
             UInt32(bytes[offset]) << 24 | UInt32(bytes[offset + 1]) << 16 | UInt32(bytes[offset + 2]) << 8 | UInt32(bytes[offset + 3])
@@ -46,7 +60,7 @@ enum KindlePreflight {
               zip(offsets, offsets.dropFirst()).allSatisfy({ pair in pair.0 < pair.1 }) else { throw KindleDecodeError.invalidContainer }
         // All MOBI field offsets below are relative to the PalmDOC record, including
         // its 16-byte prefix. Applying that prefix twice reads unrelated bytes.
-        func inspectHeader(record: Int) throws -> (compression: UInt16, textCount: UInt16, version: UInt32, boundary: Int?) {
+        func inspectHeader(record: Int) throws -> Header {
             let first = offsets[record]
             let end = record + 1 < offsets.count ? offsets[record + 1] : bytes.count
             guard end - first >= 16 else { throw KindleDecodeError.invalidContainer }
@@ -75,7 +89,8 @@ enum KindlePreflight {
                     (titleLength <= 4096 && titleOffset >= 16 + mobiLength && first + titleOffset + titleLength <= end) else {
                 throw KindleDecodeError.invalidContainer
             }
-            var boundary: Int?
+            var header = Header(compression: compression, textCount: textCount, version: version,
+                                resourceStart: Int(u32(first + 108)))
             if u32(first + 128) & 0x40 != 0 {
                 let exthStart = first + 16 + mobiLength
                 guard exthStart + 12 <= end, String(bytes: bytes[exthStart..<(exthStart + 4)], encoding: .ascii) == "EXTH" else {
@@ -92,7 +107,13 @@ enum KindlePreflight {
                         let value = u32(cursor + 8)
                         if value != UInt32.max {
                             guard value > 0, value < UInt32(count) else { throw KindleDecodeError.invalidContainer }
-                            boundary = Int(value)
+                            header.boundary = Int(value)
+                        }
+                    } else if (type == 201 || type == 202), length == 12 {
+                        let value = u32(cursor + 8)
+                        if value != UInt32.max {
+                            if type == 201 { header.coverOffset = Int(value) }
+                            else { header.thumbnailOffset = Int(value) }
                         }
                     } else if type == 122 {
                         let fixed = String(bytes: bytes[(cursor + 8)..<(cursor + length)], encoding: .ascii)?.lowercased()
@@ -101,16 +122,29 @@ enum KindlePreflight {
                     cursor += length
                 }
             }
-            return (compression, textCount, version, boundary)
+            return header
         }
         let primary = try inspectHeader(record: 0)
+        var active = primary
+        let generation: KindleContainerInfo.Generation
         if primary.version < 8, let boundary = primary.boundary {
-            let secondary = try inspectHeader(record: boundary)
-            guard secondary.version == 8 else { throw KindleDecodeError.invalidContainer }
-            return KindleContainerInfo(generation: .combo, compression: secondary.compression, textRecordCount: secondary.textCount, recordCount: count)
+            active = try inspectHeader(record: boundary)
+            guard active.version == 8 else { throw KindleDecodeError.invalidContainer }
+            generation = .combo
+        } else {
+            generation = primary.version == 8 ? .kf8 : .mobi6
         }
-        return KindleContainerInfo(generation: primary.version == 8 ? .kf8 : .mobi6,
-            compression: primary.compression, textRecordCount: primary.textCount, recordCount: count)
+        // Both halves of a combo book use the primary header's resource table.
+        var coverRanges: [Range<Int>] = []
+        let candidates = [active.coverOffset, primary.coverOffset, active.thumbnailOffset, primary.thumbnailOffset]
+        for offset in candidates.compactMap({ $0 }) {
+            let record = primary.resourceStart + offset
+            guard primary.resourceStart > Int(primary.textCount), record < offsets.count else { continue }
+            let range = offsets[record]..<(record + 1 < offsets.count ? offsets[record + 1] : bytes.count)
+            if !coverRanges.contains(range) { coverRanges.append(range) }
+        }
+        return KindleContainerInfo(generation: generation, compression: active.compression,
+            textRecordCount: active.textCount, recordCount: count, coverRecordRanges: coverRanges)
     }
 }
 

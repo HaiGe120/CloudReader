@@ -107,6 +107,60 @@ final class AppleSyncPipelineTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: try XCTUnwrap(library.fileURL(for: restoredBook))), bytes)
     }
 
+    func testBookConversationsResumeWithFreshPagesAndSyncSeparately() async throws {
+        let first = try isolatedLibrary(), second = try isolatedLibrary()
+        let store = FakeStore()
+        let (firstState, _) = try isolatedSyncState()
+        let (secondState, _) = try isolatedSyncState()
+        let firstSync = AppleSyncPipeline(storeFactory: { _ in store }, localState: firstState)
+        let secondSync = AppleSyncPipeline(storeFactory: { _ in store }, localState: secondState)
+        let book = UUID()
+        func chat(_ pages: String) -> ReaderChatSession {
+            ReaderChatSession(bookID: book, bookTitle: "Field guide", bookDescription: "About birds",
+                              bookContext: pages, selectedText: nil, contextDescription: nil)
+        }
+        let old = chat("Early pages")
+        old.draft = "What is a swift?"
+        await old.send(in: first) { _ in "A bird." }
+        let originalID = old.record.id
+        first.saveAIConversation(AIConversationRecord(messages: [.user("Other book")], bookID: UUID()))
+        _ = try await firstSync.run(to: .filesFolder, library: first)
+        _ = try await secondSync.run(to: .filesFolder, library: second)
+
+        let resumed = chat("Later pages")
+        resumed.open(in: second)
+        XCTAssertEqual(resumed.record.id, originalID)
+        resumed.draft = "Where does it migrate?"
+        await resumed.send(in: second) { request in
+            XCTAssertEqual(request.messages.map(\.text), ["What is a swift?", "A bird.", "Where does it migrate?"])
+            XCTAssertEqual(request.bookContext, "Later pages")
+            return "South."
+        }
+        resumed.startNew()
+        XCTAssertNotEqual(resumed.record.id, originalID)
+        XCTAssertEqual(resumed.context.bookID, book)
+        XCTAssertTrue(resumed.record.messages.isEmpty)
+        resumed.includeBookContext = false
+        resumed.draft = "A separate question"
+        await resumed.send(in: second) { request in
+            XCTAssertNil(request.bookContext)
+            XCTAssertNil(request.bookDescription)
+            return "Separate answer"
+        }
+        _ = try await secondSync.run(to: .filesFolder, library: second)
+        _ = try await firstSync.run(to: .filesFolder, library: first)
+        let sessions = first.conversations(for: book)
+        XCTAssertEqual(sessions.map(\.id), [resumed.record.id, originalID])
+        XCTAssertEqual(sessions.last?.messages.last?.text, "South.")
+        let latest = chat("New position")
+        latest.open(in: first)
+        XCTAssertFalse(latest.includeBookContext)
+        first.removeAIConversation(sessions[0])
+        _ = try await firstSync.run(to: .filesFolder, library: first)
+        _ = try await secondSync.run(to: .filesFolder, library: second)
+        XCTAssertEqual(second.conversations(for: book).map(\.id), [originalID])
+    }
+
     func testCorruptRemoteObjectFailsBeforePublishingManifest() async throws {
         let library = try isolatedLibrary()
         let remote = Book(title: "Corrupt", fileName: "corrupt.txt", format: .txt)

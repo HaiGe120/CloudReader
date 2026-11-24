@@ -2,6 +2,8 @@
 
 CloudReader is an **open-source, offline-first book library and reader for iOS, macOS, Android, Windows and Linux**. Import DRM-free books while keeping the original files untouched. The library works offline, with no CloudReader account or hosted backend.
 
+[Download CloudReader for iPhone and iPad on the App Store](https://apps.apple.com/app/id6825674209).
+
 Sync directly with storage destinations you choose. Your books, reading progress, favorites, deletions, and saved AI conversations can move between devices; provider credentials stay on each device.
 
 ## Features
@@ -9,7 +11,8 @@ Sync directly with storage destinations you choose. Your books, reading progress
 - Read DRM-free books with native apps for each platform.
 - Import from the Files app, Android document picker, or supported share flows.
 - Choose multiple sync destinations, including Google Drive, Dropbox, pCloud, WebDAV, SFTP, and platform file providers. Availability varies by platform.
-- Ask questions with a compatible remote AI service, or use Apple's on-device model on supported Apple devices. Book text is included only when you choose to share it with a question.
+- Ask questions with a compatible remote AI service, or use Apple's on-device model on supported Apple devices. On Apple devices, book chats can include nearby pages and the book’s details. You can turn context off before sending, resume a conversation by book, and select a remote model from the provider’s catalog.
+- Translate a selected English word into a language you choose on iPhone, iPad, and Mac.
 - Keep credentials out of sync data. Android uses Keystore; desktop uses Windows Credential Manager or Linux Secret Service. If a desktop vault is unavailable, credentials are session-only unless the user explicitly opts into the disclosed plaintext fallback.
 
 ## Platform support

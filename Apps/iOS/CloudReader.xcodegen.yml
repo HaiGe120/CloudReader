@@ -8,8 +8,8 @@ settings:
   base:
     PRODUCT_BUNDLE_IDENTIFIER: io.github.haige120.cloudreader
     PRODUCT_NAME: CloudReader
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "1.2.0"
+    CURRENT_PROJECT_VERSION: "5"
     DEVELOPMENT_TEAM: W6DM8CHQA7
     SWIFT_VERSION: "5.0"
     IPHONEOS_DEPLOYMENT_TARGET: "26.0"
@@ -95,7 +95,7 @@ targets:
     sources:
       - path: CloudReader
         excludes:
-          - Info 2.plist
+          - "Info [0-9]*.plist"
       - path: ../Shared
         excludes:
           - AppleSyncPipeline 2.swift
@@ -111,6 +111,7 @@ targets:
           - group.io.github.haige120.cloudreader
     resources:
       - path: CloudReader/Resources/CloudReader_Field_Guide.txt
+      - path: ../Shared/PrivacyInfo.xcprivacy
     dependencies:
       - target: CloudReaderShare
       - package: CloudReaderKit
@@ -136,6 +137,8 @@ targets:
     platform: iOS
     sources:
       - path: ShareExtension
+        excludes:
+          - "Info [0-9]*.plist"
       - path: Sharing
     info:
       path: ShareExtension/Info.plist

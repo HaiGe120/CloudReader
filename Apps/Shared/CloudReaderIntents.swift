@@ -4,7 +4,7 @@ import Foundation
 
 struct AskCloudReaderIntent: AppIntent {
     static var title: LocalizedStringResource = "Ask CloudReader"
-    static var description = IntentDescription("Ask a question using CloudReader's selected AI provider, including Apple Intelligence when available.")
+    static var description = IntentDescription("Ask a question using the selected AI provider, including on-device models when available.")
     static var openAppWhenRun = false
 
     @Parameter(title: "Question", description: "Ask a question. CloudReader uses your selected AI provider.")

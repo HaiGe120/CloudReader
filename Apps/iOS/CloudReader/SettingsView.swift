@@ -51,10 +51,15 @@ struct SettingsView: View {
                 Section("Your library") {
                     Label("Stored on this device", systemImage: "iphone.gen3")
                     Label("Works offline", systemImage: "wifi.slash")
+                    Label("No account required", systemImage: "person.crop.circle.badge.checkmark")
                     Label("Original files stay untouched", systemImage: "doc.on.doc")
                 }
 
                 Section {
+                    Text("Cloud storage is optional. Connect a provider only to sync your library with your own storage; this does not create or sign in to a CloudReader account.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings.cloudStorageExplanation")
                     providerCard(.googleDrive) {
                         TextField("iOS OAuth client ID", text: $googleClientID)
                             .textInputAutocapitalization(.never)
@@ -132,7 +137,7 @@ struct SettingsView: View {
                         .disabled(sftpHost.isEmpty || sftpUsername.isEmpty || sftpPassword.isEmpty || sftpHostKey.isEmpty)
                     }
                 } header: {
-                    Text("Cloud library")
+                    Text("Cloud storage (optional)")
                 } footer: {
                     Text("Connect any providers you want, then select multiple destinations below. CloudReader merges books, progress, bookmarks, deletions, and saved AI conversations across them. Conversation context you included, such as a selected passage, syncs with its chat. Connections are configured separately on each device; secrets stay in this device’s Keychain. Use HTTPS for WebDAV.")
                 }
@@ -184,6 +189,7 @@ struct SettingsView: View {
                 }
 
                 Section("Reading") {
+                    ReaderTranslationSettings()
                     LabeledContent("Native readers", value: "EPUB · PDF · TXT")
                     Text("Additional book formats can be imported and kept in your library, with native readers arriving in later iOS updates.")
                         .font(.footnote)
@@ -203,20 +209,27 @@ struct SettingsView: View {
                                 Text(kind.title).tag(kind)
                             }
                         }
-                        TextField("Model ID, e.g. \(aiProfile.endpointKind.placeholderModel)", text: $aiProfile.model)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        TextField("Full endpoint URL (optional)", text: $aiProfile.endpointURL)
+                        TextField("API endpoint or /v1 base URL (optional)", text: $aiProfile.endpointURL)
+                            .accessibilityIdentifier("ai.endpointURL")
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
                         SecureField(aiHasSavedKey ? "Replace saved API key (optional)" : "API key", text: $aiAPIKey)
+                            .accessibilityIdentifier("ai.apiKey")
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                         if aiHasSavedKey {
                             Label("API key stored in this device’s Keychain", systemImage: "lock.shield")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                        }
+                        AIModelPicker(profile: $aiProfile, enteredKey: aiAPIKey)
+                        Toggle("Allow web search", isOn: $aiProfile.webSearchEnabled)
+                        if aiProfile.webSearchEnabled {
+                            Text(aiProfile.endpointKind == .openAIChatCompletions
+                                 ? "Choose a search-capable Chat Completions model. Provider search charges may apply."
+                                 : "The model can search the web when answering. Your provider may charge for searches.")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                     } else {
                         Label(AIService.onDeviceAvailabilityDescription, systemImage: "iphone.gen3.radiowaves.left.and.right")
@@ -254,7 +267,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    LabeledContent("Version", value: "0.2 · iOS 26+")
+                    LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
                 }
             }
             .scrollContentBackground(.hidden)
@@ -327,16 +340,18 @@ struct SettingsView: View {
                 let didConnect = await cloudSync.connectOAuth(provider, clientID: normalizedClientID, clientSecret: clientSecret)
                 if didConnect { await cloudSync.sync(library: library) }
                 cloudAlertTitle = didConnect ? "\(provider.title) connection" : "Couldn’t connect to \(provider.title)"
-                cloudAlertMessage = cloudSync.errorMessage ?? (didConnect ? "Connected to \(provider.title)." : "Sign-in did not complete.")
+                cloudAlertMessage = cloudSync.errorMessage ?? (didConnect ? "Connected to \(provider.title)." : "Storage authorization did not complete.")
                 showingCloudAlert = true
             }
         } label: {
             if connectingProvider == provider {
                 Label("Connecting…", systemImage: "hourglass")
             } else {
-                Label(cloudSync.isConnected(provider) ? "Reconnect" : "Sign in with \(provider.title)", systemImage: "person.crop.circle.badge.checkmark")
+                Label(cloudSync.isConnected(provider) ? "Reconnect \(provider.title)" : "Connect \(provider.title)", systemImage: "externaldrive.badge.plus")
             }
         }
         .disabled(connectingProvider != nil)
+        .accessibilityIdentifier("cloudStorage.connect.\(provider.rawValue)")
+        .accessibilityHint("Optional storage connection. CloudReader works without an account.")
     }
 }

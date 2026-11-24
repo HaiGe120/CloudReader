@@ -12,7 +12,6 @@ struct EPUBBookReader: View {
     let font: ReaderFont
     let fontSize: CGFloat
     let palette: ReaderPalette
-    var isChromeVisible: Bool = true
     var navigationRequest: ReaderNavigationRequest? = nil
     var onNavigationStateChanged: (ReaderNavigationState) -> Void = { _ in }
     var onContentTap: () -> Void = {}
@@ -45,12 +44,6 @@ struct EPUBBookReader: View {
                         EPUBWebView(
                             publication: publication, chapter: chapter, initialProgress: chapterProgress,
                             pageLayout: pageLayout, font: font, fontSize: fontSize, palette: palette,
-                            onProgress: { fraction in
-                                guard chapter == renderedChapter else { return }
-                                chapterProgress = fraction
-                                let value = EPUBPublication.progress(chapter: chapter, fraction: fraction, chapterCount: publication.chapters.count)
-                                onNavigationStateChanged(navigationState(publication: publication, progress: value, page: nil, pages: nil))
-                            },
                             onSelection: { text in
                                 guard chapter == renderedChapter else { return }
                                 selectedText = text
@@ -59,6 +52,10 @@ struct EPUBBookReader: View {
                             onNavigate: { index, fragment in
                                 guard chapter == renderedChapter else { return }
                                 navigate(to: index, in: publication, fragment: fragment)
+                            },
+                            onChapterTurn: { direction in
+                                guard chapter == renderedChapter else { return }
+                                turnChapter(direction, in: publication)
                             },
                             onLoaded: { guard chapter == renderedChapter else { return }; isLoadingChapter = false },
                             onError: { guard chapter == renderedChapter else { return }; loadError = $0; isLoadingChapter = false },
@@ -69,10 +66,10 @@ struct EPUBBookReader: View {
                             },
                             navigationRequestID: navigationRequestID,
                             viewportSize: geometry.size,
-                            isChromeVisible: isChromeVisible,
                             onContentTap: onContentTap,
                             onNavigationState: { page, pages, fraction in
                                 guard chapter == renderedChapter else { return }
+                                chapterProgress = fraction
                                 currentPage = page
                                 currentPageCount = pages
                                 if page != nil {
@@ -81,10 +78,10 @@ struct EPUBBookReader: View {
                                 }
                                 let value = EPUBPublication.progress(chapter: chapter, fraction: fraction, chapterCount: publication.chapters.count)
                                 onNavigationStateChanged(navigationState(publication: publication, progress: value,
-                                    page: pageLayout == .scroll ? nil : page,
-                                    pages: pageLayout == .scroll ? nil : pages))
+                                    page: page, pages: pages))
                             }
                         )
+                        .frame(width: geometry.size.width, height: geometry.size.height)
                         .id(EPUBSourceRequest(url: url, reloadID: reloadID))
                         if isLoadingChapter {
                             VStack(spacing: 12) {
@@ -133,6 +130,7 @@ struct EPUBBookReader: View {
                         navigate(to: index, in: publication, fragment: fragment)
                     }
                 )
+                .environment(\.readerPageSource, nil)
             }
         }
         .task(id: EPUBSourceRequest(url: url, reloadID: reloadID)) {
@@ -174,16 +172,25 @@ struct EPUBBookReader: View {
             // Keep the last measured page state until WebKit publishes reflowed
             // metrics; hiding controls must not replace page status with percent.
             onNavigationStateChanged(navigationState(publication: publication, progress: progress,
-                page: pageLayout == .scroll ? nil : currentPage, pages: currentPageCount))
+                page: currentPage, pages: currentPageCount))
         }
     }
 
-    private func navigate(to index: Int, in publication: EPUBPublication, fragment: String? = nil) {
+    private func turnChapter(_ direction: Int, in publication: EPUBPublication) {
+        navigate(to: chapter + direction, in: publication, startingAt: direction < 0 ? 1 : 0)
+    }
+
+    private func navigate(to index: Int, in publication: EPUBPublication, fragment: String? = nil, startingAt fraction: Double = 0) {
         guard publication.chapters.indices.contains(index) else { return }
         let changesChapter = index != chapter
         guard changesChapter || fragment != nil else { return }
         chapter = index
-        if changesChapter { chapterProgress = 0; currentPage = nil; currentPageCount = nil; pendingPageTurn = nil }
+        if changesChapter {
+            chapterProgress = fraction
+            currentPage = nil
+            currentPageCount = nil
+            pendingPageTurn = nil
+        }
         targetFragment = fragment
         navigationRequestID = UUID()
         selectedText = ""
@@ -195,30 +202,19 @@ struct EPUBBookReader: View {
         guard let request, request.id != lastConsumedRequestID, let publication else { return }
         lastConsumedRequestID = request.id
         switch request.command {
-        case .previous:
+        case .previous, .next:
+            let direction = request.command == .next ? 1 : -1
+            guard let page = pendingPageTurn ?? currentPage, let count = currentPageCount else { return }
+            let first = pageLayout == .scroll ? 0 : 1
             let stride = ReaderLayoutMetrics.resolve(viewport: viewportSize, pageLayout: pageLayout, font: font, fontSize: fontSize).effectiveColumnCount
-            let firstPage = pageLayout == .scroll ? 0 : 1
-            if let count = currentPageCount, let page = effectivePage(count: count), page > firstPage {
-                let destination = max(page - (pageLayout == .scroll ? 1 : stride), firstPage)
+            let destination = page + direction * stride
+            if (first..<(first + count)).contains(destination) {
                 pendingPageTurn = destination
-                chapterProgress = Double(max(destination - firstPage, 0)) / Double(max(count - 1, 1)); navigationRequestID = UUID()
-            } else if currentPage != nil || currentPageCount != nil {
-                navigate(to: chapter - 1, in: publication)
-            } else if chapterProgress > 0.002 { navigationRequestID = UUID(); chapterProgress = max(0, chapterProgress - 0.08) }
-            else { navigate(to: chapter - 1, in: publication) }
-        case .next:
-            let stride = ReaderLayoutMetrics.resolve(viewport: viewportSize, pageLayout: pageLayout, font: font, fontSize: fontSize).effectiveColumnCount
-            let increment = pageLayout == .scroll ? 1 : stride
-            let firstPage = pageLayout == .scroll ? 0 : 1
-            let current = currentPage ?? (currentPageCount.flatMap { effectivePage(count: $0) } ?? firstPage)
-            let destination = current + increment
-            if currentPageCount != nil, let count = currentPageCount, destination < count + (pageLayout == .scroll ? 0 : 1) {
-                pendingPageTurn = destination
-                chapterProgress = Double(max(destination - (pageLayout == .scroll ? 0 : 1), 0)) / Double(max(count - 1, 1)); navigationRequestID = UUID()
-            } else if currentPage != nil || currentPageCount != nil {
-                navigate(to: chapter + 1, in: publication)
-            } else if chapterProgress < 0.998 { navigationRequestID = UUID(); chapterProgress = min(1, chapterProgress + 0.08) }
-            else { navigate(to: chapter + 1, in: publication) }
+                chapterProgress = Double(destination - first) / Double(max(count - 1, 1))
+                navigationRequestID = UUID()
+            } else {
+                turnChapter(direction, in: publication)
+            }
         case .previousChapter: navigate(to: chapter - 1, in: publication)
         case .nextChapter: navigate(to: chapter + 1, in: publication)
         case .chapter(let index): navigate(to: index, in: publication)
@@ -234,27 +230,22 @@ struct EPUBBookReader: View {
     private func navigationState(publication: EPUBPublication?, progress: Double, page: Int?, pages: Int?) -> ReaderNavigationState {
         let titles = publication?.chapters.map(\.title) ?? []
         let global = min(max(progress, 0), 1)
-        return ReaderNavigationState(progress: global,
-            pageRange: page.map { index in
-                let spreadSize = ReaderLayoutMetrics.resolve(viewport: viewportSize, pageLayout: pageLayout, font: font, fontSize: fontSize).effectiveColumnCount
-                let first = min(index, pages ?? index)
-                return first...max(first, min(index + spreadSize - 1, pages ?? index))
-            },
-            pageCount: pages, chapterIndex: publication == nil ? nil : chapter,
-            chapterCount: publication?.chapters.count, chapterTitles: titles,
-            canNavigatePrevious: (publication.map { _ in chapter > 0 } ?? false) || global > 0,
-            canNavigateNext: (publication.map { chapter < $0.chapters.count - 1 } ?? false) || global < 1)
-    }
-
-    private func effectivePage(count: Int) -> Int? {
-        guard count > 0 else { return nil }
-        if let pendingPageTurn { return min(max(pendingPageTurn, 0), count - 1) }
-        if let currentPage { return min(max(currentPage, 0), count - 1) }
+        let stride = ReaderLayoutMetrics.resolve(viewport: viewportSize, pageLayout: pageLayout, font: font, fontSize: fontSize).effectiveColumnCount
         let first = pageLayout == .scroll ? 0 : 1
-        let estimate = Int((chapterProgress * Double(max(count - 1, 1))).rounded(.down)) + first
-        return min(max(estimate, first), count - 1)
+        let visiblePages: ClosedRange<Int>? = if pageLayout != .scroll, let page, let pages {
+            page...max(page, min(page + stride - 1, pages))
+        } else {
+            nil
+        }
+        let chapterCount = publication?.chapters.count ?? 0
+        let ready = page != nil && pages != nil
+        return ReaderNavigationState(progress: global,
+            pageRange: visiblePages, pageCount: pageLayout == .scroll ? nil : pages,
+            chapterIndex: publication == nil ? nil : chapter, chapterCount: publication?.chapters.count,
+            chapterTitles: titles,
+            canNavigatePrevious: ready && (chapter > 0 || (page ?? first) > first),
+            canNavigateNext: ready && (chapter + 1 < chapterCount || (page ?? first) + stride < first + (pages ?? 0)))
     }
-
 }
 
 private struct EPUBSourceRequest: Hashable {
@@ -305,7 +296,7 @@ private struct EPUBNoteSheet: View {
                     EPUBWebView(
                     publication: notePublication, chapter: publication.chapters.count, initialProgress: 0,
                     pageLayout: pageLayout, font: font, fontSize: fontSize, palette: palette,
-                    onProgress: { _ in }, onSelection: { _ in },
+                    onSelection: { _ in },
                     onNavigate: { index, fragment in
                         guard publication.chapters.indices.contains(index) else { return }
                         dismiss()
@@ -341,6 +332,7 @@ private struct EPUBNoteSheet: View {
 }
 
 struct EPUBWebView: UIViewRepresentable {
+    @Environment(\.readerPageSource) private var pageSource
     let publication: EPUBPublication
     let chapter: Int
     let initialProgress: Double
@@ -348,22 +340,21 @@ struct EPUBWebView: UIViewRepresentable {
     let font: ReaderFont
     let fontSize: CGFloat
     let palette: ReaderPalette
-    let onProgress: (Double) -> Void
     let onSelection: (String) -> Void
     let onNavigate: (Int, String?) -> Void
+    var onChapterTurn: (Int) -> Void = { _ in }
     let onLoaded: () -> Void
     let onError: (String) -> Void
     var targetFragment: String? = nil
     var onOpenNote: ((String, String?) -> Void)? = nil
     var navigationRequestID: UUID? = nil
     var viewportSize: CGSize = .zero
-    var isChromeVisible = true
     var onContentTap: () -> Void = {}
     var onNavigationState: (Int?, Int?, Double) -> Void = { _, _, _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
-    func makeUIView(context: Context) -> WKWebView {
+    func makeUIView(context: Context) -> UIView {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         configuration.websiteDataStore = .nonPersistent()
@@ -378,21 +369,44 @@ struct EPUBWebView: UIViewRepresentable {
         view.isOpaque = false
         view.scrollView.contentInsetAdjustmentBehavior = .never
         view.scrollView.decelerationRate = .fast
-        view.scrollView.panGestureRecognizer.addTarget(context.coordinator, action: #selector(Coordinator.handleReaderPan(_:)))
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleReaderPan(_:)))
+        pan.maximumNumberOfTouches = 1
+        pan.cancelsTouchesInView = false
+        pan.delegate = context.coordinator
+        view.addGestureRecognizer(pan)
+        // SwiftUI can extend a native scrolling view under system bars. Keep both
+        // WebKit's viewport and its touch surface inside the allocated reading area.
+        let container = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(view)
+        let area = container.safeAreaLayoutGuide
+        NSLayoutConstraint.activate([
+            view.leadingAnchor.constraint(equalTo: area.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: area.trailingAnchor),
+            view.topAnchor.constraint(equalTo: area.topAnchor),
+            view.bottomAnchor.constraint(equalTo: area.bottomAnchor)
+        ])
         context.coordinator.view = view
-        updateUIView(view, context: context)
-        return view
+        updateUIView(container, context: context)
+        return container
     }
 
-    func updateUIView(_ view: WKWebView, context: Context) {
+    func updateUIView(_ container: UIView, context: Context) {
+        guard let view = context.coordinator.view else { return }
         context.coordinator.parent = self
         view.backgroundColor = palette.background
         view.scrollView.backgroundColor = palette.background
-        view.scrollView.isPagingEnabled = pageLayout != .scroll
+        let paged = pageLayout != .scroll
+        view.scrollView.bouncesVertically = !paged
+        view.scrollView.isDirectionalLockEnabled = paged
+        if view.scrollView.isPagingEnabled != paged { view.scrollView.isPagingEnabled = paged }
         let path = publication.chapters[chapter].path
+        pageSource?.useHTML(view, chapter: chapter, publication: publication) { [weak coordinator = context.coordinator] in
+            coordinator?.isReady == true && coordinator?.loadedPath == publication.chapters[chapter].path
+        }
         if context.coordinator.loadedPath != path {
             context.coordinator.loadedPath = path
-            context.coordinator.isReady = false
+            context.coordinator.beginChapter(in: view)
             context.coordinator.restoreFraction = initialProgress
             context.coordinator.lastNavigationRequestID = navigationRequestID
             var components = URLComponents()
@@ -410,13 +424,14 @@ struct EPUBWebView: UIViewRepresentable {
         }
     }
 
-    static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
+    static func dismantleUIView(_ container: UIView, coordinator: Coordinator) {
+        guard let view = coordinator.view else { return }
         view.stopLoading()
         view.configuration.userContentController.removeScriptMessageHandler(forName: "reader", contentWorld: .defaultClient)
         view.navigationDelegate = nil
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, UIGestureRecognizerDelegate {
         var parent: EPUBWebView
         weak var view: WKWebView?
         var loadedPath: String?
@@ -429,51 +444,82 @@ struct EPUBWebView: UIViewRepresentable {
         private var pendingLoadNotification = false
         private var timeoutTask: Task<Void, Never>?
         private var initialLoadFallbackTask: Task<Void, Never>?
-        private var chapterBoundaryTask: Task<Void, Never>?
-        private var panStartOffset: CGFloat?
+        private var panStartOffset: CGPoint?
+        private var hasSelection = false
+        private var pendingSwipe: Int?
+
+        func beginChapter(in view: WKWebView) {
+            isReady = false
+            pendingLoadNotification = true
+            pendingSwipe = nil
+            panStartOffset = nil
+            hasSelection = false
+            view.scrollView.isScrollEnabled = false
+        }
+
+        private var canScrollChapter: Bool { isReady && !pendingLoadNotification }
 
         init(parent: EPUBWebView) { self.parent = parent }
 
+        // WebKit may decline its own scroll gesture on a cover that fits on one screen.
+        // Sample the offset on touch-down, before either recognizer moves the page.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let view, !hasSelection, view.scrollView.zoomScale <= 1.01 else { return false }
+            panStartOffset = canScrollChapter ? view.scrollView.contentOffset : nil
+            return true
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
+        }
+
         @objc func handleReaderPan(_ gesture: UIPanGestureRecognizer) {
-            guard parent.pageLayout != .scroll, let scrollView = view?.scrollView else { return }
+            guard let view, !hasSelection else { panStartOffset = nil; return }
+            let scroll = view.scrollView
             switch gesture.state {
-            case .began:
-                chapterBoundaryTask?.cancel()
-                panStartOffset = scrollView.contentOffset.x
-            case .ended, .cancelled, .failed:
-                let translation = gesture.translation(in: scrollView).x
-                let velocity = gesture.velocity(in: scrollView).x
-                let direction = abs(translation) > 24 ? (translation < 0 ? 1 : -1) : (velocity < 0 ? 1 : -1)
-                let startOffset = panStartOffset ?? scrollView.contentOffset.x
+            case .ended:
+                let start = panStartOffset
                 panStartOffset = nil
-                guard direction != 0 else { return }
-                chapterBoundaryTask?.cancel()
-                chapterBoundaryTask = Task { @MainActor [weak self, weak scrollView] in
-                    guard let self, let scrollView else { return }
-                    var waitCount = 0
-                    while scrollView.isDecelerating && waitCount < 30 && !Task.isCancelled {
-                        try? await Task.sleep(for: .milliseconds(50))
-                        waitCount += 1
-                    }
-                    guard !Task.isCancelled else { return }
-                    let pageWidth = max(scrollView.bounds.width, 1)
-                    let maximumOffset = max(scrollView.contentSize.width - pageWidth, 0)
-                    let finalOffset = scrollView.contentOffset.x
-                    let atBoundary = direction > 0
-                        ? startOffset >= maximumOffset - 2 && finalOffset >= maximumOffset - 2
-                        : startOffset <= 2 && finalOffset <= 2
-                    guard atBoundary else { return }
-                    self.parent.onNavigate(self.parent.chapter + direction, nil)
+                let delta = gesture.translation(in: view)
+                let velocity = gesture.velocity(in: view)
+                let horizontal = abs(delta.x) > abs(delta.y) * 1.25
+                let vertical = abs(delta.y) > abs(delta.x) * 1.25
+                let scrolling = parent.pageLayout == .scroll
+                guard horizontal || (scrolling && vertical) else { return }
+                let travel = horizontal ? delta.x : delta.y
+                let speed = horizontal ? velocity.x : velocity.y
+                guard abs(travel) >= 32 || (abs(travel) >= 12 && abs(speed) >= 450 && travel * speed > 0) else { return }
+                let direction = travel < 0 ? 1 : -1
+                guard canScrollChapter else {
+                    pendingSwipe = direction
+                    return
                 }
+                finishSwipe(direction, start: start ?? scroll.contentOffset, moveWithinChapter: start == nil || (scrolling && horizontal))
+            case .cancelled, .failed:
+                panStartOffset = nil
             default:
                 break
+            }
+        }
+
+        private func finishSwipe(_ direction: Int, start: CGPoint, moveWithinChapter: Bool) {
+            guard let scroll = view?.scrollView else { return }
+            let vertical = parent.pageLayout == .scroll
+            let offset = vertical ? start.y : start.x
+            let length = vertical ? scroll.bounds.height : scroll.bounds.width
+            let extent = max(0, (vertical ? scroll.contentSize.height : scroll.contentSize.width) - length)
+            if direction > 0 ? offset >= extent - 2 : offset <= 2 {
+                parent.onChapterTurn(direction)
+            } else if moveWithinChapter {
+                let target = min(max(offset + CGFloat(direction) * length, 0), extent)
+                scroll.setContentOffset(vertical ? CGPoint(x: 0, y: target) : CGPoint(x: target, y: 0),
+                                        animated: !UIAccessibility.isReduceMotionEnabled)
             }
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             activeNavigation = navigation
             let expectedPath = loadedPath
-            pendingLoadNotification = false
             timeoutTask?.cancel()
             timeoutTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(20))
@@ -530,8 +576,7 @@ struct EPUBWebView: UIViewRepresentable {
             html body h1 { font-size:1.7em!important; } html body h2 { font-size:1.45em!important; } html body h3 { font-size:1.25em!important; } html body h4, html body h5, html body h6 { font-size:1.1em!important; }
             img, svg, video, canvas, table { max-width:100%!important; height:auto; object-fit:contain; } pre, code { white-space:pre-wrap!important; overflow-wrap:anywhere!important; } a { text-decoration:underline; }
             [style*="width"], [width] { max-width:100%!important; }
-            :root { --cloudreader-chrome-visible:\(parent.isChromeVisible ? 1 : 0); }
-            \(paged ? "html { height:100%!important; overflow-x:auto!important; overflow-y:hidden!important; } body { height:100vh!important; width:\(max(parent.viewportSize.width, 1))px!important; padding:0!important; overflow:visible!important; column-count:auto!important; column-width:\(columnWidth)px!important; column-gap:\(metrics.gutter)px!important; column-fill:auto!important; break-inside:auto; } html body > :not(img):not(svg):not(video):not(canvas) { margin-inline:\(metrics.horizontalMargin)px!important; }" : "body { width:auto!important; max-width:\(metrics.maximumProseWidth + metrics.horizontalMargin * 2)px!important; margin:0 auto!important; }")
+            \(paged ? "html { height:100%!important; overflow-x:auto!important; overflow-y:hidden!important; overscroll-behavior-y:none!important; touch-action:pan-x pinch-zoom!important; } body { height:100vh!important; width:\(max(parent.viewportSize.width, 1))px!important; padding:0!important; overflow:visible!important; column-count:auto!important; column-width:\(columnWidth)px!important; column-gap:\(metrics.gutter)px!important; column-fill:auto!important; break-inside:auto; } img, svg, video, canvas { max-height:100vh!important; } html body > :not(img):not(svg):not(video):not(canvas) { margin-inline:\(metrics.horizontalMargin)px!important; }" : "body { width:auto!important; max-width:\(metrics.maximumProseWidth + metrics.horizontalMargin * 2)px!important; margin:0 auto!important; }")
             """
             let key = "\(css)|height:\(parent.viewportSize.height)"
             guard appearanceKey != key || fraction != nil else { return }
@@ -539,13 +584,13 @@ struct EPUBWebView: UIViewRepresentable {
             let arguments: [String: Any] = [
                 "css": css, "paged": paged,
                 "fraction": fraction as Any? ?? NSNull(),
-                "fragment": fragment as Any? ?? NSNull(), "chromeVisible": parent.isChromeVisible,
+                "fragment": fragment as Any? ?? NSNull(),
                 "viewportWidth": max(parent.viewportSize.width, 1), "columns": columns, "gutter": metrics.gutter
             ]
             let expectedPath = loadedPath
             let identifier = UUID()
             configurationID = identifier
-            view.callAsyncJavaScript("return await window.cloudReader.configure(css, paged, fraction, fragment, chromeVisible, viewportWidth, columns, gutter);", arguments: arguments, in: nil, in: .defaultClient, completionHandler: { [weak self] result in
+            view.callAsyncJavaScript("return await window.cloudReader.configure(css, paged, fraction, fragment, viewportWidth, columns, gutter);", arguments: arguments, in: nil, in: .defaultClient, completionHandler: { [weak self] result in
                 guard let self, self.isReady, self.loadedPath == expectedPath, self.configurationID == identifier else { return }
                 switch result {
                 case .success:
@@ -558,7 +603,6 @@ struct EPUBWebView: UIViewRepresentable {
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard isReady, message.frameInfo.isMainFrame, let payload = message.body as? [String: Any] else { return }
-            if let fraction = payload["progress"] as? Double, fraction.isFinite { parent.onProgress(min(max(fraction, 0), 1)) }
             if payload["kind"] as? String == "location" {
                 // Release the chapter overlay before publishing the first
                 // visible page state. The shell can expose page controls as
@@ -568,10 +612,13 @@ struct EPUBWebView: UIViewRepresentable {
                 finishInitialLoadIfNeeded()
                 parent.onNavigationState(payload["page"] as? Int, payload["pages"] as? Int, (payload["progress"] as? Double) ?? 0)
             }
-            if payload["kind"] as? String == "boundary", let direction = payload["direction"] as? Int {
-                parent.onNavigate(parent.chapter + (direction > 0 ? 1 : -1), nil)
+            if let selection = payload["selection"] as? String {
+                if let rect = payload["rect"] as? [CGFloat], rect.count == 4, let view {
+                    parent.pageSource?.selectionRect = view.convert(CGRect(x: rect[0], y: rect[1], width: rect[2], height: rect[3]), to: nil)
+                }
+                hasSelection = !selection.isEmpty
+                parent.onSelection(String(selection.prefix(18_000)))
             }
-            if let selection = payload["selection"] as? String { parent.onSelection(String(selection.prefix(18_000))) }
             if payload["kind"] as? String == "tap" { parent.onContentTap() }
         }
 
@@ -580,7 +627,12 @@ struct EPUBWebView: UIViewRepresentable {
             pendingLoadNotification = false
             initialLoadFallbackTask?.cancel()
             initialLoadFallbackTask = nil
+            view?.scrollView.isScrollEnabled = true
             parent.onLoaded()
+            if let direction = pendingSwipe, let scroll = view?.scrollView {
+                pendingSwipe = nil
+                finishSwipe(direction, start: scroll.contentOffset, moveWithinChapter: true)
+            }
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -633,7 +685,6 @@ struct EPUBWebView: UIViewRepresentable {
         deinit {
             timeoutTask?.cancel()
             initialLoadFallbackTask?.cancel()
-            chapterBoundaryTask?.cancel()
         }
     }
 
@@ -647,7 +698,7 @@ struct EPUBWebView: UIViewRepresentable {
 
     private static let readerScript = """
     (() => {
-      let paged = false, restoring = true, configured = false, timer, previous = 0, pageWidth = 1, pageGap = 0, pagesPerView = 1, suppressScrollUntil = 0, cachedPageCount = null;
+      let paged = false, restoring = true, timer, pageWidth = 1, pageGap = 0, pagesPerView = 1, cachedPageCount = null;
       let desired = null, restoreVersion = 0, passage = null;
       const waiters = [];
       let pointerStart = null;
@@ -705,9 +756,7 @@ struct EPUBWebView: UIViewRepresentable {
         desired = request;
         // Keep the desired position even when the first, zero-sized viewport
         // has no scrollable extent. A later resize must not replace it with 0.
-        previous = request.fraction;
         restoring = true;
-        suppressScrollUntil = Date.now() + 180;
         clearTimeout(timer);
         let lastMetrics = '', stableFrames = 0, attempts = 0;
         const step = () => {
@@ -723,11 +772,13 @@ struct EPUBWebView: UIViewRepresentable {
           }
           else restore(request.fraction);
           const e = root(), metrics = [innerWidth, innerHeight, e.scrollWidth, e.scrollHeight].join('|');
-          const reachedTarget = anchor || passageRange || distance() <= 1 || Math.abs(position() - request.fraction) < 0.005;
+          // Page snapping can only reach a viewport boundary or the final content offset.
+          const extent = distance();
+          const target = paged ? Math.min(extent, Math.round(request.fraction * extent / pageWidth) * pageWidth) : request.fraction * extent;
+          const reachedTarget = anchor || passageRange || Math.abs((paged ? scrollX : scrollY) - target) <= 1;
           stableFrames = metrics === lastMetrics && reachedTarget ? stableFrames + 1 : 0;
           lastMetrics = metrics;
           if ((innerWidth > 0 && innerHeight > 0 && stableFrames >= 3) || ++attempts >= 90) {
-            previous = anchor || passageRange ? position() : request.fraction;
             desired = null;
             restoring = false;
             report();
@@ -737,10 +788,10 @@ struct EPUBWebView: UIViewRepresentable {
         requestAnimationFrame(() => requestAnimationFrame(step));
       };
       const report = () => {
-        const e = root(), extent = distance(), progress = position();
-        let page = paged ? Math.max(1, Math.floor(scrollX / Math.max(pageWidth, 1)) * pagesPerView + 1) : Math.max(0, Math.floor(scrollY / Math.max(innerHeight, 1)));
+        const e = root(), progress = position();
         if (cachedPageCount === null) {
-          if (!paged) cachedPageCount = Math.max(1, Math.ceil((e.scrollHeight + 1) / Math.max(innerHeight, 1)));
+          if (!paged) cachedPageCount = Math.max(1, Math.ceil(e.scrollHeight / Math.max(innerHeight, 1)));
+          else if (pagesPerView === 1) cachedPageCount = Math.max(1, Math.ceil((e.scrollWidth - 1) / pageWidth));
           else {
             const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
             let lastRect = null;
@@ -762,11 +813,18 @@ struct EPUBWebView: UIViewRepresentable {
           }
         }
         const pages = cachedPageCount;
-        if (paged) page = Math.min(page, Math.floor((pages - 1) / pagesPerView) * pagesPerView + 1);
-        else page = Math.min(page, pages - 1);
+        const page = paged
+          ? Math.min(Math.floor((pages - 1) / pagesPerView), Math.max(0, Math.round(scrollX / pageWidth))) * pagesPerView + 1
+          : Math.round(progress * (pages - 1));
         webkit.messageHandlers.reader.postMessage({kind:'location', progress, page, pages});
       };
-      window.cloudReader = { configure(css, horizontal, fraction, fragment, chromeVisible, measuredWidth, columnCount, measuredGap) {
+      const collectPageText = \(ReaderPageSource.htmlPageFunction);
+      const pageContext = () => {
+        const offset = paged ? scrollX : scrollY;
+        return collectPageText(paged, (pageWidth + pageGap) / pagesPerView, paged ? pagesPerView : 1,
+          offset <= 1, offset >= distance() - 1);
+      };
+      window.cloudReader = { pageContext, configure(css, horizontal, fraction, fragment, measuredWidth, columnCount, measuredGap) {
         const target = fraction === null ? (desired ? desired.fraction : position()) : fraction;
         const keepPassage = fraction === null && fragment === null ? capturePassage() : null;
         paged = horizontal;
@@ -785,28 +843,32 @@ struct EPUBWebView: UIViewRepresentable {
           (document.head || document.documentElement).appendChild(style);
         }
         style.textContent = css;
-        configured = true;
         const ready = new Promise(resolve => waiters.push(resolve));
         requestRestore(target, fragment, keepPassage);
         return ready;
       }};
       addEventListener('scroll', () => {
-        if (restoring || Date.now() < suppressScrollUntil) return;
-        previous = position();
+        if (restoring) return;
         clearTimeout(timer);
-        timer = setTimeout(() => { if (!restoring) { webkit.messageHandlers.reader.postMessage({progress:position()}); report(); } }, 100);
+        timer = setTimeout(() => { if (!restoring) report(); }, 100);
       }, {passive:true});
-      document.addEventListener('selectionchange', () => webkit.messageHandlers.reader.postMessage({selection:String(getSelection())}));
+      document.addEventListener('selectionchange', () => {
+        const selection = getSelection();
+        const r = selection.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : null;
+        webkit.messageHandlers.reader.postMessage({selection:String(selection), rect:r ? [r.x,r.y,r.width,r.height] : []});
+      });
       document.addEventListener('pointerup', event => {
-        if (pointerStart && (Math.abs(event.clientX - pointerStart.x) > 8 || Math.abs(event.clientY - pointerStart.y) > 8)) { pointerStart = null; return; }
+        const start = pointerStart;
         pointerStart = null;
+        if (!start || event.pointerId !== start.id || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10) return;
         if (String(getSelection()).trim()) return;
         const target = event.target;
         if (target && target.closest && target.closest('a,button,input,select,textarea,video,audio,[contenteditable=true]')) return;
         webkit.messageHandlers.reader.postMessage({kind:'tap'});
       }, {passive:true});
+      document.addEventListener('pointercancel', () => { pointerStart = null; }, {passive:true});
       document.addEventListener('pointerdown', event => {
-        pointerStart = {x:event.clientX, y:event.clientY};
+        pointerStart = event.isPrimary ? {id:event.pointerId, x:event.clientX, y:event.clientY} : null;
       }, {passive:true});
     })();
     """

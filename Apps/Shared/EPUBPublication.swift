@@ -11,6 +11,7 @@ struct EPUBPublication: Codable, Sendable {
     let title: String?
     let chapters: [EPUBChapter]
     var mediaTypes: [String: String] = [:]
+    var briefDescription: String? = nil
 
     func url(for chapter: Int) -> URL {
         rootURL.appendingPathComponent(chapters[chapter].path)
@@ -56,7 +57,7 @@ actor EPUBLoader {
         // URL resource values can remain cached on the same URL instance after a sync
         // replaces its file. Read fresh attributes so a replaced book is never stale.
         let values = try fileManager.attributesOfItem(atPath: url.path)
-        let fingerprint = "v3-\(values[.size] as? UInt64 ?? 0)-\((values[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)"
+        let fingerprint = "v4-\(values[.size] as? UInt64 ?? 0)-\((values[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)"
         let cache = try fileManager.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("EPUB", isDirectory: true).appendingPathComponent(bookID.uuidString, isDirectory: true)
         let marker = cache.appendingPathComponent("publication.json")
@@ -68,7 +69,7 @@ actor EPUBLoader {
                guard resource.path.hasPrefix(cache.path + "/") else { return false }
                return fileManager.fileExists(atPath: resource.path)
            }) {
-            return EPUBPublication(rootURL: cache, title: saved.title, chapters: saved.chapters, mediaTypes: saved.mediaTypes)
+            return EPUBPublication(rootURL: cache, title: saved.title, chapters: saved.chapters, mediaTypes: saved.mediaTypes, briefDescription: saved.briefDescription)
         }
 
         let staging = cache.deletingLastPathComponent().appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -96,10 +97,7 @@ actor EPUBLoader {
         }
 
         let container = try Self.xml(at: staging.appendingPathComponent("META-INF/container.xml"))
-        let rootfiles = container.descendants(named: "rootfile")
-        guard let packagePath = (rootfiles.first(where: { $0.attributes["media-type"] == "application/oebps-package+xml" }) ?? rootfiles.first)?.attributes["full-path"] else {
-            throw EPUBError.invalidBook
-        }
+        let packagePath = try Self.packagePath(in: container)
         let packageURL = try Self.resolve(packagePath, relativeTo: staging, root: staging)
         let package = try Self.xml(at: packageURL)
         if let encryption = try? Self.xml(at: staging.appendingPathComponent("META-INF/encryption.xml")) {
@@ -156,13 +154,18 @@ actor EPUBLoader {
             chapters.append(EPUBChapter(path: path, title: label?.isEmpty == false ? label! : "Chapter \(chapters.count + 1)"))
         }
         guard !chapters.isEmpty else { throw EPUBError.noChapters }
-        let title = package.descendants(named: "metadata").first?.children.first(where: { $0.name == "title" })?.allText
-        let saved = CachedPublication(fingerprint: fingerprint, title: title, chapters: chapters, mediaTypes: mediaTypes)
+        let metadata = package.descendants(named: "metadata").first?.children
+        let title = metadata?.first(where: { $0.name == "title" })?.allText
+        let description = metadata?.first(where: { $0.name == "description" })?.allText
+            .replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let brief = description.flatMap { $0.isEmpty ? nil : String($0.prefix(800)) }
+        let saved = CachedPublication(fingerprint: fingerprint, title: title, chapters: chapters, mediaTypes: mediaTypes, briefDescription: brief)
         try JSONEncoder().encode(saved).write(to: staging.appendingPathComponent("publication.json"), options: .atomic)
         try Task.checkCancellation()
         if fileManager.fileExists(atPath: cache.path) { try fileManager.removeItem(at: cache) }
         try fileManager.moveItem(at: staging, to: cache)
-        return EPUBPublication(rootURL: cache, title: title, chapters: chapters, mediaTypes: mediaTypes)
+        return EPUBPublication(rootURL: cache, title: title, chapters: chapters, mediaTypes: mediaTypes, briefDescription: brief)
     }
 
     static func resolve(_ href: String, relativeTo base: URL, root: URL) throws -> URL {
@@ -173,10 +176,21 @@ actor EPUBLoader {
         return url
     }
 
+    private static func packagePath(in container: EPUBXMLNode) throws -> String {
+        let rootfiles = container.descendants(named: "rootfile")
+        guard let path = (rootfiles.first { $0.attributes["media-type"] == "application/oebps-package+xml" } ?? rootfiles.first)?.attributes["full-path"] else {
+            throw EPUBError.invalidBook
+        }
+        return path
+    }
+
     private static func xml(at url: URL) throws -> EPUBXMLNode {
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        try xml(data: Data(contentsOf: url, options: .mappedIfSafe))
+    }
+
+    private static func xml(data: Data, captureInlineSVG: Bool = false) throws -> EPUBXMLNode {
         guard data.count <= 4 * 1_024 * 1_024 else { throw EPUBError.tooLarge }
-        let delegate = EPUBXMLParser()
+        let delegate = EPUBXMLParser(captureInlineSVG: captureInlineSVG)
         let parser = XMLParser(data: data)
         parser.shouldResolveExternalEntities = false
         parser.delegate = delegate
@@ -189,6 +203,104 @@ actor EPUBLoader {
         let title: String?
         let chapters: [EPUBChapter]
         let mediaTypes: [String: String]
+        let briefDescription: String?
+    }
+}
+
+extension EPUBLoader {
+    /// Reads the container, package and selected cover resources directly from the ZIP.
+    /// Library thumbnails do not need the reader's unpacked chapter cache.
+    static func coverData(at url: URL) throws -> Data? {
+        let archive = try Archive(url: url, accessMode: .read)
+        // All resolved paths are keys into the archive. No URL here is opened.
+        let root = URL(fileURLWithPath: "/EPUB", isDirectory: true)
+        let xmlLimit = 4 * 1_024 * 1_024
+        func read(_ resource: URL, limit: Int) throws -> Data? {
+            let path = String(resource.path.dropFirst(root.path.count + 1))
+            let match = try archive.enumerated().first { index, entry in
+                try Task.checkCancellation()
+                guard index < 25_000 else { throw EPUBError.tooLarge }
+                return entry.path == path && entry.type == .file
+            }
+            guard let entry = match?.element, entry.uncompressedSize > 0, entry.uncompressedSize <= UInt64(limit) else { return nil }
+            var bytes = Data()
+            let checksum = try archive.extract(entry) { chunk in
+                try Task.checkCancellation()
+                guard chunk.count <= limit - bytes.count else { throw EPUBError.tooLarge }
+                bytes.append(chunk)
+            }
+            guard checksum == entry.checksum else { throw EPUBError.invalidBook }
+            return bytes
+        }
+
+        guard let container = try read(root.appendingPathComponent("META-INF/container.xml"), limit: xmlLimit) else {
+            throw EPUBError.invalidBook
+        }
+        let packageURL = try resolve(packagePath(in: xml(data: container)), relativeTo: root, root: root)
+        guard let packageData = try read(packageURL, limit: xmlLimit) else { throw EPUBError.invalidBook }
+        let package = try xml(data: packageData)
+        let items = package.children.first { $0.name == "manifest" }?.children ?? []
+        let base = packageURL.deletingLastPathComponent()
+
+        func artwork(at resource: URL, mediaType: String?, depth: Int = 0, imageOnlyPage: Bool = false) throws -> Data? {
+            let ext = resource.pathExtension.lowercased()
+            let isSVG = mediaType == "image/svg+xml" || ext == "svg"
+            let isPage = ["application/xhtml+xml", "text/html"].contains(mediaType ?? "") || ["htm", "xhtml", "html"].contains(ext)
+            if !isPage && !isSVG {
+                guard !imageOnlyPage || mediaType?.hasPrefix("image/") == true else { return nil }
+                return try read(resource, limit: 16 * 1_024 * 1_024)
+            }
+            guard depth <= 2, let data = try read(resource, limit: xmlLimit),
+                  let page = try? xml(data: data, captureInlineSVG: isPage) else { return nil }
+            let body = page.descendants(named: "body").first ?? page
+            if imageOnlyPage && isPage && body.hasTextOutsideSVG { return nil }
+            let htmlImage = body.descendants(named: "img").first
+            let drawing = page.name == "svg" ? page : body.descendants(named: "svg").first
+            if htmlImage == nil, let drawing {
+                // Keep the complete drawing (including title text, layers and transforms)
+                // when its image resources travel inside the SVG itself.
+                let references = drawing.descendants(named: "image") + drawing.descendants(named: "use")
+                if references.allSatisfy({ element in
+                    guard let href = element.attributes["href"] ?? element.attributes["xlink:href"] else { return true }
+                    return href.hasPrefix("data:image/") || href.hasPrefix("#")
+                }) {
+                    return drawing === page ? data : drawing.inlineSVG
+                }
+            }
+            guard let image = htmlImage ?? drawing?.descendants(named: "image").first ?? body.descendants(named: "object").first else { return nil }
+            guard let href = image.attributes["src"] ?? image.attributes["href"] ?? image.attributes["xlink:href"] ?? image.attributes["data"] else { return nil }
+            if href.hasPrefix("data:image/"), let comma = href.firstIndex(of: ","), href[..<comma].hasSuffix(";base64") {
+                return Data(base64Encoded: String(href[href.index(after: comma)...]), options: .ignoreUnknownCharacters)
+            }
+            guard let imageURL = try? resolve(href, relativeTo: resource.deletingLastPathComponent(), root: root) else { return nil }
+            return try artwork(at: imageURL, mediaType: nil, depth: depth + 1)
+        }
+
+        let declared = items.first { ($0.attributes["properties"] ?? "").split(whereSeparator: \.isWhitespace).contains("cover-image") }
+        let legacyID = package.children.first { $0.name == "metadata" }?.children.first {
+            $0.name == "meta" && $0.attributes["name"]?.lowercased() == "cover"
+        }?.attributes["content"]
+        let legacy = legacyID.flatMap { id in items.first { $0.attributes["id"] == id } }
+        let guide = package.children.first { $0.name == "guide" }?.children.first { $0.attributes["type"]?.lowercased() == "cover" }
+        let named = items.first { item in
+            let type = item.attributes["media-type"] ?? ""
+            guard type.hasPrefix("image/") || ["application/xhtml+xml", "text/html"].contains(type),
+                  let href = item.attributes["href"], let url = try? resolve(href, relativeTo: base, root: root) else { return false }
+            let names = [item.attributes["id"] ?? "", url.deletingPathExtension().lastPathComponent]
+            return names.contains { ["cover", "coverimage", "frontcover", "coverpage", "coverart"].contains($0.lowercased().filter(\.isLetter)) }
+        }
+        let firstID = package.children.first { $0.name == "spine" }?.children.first { $0.name == "itemref" }?.attributes["idref"]
+        let firstPage = firstID.flatMap { id in items.first { $0.attributes["id"] == id } }
+
+        var tried = Set<URL>()
+        for (candidate, imageOnlyPage) in [(declared, false), (legacy, false), (guide, false), (named, false), (firstPage, true)] {
+            guard let candidate, let href = candidate.attributes["href"], let resource = try? resolve(href, relativeTo: base, root: root),
+                  tried.insert(resource).inserted else { continue }
+            if let bytes = try artwork(at: resource, mediaType: candidate.attributes["media-type"], imageOnlyPage: imageOnlyPage) {
+                return bytes
+            }
+        }
+        return nil
     }
 }
 
@@ -197,7 +309,11 @@ private final class EPUBXMLNode {
     let attributes: [String: String]
     var text = ""
     var children: [EPUBXMLNode] = []
+    var inlineSVG: Data?
     var allText: String { ([text] + children.map(\.allText)).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines) }
+    var hasTextOutsideSVG: Bool {
+        name != "svg" && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || children.contains(where: \.hasTextOutsideSVG))
+    }
 
     init(name: String, attributes: [String: String]) {
         self.name = name.split(separator: ":").last.map(String.init) ?? name
@@ -212,15 +328,59 @@ private final class EPUBXMLNode {
 private final class EPUBXMLParser: NSObject, XMLParserDelegate {
     var root: EPUBXMLNode?
     private var stack: [EPUBXMLNode] = []
+    private var captureInlineSVG: Bool
+    private var svgRoot: EPUBXMLNode?
+    private var svgSource = ""
+
+    init(captureInlineSVG: Bool) { self.captureInlineSVG = captureInlineSVG }
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String]) {
         guard stack.count < 128 else { parser.abortParsing(); return }
         let node = EPUBXMLNode(name: elementName, attributes: attributeDict)
         if let parent = stack.last { parent.children.append(node) } else { root = node }
+        if captureInlineSVG && (svgRoot != nil || node.name == "svg") {
+            var attributes = attributeDict
+            if svgRoot == nil {
+                svgRoot = node
+                attributes["xmlns"] = attributeDict["xmlns"] ?? "http://www.w3.org/2000/svg"
+                for ancestor in stack.reversed() {
+                    for (key, value) in ancestor.attributes where key.hasPrefix("xmlns:") && attributes[key] == nil {
+                        attributes[key] = value
+                    }
+                }
+            }
+            svgSource += "<" + elementName
+            for (key, value) in attributes {
+                svgSource += " " + key + "=\"" + Self.escapedXML(value).replacingOccurrences(of: "\"", with: "&quot;") + "\""
+            }
+            svgSource += ">"
+        }
         stack.append(node)
     }
 
-    func parser(_ parser: XMLParser, foundCharacters string: String) { stack.last?.text += string }
-    func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) { stack.last?.text += String(decoding: CDATABlock, as: UTF8.self) }
-    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) { _ = stack.popLast() }
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        stack.last?.text += string
+        if svgRoot != nil { svgSource += Self.escapedXML(string) }
+    }
+    func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
+        self.parser(parser, foundCharacters: String(decoding: CDATABlock, as: UTF8.self))
+    }
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        let node = stack.popLast()
+        if let svgRoot {
+            svgSource += "</" + elementName + ">"
+            if node === svgRoot {
+                svgRoot.inlineSVG = Data(svgSource.utf8)
+                self.svgRoot = nil
+                captureInlineSVG = false
+                svgSource = ""
+            }
+        }
+    }
+
+    private static func escapedXML(_ string: String) -> String {
+        string.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
 }

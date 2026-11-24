@@ -160,7 +160,66 @@ private struct MacTextContentClickMonitor: NSViewRepresentable {
     }
 }
 
+/// LazyVStack only measures nearby paragraphs. Use those actual frames as the
+/// anchor, measuring missing neighbors on demand when a chat opens.
+@MainActor final class MacTextViewport {
+    var frames: [Int: CGRect] = [:]
+
+    func context(paragraphs: [String], width: CGFloat, height: CGFloat, font: NSFont) -> ReaderPageContext? {
+        guard width > 0, height > 0,
+              let anchor = frames.filter({ paragraphs.indices.contains($0.key) && $0.value.maxY > 0 && $0.value.minY < height })
+                .min(by: { $0.key < $1.key }) else { return nil }
+        var sections = [[String](), [String](), [String]()]
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = 5
+
+        func read(_ index: Int, startingAt top: CGFloat?, endingAt bottom: CGFloat?) -> CGRect {
+            let text = paragraphs[index]
+            let storage = NSTextStorage(string: text.isEmpty ? " " : text, attributes: [.font: font, .paragraphStyle: style])
+            let manager = NSLayoutManager()
+            let container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
+            container.lineFragmentPadding = 0
+            storage.addLayoutManager(manager)
+            manager.addTextContainer(container)
+            manager.ensureLayout(for: container)
+            let measuredHeight = max(1, manager.usedRect(for: container).height)
+            let frame = frames[index] ?? CGRect(x: 0, y: top ?? ((bottom ?? 0) - measuredHeight), width: width, height: measuredHeight)
+            guard !text.isEmpty, frame.height > 0 else { return frame }
+            // Scale the native line measurements to the displayed SwiftUI frame.
+            for bucket in 0..<3 {
+                let page = CGRect(x: frame.minX, y: CGFloat(bucket - 1) * height, width: frame.width, height: height)
+                let overlap = frame.intersection(page)
+                guard !overlap.isNull, overlap.height > 0 else { continue }
+                let scale = measuredHeight / frame.height
+                let region = CGRect(x: 0, y: (overlap.minY - frame.minY) * scale, width: width, height: overlap.height * scale)
+                let glyphs = manager.glyphRange(forBoundingRect: region, in: container)
+                let range = manager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+                let snippet = (text as NSString).substring(with: range)
+                if index < anchor.key { sections[bucket].insert(snippet, at: 0) }
+                else { sections[bucket].append(snippet) }
+            }
+            return frame
+        }
+
+        var top = anchor.value.minY
+        var index = anchor.key
+        while index > 0, top > -height {
+            index -= 1
+            top = read(index, startingAt: nil, endingAt: top - 14).minY
+        }
+        top = anchor.value.minY
+        index = anchor.key
+        while index < paragraphs.count, top < 2 * height {
+            top = read(index, startingAt: top, endingAt: nil).maxY + 14
+            index += 1
+        }
+        return ReaderPageContext(previous: sections[0].joined(separator: "\n"), current: sections[1].joined(separator: "\n"),
+                                 next: sections[2].joined(separator: "\n"), location: "Current reading position")
+    }
+}
+
 struct MacTextReaderView: View {
+    @Environment(\.readerPageSource) private var pageSource
     let book: Book
     let progress: Double
     let pageLayoutRaw: String
@@ -180,6 +239,7 @@ struct MacTextReaderView: View {
     @State private var fullText: String
     @State private var paragraphs: [String]
     @State private var contentHash: Int
+    @State private var textViewport = MacTextViewport()
     @State private var pageGroupIndex = 0
     @State private var scrollGroupIndex: Int?
     @State private var paginationCacheSignature = ""
@@ -251,6 +311,13 @@ struct MacTextReaderView: View {
             Group {
                 if layout == .scroll {
                     scrollingReader(horizontalMargin: metrics.horizontalMargin, maximumWidth: metrics.maximumProseWidth)
+                        .onChange(of: paginationSignature, initial: true) {
+                            pageSource?.capture = {
+                                textViewport.context(paragraphs: paragraphs,
+                                    width: min(metrics.maximumProseWidth, max(1, geometry.size.width - metrics.horizontalMargin * 2)),
+                                    height: geometry.size.height, font: platformFont)
+                            }
+                        }
                 } else if pageTexts.isEmpty {
                     ProgressView("Preparing pages…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -363,6 +430,10 @@ struct MacTextReaderView: View {
                 }
                 let passage = (textView.string as NSString).substring(with: range)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                if let window = textView.window {
+                    let rect = textView.firstRect(forCharacterRange: range, actualRange: nil)
+                    pageSource?.locateSelection(in: window, windowRect: window.convertFromScreen(rect))
+                }
                 onSelectionChanged(passage)
             }
         }
@@ -382,6 +453,8 @@ struct MacTextReaderView: View {
                             .foregroundStyle(foregroundColor)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .scrollView) } action: { textViewport.frames[index] = $0 }
+                            .onDisappear { textViewport.frames[index] = nil }
                             .id(index)
                     }
                 }
@@ -483,6 +556,9 @@ struct MacTextReaderView: View {
     }
 
     private func publishNavigationState(pageTexts: [String], pagesPerGroup: Int, groupCount: Int) {
+        pageSource?.capture = {
+            .pages(count: pageTexts.count, first: pageGroupIndex * pagesPerGroup, visibleCount: pagesPerGroup) { pageTexts[$0] }
+        }
         guard !pageTexts.isEmpty else { return }
         let group = min(max(pageGroupIndex, 0), max(groupCount - 1, 0))
         let first = group * pagesPerGroup
@@ -557,6 +633,7 @@ struct MacPDFLayoutSnapshot {
 }
 
 struct MacPDFReaderView: NSViewRepresentable {
+    @Environment(\.readerPageSource) private var pageSource
     let url: URL
     let progress: Double
     let pageLayoutRaw: String
@@ -590,6 +667,8 @@ struct MacPDFReaderView: NSViewRepresentable {
     }
 
     func updateNSView(_ view: MacNavigablePDFView, context: Context) {
+        pageSource?.usePDF(view)
+        context.coordinator.pageSource = pageSource
         context.coordinator.onProgressChanged = onProgressChanged
         context.coordinator.onSelectionChanged = onSelectionChanged
         context.coordinator.onNavigationStateChanged = onNavigationStateChanged
@@ -662,6 +741,7 @@ struct MacPDFReaderView: NSViewRepresentable {
     }
 
     final class Coordinator {
+        weak var pageSource: ReaderPageSource?
         var onProgressChanged: (Double) -> Void
         var onSelectionChanged: (String) -> Void
         var onNavigationStateChanged: (ReaderNavigationState) -> Void
@@ -746,7 +826,13 @@ struct MacPDFReaderView: NSViewRepresentable {
             ) { [weak view, weak self] _ in
                 guard let view, let self else { return }
                 let passage = view.currentSelection?.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                DispatchQueue.main.async { [weak self] in self?.onSelectionChanged(passage) }
+                DispatchQueue.main.async { [weak self, weak view] in
+                    if let view, let selection = view.currentSelection, let page = selection.pages.first {
+                        let rect = view.convert(selection.bounds(for: page), from: page)
+                        self?.pageSource?.locateSelection(in: view.window, windowRect: view.convert(rect, to: nil))
+                    }
+                    self?.onSelectionChanged(passage)
+                }
             })
         }
 

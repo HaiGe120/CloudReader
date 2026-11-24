@@ -5,10 +5,11 @@ struct AIConversationHistoryView: View {
     @EnvironmentObject private var library: BookLibrary
     @Environment(\.dismiss) private var dismiss
 
+    var bookID: UUID? = nil
     let onSelect: (AIConversationRecord) -> Void
 
     private var conversations: [AIConversationRecord] {
-        library.aiConversations.sorted { $0.modifiedAt > $1.modifiedAt }
+        library.conversations(for: bookID)
     }
 
     var body: some View {
@@ -73,6 +74,23 @@ struct AIConversationHistoryView: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+    }
+}
+
+struct AssistantMessageText: View {
+    let message: AIConversationMessage
+
+    var body: some View {
+        if message.role == .assistant,
+           let styled = try? AttributedString(markdown: message.text,
+               options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            Text(styled)
+                .environment(\.openURL, OpenURLAction { url in
+                    ["https", "http"].contains(url.scheme?.lowercased() ?? "") ? .systemAction : .discarded
+                })
+        } else {
+            Text(message.text)
         }
     }
 }

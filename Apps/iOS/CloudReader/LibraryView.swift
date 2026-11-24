@@ -10,6 +10,8 @@ struct LibraryView: View {
     @State private var searchText = ""
     @State private var isShowingImporter = false
     @State private var isShowingAssistant = false
+    @State private var bookToRename: Book?
+    @State private var draftTitle = ""
     @State private var bookToDelete: Book?
     @State private var navigationPath: [Book] = []
 
@@ -74,6 +76,12 @@ struct LibraryView: View {
             } message: {
                 Text(library.alertMessage ?? "")
             }
+            .alert("Rename Book", isPresented: renameDialogIsPresented, presenting: bookToRename) { book in
+                TextField("Book title", text: $draftTitle)
+                Button("Save") { library.rename(book, to: draftTitle) }
+                    .disabled(draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel", role: .cancel) {}
+            }
             .confirmationDialog("Remove this book?", isPresented: deleteDialogIsPresented, titleVisibility: .visible) {
                 Button("Remove from Library", role: .destructive) {
                     if let bookToDelete { library.remove(bookToDelete) }
@@ -106,6 +114,19 @@ struct LibraryView: View {
 
     private var deleteDialogIsPresented: Binding<Bool> {
         Binding(get: { bookToDelete != nil }, set: { if !$0 { bookToDelete = nil } })
+    }
+
+    private var renameDialogIsPresented: Binding<Bool> {
+        Binding(get: { bookToRename != nil }, set: { if !$0 { bookToRename = nil } })
+    }
+
+    private func renameAction(for book: Book) -> some View {
+        Button {
+            draftTitle = book.title
+            bookToRename = book
+        } label: {
+            Label("Rename", systemImage: "pencil")
+        }
     }
 
     private var libraryTitle: some View {
@@ -300,6 +321,7 @@ struct LibraryView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open \(book.title)")
+        .contextMenu { renameAction(for: book) }
     }
 
     private var syncSummary: some View {
@@ -467,6 +489,7 @@ struct LibraryView: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
+                            renameAction(for: book)
                             Button(role: .destructive) {
                                 bookToDelete = book
                             } label: {
@@ -512,6 +535,7 @@ struct LibraryView: View {
             }
         }
         .buttonStyle(.plain)
+        .contextMenu { renameAction(for: book) }
     }
 }
 
@@ -626,6 +650,7 @@ private struct BookTile: View {
 }
 
 private struct BookCover: View {
+    @EnvironmentObject private var library: BookLibrary
     let book: Book
     var compact = false
 
@@ -665,9 +690,40 @@ private struct BookCover: View {
                 .padding(compact ? 10 : 14)
                 .padding(.leading, 7)
             }
+            .overlay {
+                BookCoverArtwork(book: book)
+                    .id(library.contentRevisions[book.id] ?? book.id)
+            }
             .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 17, style: .continuous))
             .shadow(color: colors.last?.opacity(0.22) ?? .black.opacity(0.15), radius: compact ? 7 : 12, x: 0, y: 7)
         }
         .accessibilityLabel("Cover for \(book.title)")
+    }
+}
+
+private struct BookCoverArtwork: View {
+    @EnvironmentObject private var library: BookLibrary
+    @State private var artwork: UIImage?
+    let book: Book
+
+    var body: some View {
+        Color.clear
+            .overlay {
+                if let artwork {
+                    ZStack {
+                        Color(uiColor: .secondarySystemGroupedBackground)
+                        Image(uiImage: artwork)
+                            .resizable()
+                            .scaledToFit()
+                    }
+                    .accessibilityHidden(true)
+                }
+            }
+            .allowsHitTesting(false)
+            .task {
+                guard book.format != .txt, let url = library.fileURL(for: book) else { return }
+                let image = await BookCoverThumbnails.shared.thumbnail(at: url, format: book.format)
+                if !Task.isCancelled { artwork = image }
+            }
     }
 }
