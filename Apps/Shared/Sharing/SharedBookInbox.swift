@@ -5,7 +5,11 @@ import UniformTypeIdentifiers
 /// A completed directory is published with an atomic rename so the app never
 /// imports a file while an item provider is still writing it.
 struct SharedBookInbox {
+    #if os(macOS)
+    static let appGroupIdentifier = "W6DM8CHQA7.io.github.haige120.cloudreader.macos"
+    #else
     static let appGroupIdentifier = "group.io.github.haige120.cloudreader"
+    #endif
     static let supportedExtensions: Set<String> = ["epub", "pdf", "txt", "mobi", "azw3", "fb2", "cbz", "cbr"]
     static let live = SharedBookInbox()
 

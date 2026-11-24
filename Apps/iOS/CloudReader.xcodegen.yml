@@ -103,7 +103,6 @@ targets:
           - KindleDecoder
       - path: ../Shared/KindleDecoder
         buildPhase: resources
-      - path: Sharing
     entitlements:
       path: CloudReader/CloudReader.entitlements
       properties:
@@ -139,7 +138,7 @@ targets:
       - path: ShareExtension
         excludes:
           - "Info [0-9]*.plist"
-      - path: Sharing
+      - path: ../Shared/Sharing
     info:
       path: ShareExtension/Info.plist
       properties:

@@ -700,30 +700,3 @@ private struct BookCover: View {
         .accessibilityLabel("Cover for \(book.title)")
     }
 }
-
-private struct BookCoverArtwork: View {
-    @EnvironmentObject private var library: BookLibrary
-    @State private var artwork: UIImage?
-    let book: Book
-
-    var body: some View {
-        Color.clear
-            .overlay {
-                if let artwork {
-                    ZStack {
-                        Color(uiColor: .secondarySystemGroupedBackground)
-                        Image(uiImage: artwork)
-                            .resizable()
-                            .scaledToFit()
-                    }
-                    .accessibilityHidden(true)
-                }
-            }
-            .allowsHitTesting(false)
-            .task {
-                guard book.format != .txt, let url = library.fileURL(for: book) else { return }
-                let image = await BookCoverThumbnails.shared.thumbnail(at: url, format: book.format)
-                if !Task.isCancelled { artwork = image }
-            }
-    }
-}

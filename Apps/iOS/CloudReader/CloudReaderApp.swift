@@ -246,12 +246,3 @@ private struct RootTabView: View {
         }
     }
 }
-
-private extension BookImportCoordinator {
-    func receiveSharedBooks(library: BookLibrary) {
-        guard let urls = try? SharedBookInbox.live.pendingFiles(), !urls.isEmpty else { return }
-        importFiles(urls, library: library) { url in
-            try SharedBookInbox.live.removeFile(at: url)
-        }
-    }
-}

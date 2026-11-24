@@ -257,7 +257,7 @@ struct MacSettingsView: View {
                 if let aiSaveMessage {
                     Text(aiSaveMessage).font(.caption).foregroundStyle(.secondary)
                 }
-                Text("Ask CloudReader is an App Intent. On Mac, add it to a custom shortcut in Shortcuts; on iOS, Siri can use the built-in phrase. Both use the provider selected here. Conversations are not library-synced.")
+                Text("Add Ask CloudReader to a shortcut to ask a question with this provider. Saved conversations sync with your selected library destinations.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -266,6 +266,11 @@ struct MacSettingsView: View {
                 LabeledContent("EPUB", value: "Built-in reader")
                 LabeledContent("PDF", value: "PDFKit")
                 LabeledContent("TXT", value: "Adjustable text")
+                LabeledContent("MOBI, AZW3 and FB2", value: "Built-in readers")
+                LabeledContent("CBZ and CBR", value: "Comic reader")
+            }
+            Section("About") {
+                LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
             }
         }
         .formStyle(.grouped)

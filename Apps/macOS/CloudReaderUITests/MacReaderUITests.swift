@@ -4,14 +4,13 @@ final class MacReaderUITests: XCTestCase {
     @MainActor
     private func launch(format: String, layout: String = "singlePage", width: Int = 1100) -> XCUIApplication {
         let app = XCUIApplication()
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         app.launchEnvironment["CLOUDREADER_TEST_HOST"] = "0"
         app.launchEnvironment["CLOUDREADER_UI_TEST_MODE"] = "1"
         app.launchEnvironment["CLOUDREADER_UI_TEST_SESSION"] = UUID().uuidString
         app.launchEnvironment["CLOUDREADER_UI_TEST_FORMAT"] = format
         app.launchEnvironment["CLOUDREADER_UI_TEST_LAYOUT"] = layout
         app.launchEnvironment["CLOUDREADER_UI_TEST_WIDTH"] = String(width)
-        app.launchEnvironment["CLOUDREADER_UI_TEST_FIXTURE_ROOT"] = root.path
+        app.launchEnvironment["CLOUDREADER_UI_TEST_FIXTURE_BUNDLE"] = Bundle(for: Self.self).resourceURL?.path
         // Runtime and UI targets share the isolated app identity. Finish any
         // remaining test-host process before launching a visible reader session.
         if app.state != .notRunning { app.terminate() }
@@ -48,6 +47,32 @@ final class MacReaderUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor
+    func testBookChatSendsWithReturnAndRestoresSessions() throws {
+        let app = launch(format: "pdf")
+        ready(app)
+        app.buttons["reader.next"].click()
+        let status = app.staticTexts["reader.pageStatus"]
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: textEquals("Page 2 of 3"), object: status)], timeout: 8), .completed)
+        app.buttons["reader.askAI"].click()
+        let field = app.textFields["assistant.question"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Share question with another app"].exists)
+        field.click()
+        field.typeText("Explain the middle page.\r")
+        let answer = app.staticTexts.matching(NSPredicate(format: "(value CONTAINS %@ AND value CONTAINS %@) OR (label CONTAINS %@ AND label CONTAINS %@)",
+            "Previous page:", "Next page:", "Previous page:", "Next page:")).firstMatch
+        XCTAssertTrue(answer.waitForExistence(timeout: 12))
+        app.buttons["Done"].click()
+        app.buttons["reader.askAI"].click()
+        XCTAssertTrue(app.staticTexts["Explain the middle page."].waitForExistence(timeout: 6))
+        let options = app.descendants(matching: .any).matching(identifier: "Conversation options").firstMatch
+        options.click()
+        app.menuItems["New conversation"].click()
+        XCTAssertFalse(app.staticTexts["Explain the middle page."].exists)
+        XCTAssertTrue(field.exists)
     }
 
     @MainActor

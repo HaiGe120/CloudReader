@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct CloudReaderApp: App {
+    @StateObject private var sharedImports = BookImportCoordinator()
     @StateObject private var library: BookLibrary
     @StateObject private var cloudSync: CloudSyncCoordinator
     private let isTestHost: Bool
@@ -50,16 +51,26 @@ struct CloudReaderApp: App {
                 EmptyView()
             } else {
                 MacLibraryView(isUITestMode: isUITestMode, initialBookID: uiTestBookID)
+                    .environment(\.readerChatReply, isUITestMode ? { turn in
+                        [turn.bookTitle, turn.bookContext].compactMap { $0 }.joined(separator: "\n")
+                    } : ReaderChatSession.answer)
+                    .environmentObject(sharedImports)
                     .environmentObject(library)
                     .environmentObject(cloudSync)
                     .defaultAppStorage(uiTestDefaults ?? .standard)
                     .tint(Color(red: 0.40, green: 0.34, blue: 0.28))
                     .frame(minWidth: 520, minHeight: 480)
                     .background { if isUITestMode { MacReaderUITestWindowConfiguration() } }
-                    .onAppear { if !isUITestMode { library.installDemoBookIfNeeded() } }
+                    .onAppear {
+                        if !isUITestMode {
+                            library.installDemoBookIfNeeded()
+                            sharedImports.receiveSharedBooks(library: library)
+                        }
+                    }
             }
         }
         .defaultSize(width: 1100, height: 780)
+        .defaultLaunchBehavior(.presented)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("Import Books…", systemImage: "square.and.arrow.down") {

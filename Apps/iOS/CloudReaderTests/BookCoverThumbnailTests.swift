@@ -1,5 +1,6 @@
 import CloudReaderCore
-import UIKit
+import CoreGraphics
+import Foundation
 import XCTest
 @testable import CloudReader
 
@@ -20,15 +21,22 @@ final class BookCoverThumbnailTests: XCTestCase {
         return defaults
     }
 
-    private func pdf(pages: [UIColor]) -> Data {
-        let bounds = CGRect(x: 0, y: 0, width: 1200, height: 1800)
-        return UIGraphicsPDFRenderer(bounds: bounds).pdfData { renderer in
-            for color in pages {
-                renderer.beginPage()
-                renderer.cgContext.setFillColor(color.cgColor)
-                renderer.cgContext.fill(bounds)
-            }
+    private let red = CGColor(red: 1, green: 0, blue: 0, alpha: 1)
+    private let blue = CGColor(red: 0, green: 0, blue: 1, alpha: 1)
+
+    private func pdf(pages: [CGColor]) -> Data {
+        let data = NSMutableData()
+        var bounds = CGRect(x: 0, y: 0, width: 1200, height: 1800)
+        let consumer = CGDataConsumer(data: data)!
+        let renderer = CGContext(consumer: consumer, mediaBox: &bounds, nil)!
+        for color in pages {
+            renderer.beginPDFPage(nil)
+            renderer.setFillColor(color)
+            renderer.fill(bounds)
+            renderer.endPDFPage()
         }
+        renderer.closePDF()
+        return data as Data
     }
 
     // Convert one center pixel to known RGBA byte order regardless of the thumbnail's color space.
@@ -51,7 +59,7 @@ final class BookCoverThumbnailTests: XCTestCase {
         let defaults = try isolatedDefaults()
         let source = root.appendingPathComponent("Two pages.pdf")
         let storage = root.appendingPathComponent("Library")
-        try pdf(pages: [.red, .blue]).write(to: source)
+        try pdf(pages: [red, blue]).write(to: source)
         let library = BookLibrary(storageDirectory: storage, defaults: defaults)
         let imported = await library.importBooksAsync(from: [source])
         let original = try XCTUnwrap(imported.importedBooks.first)
@@ -62,7 +70,7 @@ final class BookCoverThumbnailTests: XCTestCase {
         let managedURL = try XCTUnwrap(reopened.fileURL(for: book))
         let thumbnail = await BookCoverThumbnails().thumbnail(at: managedURL, format: book.format)
 
-        let image = try XCTUnwrap(thumbnail?.cgImage)
+        let image = try XCTUnwrap(thumbnail)
         XCTAssertLessThanOrEqual(max(image.width, image.height), 640)
         let pixel = try centerPixel(in: image)
         XCTAssertGreaterThan(pixel[0], 220)
@@ -72,18 +80,18 @@ final class BookCoverThumbnailTests: XCTestCase {
     func testSyncedReplacementRefreshesCachedArtworkAtSamePath() async throws {
         let library = BookLibrary(storageDirectory: try temporaryDirectory(), defaults: try isolatedDefaults())
         let book = Book(title: "Synced", fileName: "source.pdf", format: .pdf)
-        XCTAssertTrue(library.applySyncedBook(book, contents: pdf(pages: [.red])))
+        XCTAssertTrue(library.applySyncedBook(book, contents: pdf(pages: [red])))
         let existing = try XCTUnwrap(library.books.first)
         let url = try XCTUnwrap(library.fileURL(for: existing))
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 100)], ofItemAtPath: url.path)
         let thumbnails = BookCoverThumbnails()
         let before = await thumbnails.thumbnail(at: url, format: existing.format)
-        XCTAssertGreaterThan(try centerPixel(in: XCTUnwrap(before?.cgImage))[0], 220)
+        XCTAssertGreaterThan(try centerPixel(in: XCTUnwrap(before))[0], 220)
 
-        XCTAssertTrue(library.applySyncedBook(book, contents: pdf(pages: [.blue])))
+        XCTAssertTrue(library.applySyncedBook(book, contents: pdf(pages: [blue])))
         XCTAssertEqual(library.fileURL(for: existing), url)
         let after = await thumbnails.thumbnail(at: url, format: existing.format)
-        let pixel = try centerPixel(in: XCTUnwrap(after?.cgImage))
+        let pixel = try centerPixel(in: XCTUnwrap(after))
         XCTAssertGreaterThan(pixel[2], 220)
         XCTAssertLessThan(pixel[0], 35)
     }
@@ -109,7 +117,7 @@ final class BookCoverThumbnailTests: XCTestCase {
             """
         let data = try XCTUnwrap(svg.data(using: .utf16))
         let thumbnail = await SVGCoverThumbnail.thumbnail(data: data, maxPixelSize: 96)
-        let image = try XCTUnwrap(thumbnail?.cgImage)
+        let image = try XCTUnwrap(thumbnail)
         XCTAssertEqual(image.width, 64)
         XCTAssertEqual(image.height, 96)
         let pixel = try centerPixel(in: image)

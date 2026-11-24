@@ -59,7 +59,7 @@ final class ShareViewController: UIViewController {
         var lastError: Error?
         for provider in providers {
             do {
-                try await stage(provider)
+                try await SharedBookInbox.live.stage(provider)
                 saved += 1
             } catch {
                 failures += 1
@@ -79,58 +79,6 @@ final class ShareViewController: UIViewController {
             messageLabel.text = lastError?.localizedDescription ?? SharedBookInbox.InboxError.unsupportedFile.localizedDescription
         }
         UIAccessibility.post(notification: .screenChanged, argument: titleLabel)
-    }
-
-    private func stage(_ provider: NSItemProvider) async throws {
-        let suggestedName = provider.suggestedName
-        let specificTypeIdentifier = provider.registeredTypeIdentifiers.first { identifier in
-            guard let type = UTType(identifier), let fileExtension = type.preferredFilenameExtension else { return false }
-            return SharedBookInbox.supportedExtensions.contains(fileExtension.lowercased())
-        }
-        let suggestedExtension = suggestedName.map { ($0 as NSString).pathExtension.lowercased() }
-        let genericTypeIdentifier = provider.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .data) == true }
-        let typeIdentifier = specificTypeIdentifier ?? (suggestedExtension.map { SharedBookInbox.supportedExtensions.contains($0) } == true ? genericTypeIdentifier : nil)
-
-        if let typeIdentifier {
-            let preferredExtension = specificTypeIdentifier.flatMap { UTType($0)?.preferredFilenameExtension } ?? suggestedExtension
-            do {
-                try await stageFileRepresentation(provider, typeIdentifier: typeIdentifier, suggestedName: suggestedName, preferredExtension: preferredExtension)
-                return
-            } catch {
-                guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else { throw error }
-            }
-        }
-        guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else { throw SharedBookInbox.InboxError.unsupportedFile }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, error in
-                let url = (item as? URL) ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
-                guard let url else {
-                    continuation.resume(throwing: error ?? SharedBookInbox.InboxError.unsupportedFile)
-                    return
-                }
-                do {
-                    try SharedBookInbox.live.stageFile(at: url, suggestedName: suggestedName)
-                    continuation.resume()
-                } catch { continuation.resume(throwing: error) }
-            }
-        }
-    }
-
-    private func stageFileRepresentation(_ provider: NSItemProvider, typeIdentifier: String, suggestedName: String?, preferredExtension: String?) async throws {
-        // Item-provider URLs are valid only inside this completion handler.
-        // Copy into the app group before resuming the async operation.
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, error in
-                guard let url else {
-                    continuation.resume(throwing: error ?? SharedBookInbox.InboxError.unsupportedFile)
-                    return
-                }
-                do {
-                    try SharedBookInbox.live.stageFile(at: url, suggestedName: suggestedName, preferredExtension: preferredExtension)
-                    continuation.resume()
-                } catch { continuation.resume(throwing: error) }
-            }
-        }
     }
 
     @objc private func finish() {

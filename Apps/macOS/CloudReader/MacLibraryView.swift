@@ -14,8 +14,12 @@ struct MacLibraryView: View {
     @State private var isShowingAssistant = false
     @State private var isPresentingBookImporter = false
     @State private var isDropTargeted = false
+    @State private var bookToRename: Book?
+    @State private var draftTitle = ""
     @State private var bookToRemove: Book?
     @State private var syncTask: Task<Void, Never>?
+    @EnvironmentObject private var sharedImports: BookImportCoordinator
+    @Environment(\.controlActiveState) private var windowActiveState
     @StateObject private var imports = BookImportCoordinator()
     @State private var navigationPath: [Book] = []
 
@@ -23,12 +27,6 @@ struct MacLibraryView: View {
         let ordered = library.books.sorted { $0.addedAt > $1.addedAt }
         guard !searchText.isEmpty else { return ordered }
         return ordered.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
-    }
-
-    private var importTypes: [UTType] {
-        let customTypes = ["epub", "mobi", "azw3", "fb2", "cbz", "cbr"]
-            .compactMap { UTType(filenameExtension: $0, conformingTo: .data) }
-        return [.pdf, .plainText] + customTypes
     }
 
     var body: some View {
@@ -55,6 +53,12 @@ struct MacLibraryView: View {
             } message: {
                 Text(library.alertMessage ?? "")
             }
+            .alert("Rename Book", isPresented: renameDialogIsPresented, presenting: bookToRename) { book in
+                TextField("Book title", text: $draftTitle)
+                Button("Save") { library.rename(book, to: draftTitle) }
+                    .disabled(draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel", role: .cancel) {}
+            }
             .confirmationDialog("Remove this book?", isPresented: removeDialogIsPresented, titleVisibility: .visible) {
                 Button("Remove from Library", role: .destructive) {
                     if let bookToRemove { library.remove(bookToRemove) }
@@ -69,9 +73,20 @@ struct MacLibraryView: View {
                     .frame(minWidth: 620, minHeight: 500)
             }
         }
+        .onOpenURL { url in
+            if url.isFileURL { imports.importFiles([url], library: library) }
+        }
+        .onChange(of: sharedImports.bookToOpen) { _, book in
+            if let book, windowActiveState == .key { navigationPath = [book] }
+        }
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: importDroppedBooks)
         .overlay(alignment: .top) {
-            if isDropTargeted {
+            if imports.isImporting || sharedImports.isImporting {
+                ProgressView("Importing books…")
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.top)
+            } else if isDropTargeted {
                 Label("Drop books to import", systemImage: "square.and.arrow.down")
                     .font(.system(size: 14, weight: .semibold))
                     .padding(.horizontal, 18)
@@ -93,7 +108,12 @@ struct MacLibraryView: View {
                let book = library.books.first(where: { $0.id == initialBookID }) { navigationPath = [book] }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { scheduleSync() }
+            if phase == .active {
+                if !isUITestMode { sharedImports.receiveSharedBooks(library: library) }
+                scheduleSync()
+            } else {
+                library.flushPendingChanges()
+            }
         }
         .onChange(of: library.books) { _, _ in scheduleSync() }
         .onChange(of: library.aiConversations) { _, _ in scheduleSync() }
@@ -104,6 +124,19 @@ struct MacLibraryView: View {
 
     private var alertIsPresented: Binding<Bool> {
         Binding(get: { library.alertMessage != nil }, set: { if !$0 { library.alertMessage = nil } })
+    }
+
+    private var renameDialogIsPresented: Binding<Bool> {
+        Binding(get: { bookToRename != nil }, set: { if !$0 { bookToRename = nil } })
+    }
+
+    private func renameAction(for book: Book) -> some View {
+        Button {
+            draftTitle = book.title
+            bookToRename = book
+        } label: {
+            Label("Rename", systemImage: "pencil")
+        }
     }
 
     private var removeDialogIsPresented: Binding<Bool> {
@@ -118,7 +151,7 @@ struct MacLibraryView: View {
         let panel = NSOpenPanel()
         panel.title = "Import Books"
         panel.prompt = "Import"
-        panel.allowedContentTypes = importTypes
+        panel.allowedContentTypes = SharedBookInbox.contentTypes
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -350,6 +383,7 @@ struct MacLibraryView: View {
             .shadow(color: Color(red: 0.17, green: 0.27, blue: 0.25).opacity(0.22), radius: 20, y: 10)
         }
         .buttonStyle(.plain)
+        .contextMenu { renameAction(for: book) }
         .accessibilityLabel("Open \(book.title)")
     }
 
@@ -534,6 +568,7 @@ struct MacLibraryView: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
+                            renameAction(for: book)
                             Button(book.isBookmarked ? "Remove Favorite" : "Add Favorite", systemImage: book.isBookmarked ? "bookmark.slash" : "bookmark") {
                                 library.toggleBookmark(book)
                             }
@@ -580,6 +615,7 @@ struct MacLibraryView: View {
             }
         }
         .buttonStyle(.plain)
+        .contextMenu { renameAction(for: book) }
     }
 
     private func scheduleSync() {
@@ -716,6 +752,7 @@ private struct MacBookTile: View {
 }
 
 private struct MacBookCover: View {
+    @EnvironmentObject private var library: BookLibrary
     let book: Book
     var compact = false
 
@@ -754,6 +791,10 @@ private struct MacBookCover: View {
                 }
                 .padding(compact ? 10 : 14)
                 .padding(.leading, 7)
+            }
+            .overlay {
+                BookCoverArtwork(book: book)
+                    .id(library.contentRevisions[book.id] ?? book.id)
             }
             .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 17, style: .continuous))
             .shadow(color: colors.last?.opacity(0.22) ?? .black.opacity(0.15), radius: compact ? 7 : 12, x: 0, y: 7)

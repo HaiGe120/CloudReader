@@ -4,6 +4,7 @@ import CloudReaderCore
 struct MacAIAssistantView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var library: BookLibrary
+    @Environment(\.readerChatReply) private var reply
     @State private var chat: ReaderChatSession
     @State private var isShowingHistory = false
     @State private var profile = AIProfileStore.load()
@@ -45,6 +46,10 @@ struct MacAIAssistantView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                ShareLink(item: chat.shareText.isEmpty ? "A question for my AI assistant" : chat.shareText) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .accessibilityLabel("Share question with another app")
                 Menu {
                     Button("New conversation", systemImage: "square.and.pencil", action: chat.startNew)
                     Button("Conversation history (\(library.conversations(for: chat.launchContext.bookID).count))", systemImage: "clock.arrow.circlepath") {
@@ -65,6 +70,12 @@ struct MacAIAssistantView: View {
                 Toggle(isOn: $chat.includeBookContext) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Include book details and reading context").font(.callout.weight(.medium))
+                        if chat.includeBookContext, let description = chat.context.bookDescription {
+                            Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                        if chat.includeBookContext, let excerpt = chat.context.selectedText {
+                            Text(String(excerpt.prefix(280))).font(.caption).lineLimit(2)
+                        }
                         Text(chat.context.contextDescription ?? "Includes available book details and highlighted text.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
@@ -146,8 +157,8 @@ struct MacAIAssistantView: View {
             }
 
             HStack(alignment: .bottom, spacing: 12) {
-                TextField(chat.context.selectedText == nil ? "Ask a question…" : "Ask about this passage…", text: $chat.draft, axis: .vertical)
-                    .lineLimit(1...6)
+                TextField(chat.context.selectedText == nil ? "Ask a question…" : "Ask about this passage…", text: $chat.draft)
+                    .accessibilityIdentifier("assistant.question")
                     .textFieldStyle(.plain)
                     .onSubmit(sendQuestion)
                     .focused($isPromptFocused)
@@ -194,6 +205,6 @@ struct MacAIAssistantView: View {
     }
 
     private func sendQuestion() {
-        Task { await chat.send(in: library) }
+        Task { await chat.send(in: library, reply: reply) }
     }
 }

@@ -25,20 +25,6 @@ struct AIAssistantView: View {
 
     private var profile: AIProviderConfiguration { AIProfileStore.load() }
 
-    private var shareText: String {
-        let question = chat.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let prompt = question.isEmpty ? chat.record.messages.last(where: { $0.role == .user })?.text ?? "" : question
-        guard chat.includeBookContext else { return prompt }
-
-        var sections: [String] = []
-        if let bookTitle = chat.context.bookTitle, !bookTitle.isEmpty { sections.append("Book: \(bookTitle)") }
-        if let bookDescription = chat.context.bookDescription, !bookDescription.isEmpty { sections.append("Brief description: \(bookDescription)") }
-        if let selectedText = chat.context.selectedText, !selectedText.isEmpty { sections.append("Selected passage:\n\(selectedText)") }
-        if let bookContext = chat.context.bookContext, !bookContext.isEmpty { sections.append("Book text:\n\(bookContext)") }
-        if !prompt.isEmpty { sections.append("Question:\n\(prompt)") }
-        return sections.joined(separator: "\n\n")
-    }
-
     private var hasReaderContext: Bool {
         chat.context.bookTitle != nil || chat.context.bookDescription != nil || chat.context.selectedText != nil || chat.context.bookContext != nil
     }
@@ -82,7 +68,7 @@ struct AIAssistantView: View {
                     Button("Done") { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    ShareLink(item: shareText.isEmpty ? "A question for my AI assistant" : shareText) {
+                    ShareLink(item: chat.shareText.isEmpty ? "A question for my AI assistant" : chat.shareText) {
                         Image(systemName: "square.and.arrow.up")
                     }
                     .accessibilityLabel("Share question with another app")
@@ -328,16 +314,5 @@ private struct AIMessageBubble: View {
             if !isUser { Spacer(minLength: 45) }
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-private struct ReaderChatReplyKey: EnvironmentKey {
-    static let defaultValue: @MainActor (AIConversationRecord) async throws -> String = ReaderChatSession.answer
-}
-
-extension EnvironmentValues {
-    var readerChatReply: @MainActor (AIConversationRecord) async throws -> String {
-        get { self[ReaderChatReplyKey.self] }
-        set { self[ReaderChatReplyKey.self] = newValue }
     }
 }

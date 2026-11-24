@@ -31,6 +31,7 @@ struct MacEPUBBookReader: View {
     @State private var reloadID = UUID()
     @State private var navigationID = UUID()
     @State private var targetFragment: String?
+    @State private var note: MacEPUBNote?
     @State private var viewportSize: CGSize = .zero
     @State private var currentPage: Int?
     @State private var currentPageCount: Int?
@@ -98,6 +99,9 @@ struct MacEPUBBookReader: View {
                                 let value = EPUBPublication.progress(chapter: renderedChapter, fraction: fraction, chapterCount: publication.chapters.count)
                                 onProgressChanged(value)
                                 publishState(publication, progress: value, page: page, pages: pages)
+                            },
+                            onOpenNote: { path, fragment in
+                                note = MacEPUBNote(path: path, fragment: fragment)
                             }
                         )
                         .id(EPUBMacSource(url: url, bookID: bookID, reloadID: reloadID))
@@ -130,6 +134,16 @@ struct MacEPUBBookReader: View {
                         reloadID = UUID()
                     }.buttonStyle(.bordered)
                 }.background(background)
+            }
+        }
+        .sheet(item: $note) { initial in
+            if let publication {
+                MacEPUBNoteSheet(publication: publication, note: initial, fontRaw: fontRaw, fontSize: fontSize,
+                    background: background, foreground: foreground) { index, fragment in
+                    note = nil
+                    navigate(to: index, in: publication, fragment: fragment)
+                }
+                .environment(\.readerPageSource, nil)
             }
         }
         .task(id: EPUBMacLoadRequest(url: url, bookID: bookID, reloadID: reloadID)) {
@@ -253,7 +267,57 @@ struct MacEPUBBookReader: View {
         let columns = ReaderLayoutMetrics.resolve(viewport: viewportSize, pageLayout: ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll, font: ReaderFont(rawValue: fontRaw) ?? .systemSerif, fontSize: CGFloat(fontSize)).effectiveColumnCount
         let range = page.map { $0...max($0, min($0 + columns - 1, pages ?? $0)) }
         let paged = (ReaderPageLayout(rawValue: pageLayoutRaw) ?? .scroll) != .scroll
-        onNavigationStateChanged(ReaderNavigationState(progress: progress, pageRange: paged ? range : nil, pageCount: paged ? pages : nil, chapterIndex: chapter, chapterCount: publication.chapters.count, chapterTitles: publication.chapters.map(\.title), canNavigatePrevious: chapter > 0 || progress > 0, canNavigateNext: chapter < publication.chapters.count - 1 || progress < 1))
+        onNavigationStateChanged(ReaderNavigationState(progress: progress, pageRange: paged ? range : nil, pageCount: paged ? pages : nil, chapterIndex: chapter, chapterCount: publication.chapters.count, chapterTitles: publication.chapters.map(\.title), canNavigatePrevious: page != nil && pages != nil && (chapter > 0 || (page ?? 0) > (paged ? 1 : 0)),
+            canNavigateNext: page != nil && pages != nil && (chapter + 1 < publication.chapters.count || (page ?? 0) + columns < (pages ?? 0) + (paged ? 1 : 0))))
+    }
+}
+
+private struct MacEPUBNote: Identifiable {
+    let id = UUID()
+    let path: String
+    let fragment: String?
+}
+
+private struct MacEPUBNoteSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let publication: EPUBPublication
+    let note: MacEPUBNote
+    let fontRaw: String
+    let fontSize: Double
+    let background: Color
+    let foreground: Color
+    let navigate: (Int, String?) -> Void
+    @State private var loadError: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Note").font(.headline)
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            }
+            .padding()
+            Divider()
+            GeometryReader { geometry in
+                let index = publication.chapters.count
+                let document = EPUBPublication(rootURL: publication.rootURL, title: "Note",
+                    chapters: publication.chapters + [EPUBChapter(path: note.path, title: "Note")],
+                    mediaTypes: publication.mediaTypes)
+                MacEPUBWebView(publication: document, chapter: index, initialProgress: 0,
+                    pageLayoutRaw: "scroll", fontRaw: fontRaw, fontSize: fontSize, background: background,
+                    foreground: foreground, navigationID: note.id, targetFragment: note.fragment,
+                    viewportSize: geometry.size, isChromeVisible: true, onProgress: { _ in }, onSelection: { _ in },
+                    onNavigate: { chapter, fragment in
+                        if publication.chapters.indices.contains(chapter) { navigate(chapter, fragment) }
+                    }, onChapterBoundary: { _ in }, onLoaded: {}, onError: { loadError = $0 },
+                    onContentTap: {}, onNavigationState: { _, _, _ in })
+                if let loadError {
+                    ContentUnavailableView("Couldn't open note", systemImage: "doc.text", description: Text(loadError))
+                        .background(background)
+                }
+            }
+        }
+        .frame(minWidth: 440, minHeight: 320)
     }
 }
 
@@ -291,6 +355,7 @@ struct MacEPUBWebView: NSViewRepresentable {
     let onError: (String) -> Void
     let onContentTap: () -> Void
     let onNavigationState: (Int?, Int?, Double) -> Void
+    var onOpenNote: ((String, String?) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -627,10 +692,14 @@ struct MacEPUBWebView: NSViewRepresentable {
                     parent.onNavigate(index, targetFragment)
                 case let .document(path, fragment):
                     decisionHandler(.cancel)
-                    nonSpineDocumentPath = path
-                    loadDocument(path: path, fraction: 0, fragment: fragment)
+                    if let open = parent.onOpenNote {
+                        open(path, fragment)
+                    } else {
+                        nonSpineDocumentPath = path
+                        loadDocument(path: path, fraction: 0, fragment: fragment)
+                    }
                 case nil:
-                    decisionHandler(.allow)
+                    decisionHandler(path == loadedPath ? .allow : .cancel)
                 }
                 return
             }

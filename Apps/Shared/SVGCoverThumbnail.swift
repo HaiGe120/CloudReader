@@ -1,4 +1,4 @@
-import UIKit
+import ImageIO
 import WebKit
 
 @MainActor
@@ -9,7 +9,7 @@ enum SVGCoverThumbnail {
         return WKWebView(frame: .zero, configuration: configuration)
     }()
 
-    static func thumbnail(data: Data, maxPixelSize: Int) async -> UIImage? {
+    static func thumbnail(data: Data, maxPixelSize: Int) async -> CGImage? {
         guard !Task.isCancelled, maxPixelSize > 0, data.count <= 4 * 1_024 * 1_024 else { return nil }
         let root = SVGRoot()
         let parser = XMLParser(data: data)
@@ -49,7 +49,8 @@ enum SVGCoverThumbnail {
             }
         }
         guard !Task.isCancelled, let encoded, let png = Data(base64Encoded: encoded) else { return nil }
-        return UIImage(data: png)
+        guard let source = CGImageSourceCreateWithData(png as CFData, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 }
 

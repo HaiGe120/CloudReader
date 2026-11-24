@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import UniformTypeIdentifiers
 @testable import CloudReader
 
 final class SharedBookInboxTests: XCTestCase {
@@ -29,6 +30,18 @@ final class SharedBookInboxTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: queued), contents)
         try inbox.removeFile(at: queued)
         XCTAssertTrue(try inbox.pendingFiles().isEmpty)
+    }
+
+    func testFileURLItemProviderStagesBookForDurableImport() async throws {
+        let source = temporaryDirectory.appendingPathComponent("Shared Novel.txt")
+        let contents = Data("From the share sheet.".utf8)
+        try contents.write(to: source)
+        let provider = NSItemProvider(item: source as NSURL, typeIdentifier: UTType.fileURL.identifier)
+        try await inbox.stage(provider)
+        try FileManager.default.removeItem(at: source)
+        let queued = try XCTUnwrap(inbox.pendingFiles().first)
+        XCTAssertEqual(queued.lastPathComponent, source.lastPathComponent)
+        XCTAssertEqual(try Data(contentsOf: queued), contents)
     }
 
     func testDuplicateFileNamesKeepBothSharedBooks() throws {

@@ -1,6 +1,6 @@
 import CloudReaderCore
 import ImageIO
-import UIKit
+import Foundation
 
 /// Disposable, device-local thumbnails derived from the managed book files.
 actor BookCoverThumbnails {
@@ -27,9 +27,9 @@ actor BookCoverThumbnails {
     private final class Entry {
         let version: FileVersion
         let format: BookFormat
-        let image: UIImage?
+        let image: CGImage?
 
-        init(version: FileVersion, format: BookFormat, image: UIImage?) {
+        init(version: FileVersion, format: BookFormat, image: CGImage?) {
             self.version = version
             self.format = format
             self.image = image
@@ -41,13 +41,13 @@ actor BookCoverThumbnails {
         cache.totalCostLimit = 32 * 1_024 * 1_024
     }
 
-    func thumbnail(at url: URL, format: BookFormat) async -> UIImage? {
+    func thumbnail(at url: URL, format: BookFormat) async -> CGImage? {
         guard format != .txt, !Task.isCancelled, let version = FileVersion(at: url) else { return nil }
         let key = url as NSURL
         if let entry = cache.object(forKey: key), entry.version == version, entry.format == format {
             return entry.image
         }
-        let image: UIImage?
+        let image: CGImage?
         do {
             image = try await loadThumbnail(at: url, format: format)
         } catch {
@@ -55,12 +55,12 @@ actor BookCoverThumbnails {
             return nil
         }
         guard !Task.isCancelled, FileVersion(at: url) == version else { return nil }
-        let cost = image?.cgImage.map { $0.bytesPerRow * $0.height } ?? 1
+        let cost = image.map { $0.bytesPerRow * $0.height } ?? 1
         cache.setObject(Entry(version: version, format: format, image: image), forKey: key, cost: cost)
         return image
     }
 
-    private func loadThumbnail(at url: URL, format: BookFormat) async throws -> UIImage? {
+    private func loadThumbnail(at url: URL, format: BookFormat) async throws -> CGImage? {
         let artwork: Data?
         switch format {
         case .epub: artwork = try EPUBLoader.coverData(at: url)
@@ -81,7 +81,7 @@ actor BookCoverThumbnails {
         return vector
     }
 
-    private static func downsample(_ data: Data) -> UIImage? {
+    private static func downsample(_ data: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -89,7 +89,7 @@ actor BookCoverThumbnails {
                 kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
                 kCGImageSourceShouldCacheImmediately: true
               ] as CFDictionary) else { return nil }
-        return UIImage(cgImage: thumbnail)
+        return thumbnail
     }
 
     private static func thumbnailSize(for size: CGSize) -> CGSize? {
@@ -100,7 +100,7 @@ actor BookCoverThumbnails {
                       height: max(1, (size.height / longest * limit).rounded()))
     }
 
-    private static func firstPDFPage(at url: URL) -> UIImage? {
+    private static func firstPDFPage(at url: URL) -> CGImage? {
         guard let document = CGPDFDocument(url as CFURL), document.isUnlocked,
               let page = document.page(at: 1) else { return nil }
         let box = page.getBoxRect(.cropBox).standardized
@@ -116,6 +116,6 @@ actor BookCoverThumbnails {
         context.concatenate(page.getDrawingTransform(.cropBox, rect: bounds, rotate: 0, preserveAspectRatio: true))
         context.drawPDFPage(page)
         guard let bitmap = context.makeImage() else { return nil }
-        return UIImage(cgImage: bitmap)
+        return bitmap
     }
 }

@@ -1,6 +1,7 @@
 import CloudReaderCore
 import Foundation
 import Observation
+import SwiftUI
 
 /// The launch context belongs to the open reader. A saved session supplies its
 /// transcript and sharing choice, even when the reader has since turned a page.
@@ -27,6 +28,20 @@ final class ReaderChatSession {
     }
 
     var context: AIConversationRecord { launchContext.bookID == nil ? record : launchContext }
+
+    var shareText: String {
+        let question = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt = question.isEmpty ? record.messages.last(where: { $0.role == .user })?.text ?? "" : question
+        guard includeBookContext else { return prompt }
+
+        var sections: [String] = []
+        if let bookTitle = context.bookTitle, !bookTitle.isEmpty { sections.append("Book: \(bookTitle)") }
+        if let bookDescription = context.bookDescription, !bookDescription.isEmpty { sections.append("Brief description: \(bookDescription)") }
+        if let selectedText = context.selectedText, !selectedText.isEmpty { sections.append("Selected passage:\n\(selectedText)") }
+        if let bookContext = context.bookContext, !bookContext.isEmpty { sections.append("Book text:\n\(bookContext)") }
+        if !prompt.isEmpty { sections.append("Question:\n\(prompt)") }
+        return sections.joined(separator: "\n\n")
+    }
 
     func open(in library: BookLibrary) {
         guard !didOpen else { return }
@@ -115,5 +130,16 @@ extension BookLibrary {
                 if $0.modifiedAt == $1.modifiedAt { return $0.id.uuidString < $1.id.uuidString }
                 return $0.modifiedAt > $1.modifiedAt
             }
+    }
+}
+
+private struct ReaderChatReplyKey: EnvironmentKey {
+    static let defaultValue: @MainActor (AIConversationRecord) async throws -> String = ReaderChatSession.answer
+}
+
+extension EnvironmentValues {
+    var readerChatReply: @MainActor (AIConversationRecord) async throws -> String {
+        get { self[ReaderChatReplyKey.self] }
+        set { self[ReaderChatReplyKey.self] = newValue }
     }
 }
