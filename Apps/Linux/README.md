@@ -1,11 +1,6 @@
 # Linux
 
-Download the amd64 DEB from the
-[1.2.1 Google connection preview](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.1-google-connect-preview).
-See [release notes](../../docs/releases/1.2.1-google-connect-preview.md) for checksums,
-native dependencies, runtime/source companions and verification limits.
-Google defaults are bundled; readers do not need IDs/secrets. Live account
-consent/refresh/backup and installed-update acceptance remain unverified.
+Download the **Debian 12 amd64 DEB** from the [1.2.3 desktop preview](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.3-desktop-preview). The release includes SHA-256 checksums, dependency notices and links to the bundled runtimes’ source.
 
 Debian 12 x64 is the packaging baseline for the shared app in `Apps/Desktop`.
 Run `bash scripts/build-app.sh linux` with JDK 17 and the `fakeroot`/Debian packaging

@@ -39,12 +39,12 @@ The iOS and macOS apps share their Swift data model and sync implementation. And
 | --- | --- | --- |
 | iPhone and iPad | [App Store](https://apps.apple.com/app/id6825674209) | iOS or iPadOS 26+ |
 | Android | [1.2.3 preview APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.3-android-preview/CloudReader-1.2.3-android-debug.apk) | Android 12+ |
-| Windows | [1.2.1 preview MSI](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-windows.msi) | Windows x64, unsigned installer |
-| Linux | [1.2.1 preview DEB](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-linux.deb) | Debian 12 amd64 baseline |
+| Windows | [1.2.3 preview MSI](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.3-desktop-preview/CloudReader-1.2.3-windows.msi) | Windows x64, unsigned installer |
+| Linux | [1.2.3 preview DEB](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.3-desktop-preview/CloudReader-1.2.3-linux.deb) | Debian 12 amd64 baseline |
 
 **Android upgrades.** The 1.2.3 APK uses the same debug signing certificate as 1.2.1 and 1.2.2. The public 1.2.0 APK used a different key and cannot update in place. If you use 1.2.0, keep your installation and its library data.
 
-Release pages include checksums and notices. The November 1 Windows and Linux preview includes the bundled Java runtime and standard Google connection. [Android 1.2.3 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.3-android-preview) · [Windows and Linux 1.2.1 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.1-google-connect-preview) · [All releases](https://github.com/HaiGe120/CloudReader/releases)
+Release pages include checksums and notices. The desktop preview includes shelf covers, contextual book chats and a bundled Java runtime. [Android 1.2.3 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.3-android-preview) · [Windows and Linux 1.2.3 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.3-desktop-preview) · [All releases](https://github.com/HaiGe120/CloudReader/releases)
 
 When several devices share storage, sync them one at a time. Concurrent writers using schema v1 can overwrite changes they have yet to see. [Sync contract](Contracts/v1/README.md)
 

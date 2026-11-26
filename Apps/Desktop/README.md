@@ -6,14 +6,11 @@ provide file access, credential storage, PDF rendering and WebKit. The current
 reader scope follows the enabled iOS readers: TXT, PDF, EPUB, FB2 and CBZ.
 MOBI/AZW3/CBR remain importable storage-only formats.
 
-## 1.2.1 Google connection preview
+## Windows and Linux 1.2.3 preview
 
-Download the [1.2.1 prerelease](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.1-google-connect-preview):
-Windows x64 MSI, Debian 12 amd64 DEB, or the all-platform preview ZIP.
-Compiled revision: `48d8b5e154bc5b101bb85051d869836e02039069`; coordinated run `41315984334`.
-See [release notes and exact hashes](../../docs/releases/1.2.1-google-connect-preview.md).
-Keep the notices companion and matching Java/OpenJFX sources with redistributions.
-Windows remains unsigned; installed/update acceptance is not yet complete.
+Download the Windows x64 MSI or Debian 12 amd64 DEB from the [1.2.3 desktop release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.3-desktop-preview). The release includes SHA-256 checksums, dependency notices and matching runtime source links. Windows uses an unsigned installer.
+
+The shelf displays embedded covers and PDF first-page thumbnails. Click the reader’s progress indicator to reopen the controls. Ask AI resumes a book’s latest conversation and lets you review or exclude nearby text before sending with Ctrl+Enter. Settings offers app appearance, model browsing and optional provider web search. Word translation uses the configured AI provider.
 
 The existing library at `~/.cloudreader-desktop` is retained, including prototype
 properties files and UTF-16 TXT offsets. Original imported files are copied. New
