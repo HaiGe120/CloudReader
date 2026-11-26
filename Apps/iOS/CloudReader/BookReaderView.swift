@@ -21,7 +21,8 @@ struct BookReaderView: View {
     @State private var assistantRequest: ReaderChatRequest?
     @State private var isShowingAppearance = false
     @State private var selectedPassage = ""
-    @State private var isChromeVisible = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isChromeVisible = false
     @State private var navigationRequest: ReaderNavigationRequest?
     @State private var navigationState: ReaderNavigationState?
 
@@ -67,10 +68,16 @@ struct BookReaderView: View {
         }
         .environment(\.readerPageSource, pageSource)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(uiColor: readerPalette.background))
         .clipped()
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            compactProgress
+                .opacity(isChromeVisible || navigationState == nil ? 0 : 1)
+                .accessibilityHidden(isChromeVisible || navigationState == nil)
+                .allowsHitTesting(!isChromeVisible && navigationState != nil)
+        }
+        .background { Color(uiColor: readerPalette.background).ignoresSafeArea() }
         .overlay(alignment: .top) {
-            if isChromeVisible { readerToolbar }
+            if isChromeVisible || navigationState == nil { readerToolbar }
         }
         .overlay(alignment: .bottom) {
             VStack(spacing: 12) {
@@ -85,6 +92,9 @@ struct BookReaderView: View {
                     )
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
+            .frame(maxWidth: 580)
         }
         .overlay {
             if translateWords, let word = ReaderWordTranslation.englishWord(selectedPassage), assistantRequest == nil {
@@ -93,7 +103,7 @@ struct BookReaderView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar, .tabBar)
-        .statusBarHidden(true)
+        .statusBarHidden(false)
         .onAppear { library.markOpened(book) }
         .onDisappear { library.flushPendingChanges() }
         .task(id: "\(bookURL?.absoluteString ?? "")|\(textLoadAttempt)") { await loadTextIfNeeded() }
@@ -113,12 +123,35 @@ struct BookReaderView: View {
         }
     }
 
+    private var compactProgress: some View {
+        let progress = currentNavigationState.progress
+        return Button(action: toggleChrome) {
+            HStack(spacing: 10) {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .tint(.readerAccent)
+                Text(progress, format: .percent.precision(.fractionLength(0)))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(Color(uiColor: readerPalette.foreground))
+            }
+            .frame(maxWidth: 360)
+            .padding(.horizontal, 22)
+            .frame(height: 24)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Reading progress")
+        .accessibilityValue(Text(progress, format: .percent.precision(.fractionLength(0))))
+        .accessibilityHint("Shows reading controls")
+        .accessibilityIdentifier("reader.compactProgress")
+    }
+
     private var readerToolbar: some View {
         HStack(spacing: 0) {
             Button { dismiss() } label: { toolbarIcon("chevron.backward") }
                 .accessibilityLabel("Back to library")
             Text(book.title)
-                .font(.headline)
+                .font(.system(.headline, design: .serif))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
@@ -140,7 +173,11 @@ struct BookReaderView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 6)
-        .background(.regularMaterial)
+        .glassEffect(.regular, in: Capsule())
+        .background(Color(uiColor: readerPalette.background).opacity(0.90), in: Capsule())
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .frame(maxWidth: 680)
     }
 
     private func toolbarIcon(_ name: String) -> some View {
@@ -284,7 +321,7 @@ struct BookReaderView: View {
     }
 
     private func toggleChrome() {
-        isChromeVisible.toggle()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { isChromeVisible.toggle() }
     }
 
     private func openAssistant(about passage: String? = nil) {

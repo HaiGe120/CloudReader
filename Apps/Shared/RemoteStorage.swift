@@ -93,7 +93,10 @@ enum SecureVault {
     static func save<T: Encodable>(_ value: T, account: String) throws {
         let data = try JSONEncoder().encode(value)
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "io.github.haige120.cloudreader", kSecAttrAccount as String: account]
-        SecItemDelete(query as CFDictionary)
+        let update = [kSecValueData as String: data]
+        let updated = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if updated == errSecSuccess { return }
+        guard updated == errSecItemNotFound else { throw CloudSyncError.authorization("Keychain save failed (\(updated)).") }
         var item = query
         item[kSecValueData as String] = data
         #if os(iOS)
@@ -104,16 +107,26 @@ enum SecureVault {
     }
 
     static func load<T: Decodable>(_ type: T.Type, account: String) -> T? {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "io.github.haige120.cloudreader", kSecAttrAccount as String: account, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
-        var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
-        return try? JSONDecoder().decode(type, from: data)
+        try? read(type, account: account)
     }
 
-    static func remove(account: String) {
+    static func read<T: Decodable>(_ type: T.Type, account: String) throws -> T? {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "io.github.haige120.cloudreader", kSecAttrAccount as String: account, kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let data = result as? Data else {
+            throw CloudSyncError.authorization("Keychain read failed (\(status)).")
+        }
+        return try JSONDecoder().decode(type, from: data)
+    }
+
+    static func remove(account: String) { try? delete(account: account) }
+
+    static func delete(account: String) throws {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "io.github.haige120.cloudreader", kSecAttrAccount as String: account]
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw CloudSyncError.authorization("Keychain removal failed (\(status)).") }
     }
 }
 

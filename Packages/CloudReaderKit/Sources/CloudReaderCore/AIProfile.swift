@@ -52,12 +52,13 @@ public struct AIProviderConfiguration: Codable, Equatable, Sendable {
     public var endpointURL = ""
     public var model = ""
     public var webSearchEnabled = false
+    public var useAppleWhenOffline = true
 
     public var assistantName: String {
         modelSource == .appleOnDevice ? "Apple Intelligence" : name
     }
 
-    private enum CodingKeys: String, CodingKey { case name, modelSource, endpointKind, endpointURL, model, webSearchEnabled }
+    private enum CodingKeys: String, CodingKey { case name, modelSource, endpointKind, endpointURL, model, webSearchEnabled, useAppleWhenOffline }
 
     public init() {}
 
@@ -67,6 +68,7 @@ public struct AIProviderConfiguration: Codable, Equatable, Sendable {
         modelSource = try values.decodeIfPresent(AIModelSource.self, forKey: .modelSource) ?? .remoteAPI
         endpointKind = try values.decodeIfPresent(AIEndpointKind.self, forKey: .endpointKind) ?? .openAIResponses
         endpointURL = try values.decodeIfPresent(String.self, forKey: .endpointURL) ?? ""
+        useAppleWhenOffline = try values.decodeIfPresent(Bool.self, forKey: .useAppleWhenOffline) ?? true
         webSearchEnabled = try values.decodeIfPresent(Bool.self, forKey: .webSearchEnabled) ?? false
         model = try values.decodeIfPresent(String.self, forKey: .model) ?? ""
     }
@@ -77,6 +79,7 @@ public struct AIProviderConfiguration: Codable, Equatable, Sendable {
         try values.encode(modelSource, forKey: .modelSource)
         try values.encode(endpointKind, forKey: .endpointKind)
         try values.encode(endpointURL, forKey: .endpointURL)
+        if !useAppleWhenOffline { try values.encode(false, forKey: .useAppleWhenOffline) }
         if webSearchEnabled { try values.encode(true, forKey: .webSearchEnabled) }
         try values.encode(model, forKey: .model)
     }

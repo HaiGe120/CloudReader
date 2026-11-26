@@ -27,6 +27,7 @@ targets:
     info:
       path: CloudReader/Info.plist
       properties:
+        AIKeychainAccessGroup: $(AppIdentifierPrefix)io.github.haige120.cloudreader.ai
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleURLTypes:

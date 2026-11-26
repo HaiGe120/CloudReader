@@ -25,6 +25,7 @@ targets:
     info:
       path: CloudReader/Info.plist
       properties:
+        AIKeychainAccessGroup: $(AppIdentifierPrefix)io.github.haige120.cloudreader.ai
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
@@ -106,6 +107,9 @@ targets:
     entitlements:
       path: CloudReader/CloudReader.entitlements
       properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
+          - $(AppIdentifierPrefix)io.github.haige120.cloudreader.ai
         com.apple.security.application-groups:
           - group.io.github.haige120.cloudreader
     resources:

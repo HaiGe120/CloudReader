@@ -23,10 +23,18 @@ struct AIAssistantView: View {
             contextDescription: contextDescription, initialQuestion: initialQuestion))
     }
 
-    private var profile: AIProviderConfiguration { AIProfileStore.load() }
+    @State private var savedProfile = AIProfileStore.load()
 
     private var hasReaderContext: Bool {
         chat.context.bookTitle != nil || chat.context.bookDescription != nil || chat.context.selectedText != nil || chat.context.bookContext != nil
+    }
+
+    @ObservedObject private var connectivity = AIConnectivity.shared
+    private var profile: AIProviderConfiguration {
+        var active = savedProfile
+        active.modelSource = AIService.effectiveSource(profile: active, offline: connectivity.offline == true,
+                                                      appleAvailable: AIService.onDeviceAvailable)
+        return active
     }
 
     var body: some View {
@@ -86,7 +94,7 @@ struct AIAssistantView: View {
                     .disabled(chat.isThinking)
                 }
             }
-            .onAppear { chat.open(in: library) }
+            .onAppear { savedProfile = AIProfileStore.load(); chat.open(in: library) }
             .onChange(of: library.aiConversations) { _, records in chat.refresh(from: records) }
             .sheet(isPresented: $isShowingHistory) {
                 AIConversationHistoryView(bookID: chat.launchContext.bookID, onSelect: chat.restore)
@@ -110,7 +118,7 @@ struct AIAssistantView: View {
         VStack(alignment: .leading, spacing: 16) {
             Image(systemName: "sparkles")
                 .font(.system(size: 25, weight: .medium))
-                .foregroundStyle(Color(red: 0.50, green: 0.39, blue: 0.27))
+                .foregroundStyle(Color.readerAccent)
                 .frame(width: 54, height: 54)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
@@ -157,7 +165,7 @@ struct AIAssistantView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(.white.opacity(0.42), lineWidth: 1)
+                .strokeBorder(.primary.opacity(0.09), lineWidth: 1)
         }
     }
 
@@ -269,15 +277,11 @@ struct AIAssistantView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(.white.opacity(0.5), lineWidth: 1)
-            }
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22))
             VStack(alignment: .leading, spacing: 3) {
                 Text(profile.modelSource == .appleOnDevice
                      ? "Processed on this device · Apple Intelligence"
-                     : "Sent to \(profile.name) · \(profile.endpointKind.title)")
+                     : "Online provider · \(profile.name) · \(profile.endpointKind.title)")
                 Text(profile.modelSource == .appleOnDevice
                      ? "AI runs on this device. Saved conversation and included book context sync to your selected cloud drive when connected."
                      : "Your API key stays in Keychain. Saved conversation and included book context sync to your selected cloud drive when connected.")

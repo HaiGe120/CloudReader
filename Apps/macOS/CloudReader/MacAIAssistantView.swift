@@ -7,7 +7,7 @@ struct MacAIAssistantView: View {
     @Environment(\.readerChatReply) private var reply
     @State private var chat: ReaderChatSession
     @State private var isShowingHistory = false
-    @State private var profile = AIProfileStore.load()
+    @State private var savedProfile = AIProfileStore.load()
     @FocusState private var isPromptFocused: Bool
 
     init(
@@ -26,6 +26,14 @@ struct MacAIAssistantView: View {
     private var remoteAIIsConfigured: Bool {
         !profile.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && AIProfileStore.hasAPIKey
+    }
+
+    @ObservedObject private var connectivity = AIConnectivity.shared
+    private var profile: AIProviderConfiguration {
+        var active = savedProfile
+        active.modelSource = AIService.effectiveSource(profile: active, offline: connectivity.offline == true,
+                                                      appleAvailable: AIService.onDeviceAvailable)
+        return active
     }
 
     var body: some View {
@@ -184,7 +192,7 @@ struct MacAIAssistantView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear { isPromptFocused = true }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
-            profile = AIProfileStore.load()
+            savedProfile = AIProfileStore.load()
         }
         .onAppear { chat.open(in: library) }
         .onChange(of: library.aiConversations) { _, records in chat.refresh(from: records) }

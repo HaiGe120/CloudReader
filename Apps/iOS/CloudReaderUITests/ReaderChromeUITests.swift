@@ -1,4 +1,5 @@
 import Network
+import Vision
 import XCTest
 
 final class ReaderChromeUITests: XCTestCase {
@@ -42,6 +43,7 @@ final class ReaderChromeUITests: XCTestCase {
         app.launchEnvironment["CLOUDREADER_UI_TEST_MODE"] = "1"
         app.launch()
         app.buttons["Settings"].firstMatch.tap()
+        app.buttons["AI settings"].firstMatch.tap()
         let provider = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "AI provider")).firstMatch
         for _ in 0..<18 where !provider.isHittable { app.swipeUp() }
         provider.tap()
@@ -81,6 +83,7 @@ final class ReaderChromeUITests: XCTestCase {
         let fixture = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Reader PDF UI Test Book")).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15))
         fixture.tap()
+        revealReadingControls(in: app)
         let next = app.buttons["reader.next"]
         XCTAssertTrue(next.waitForExistence(timeout: 10))
         next.tap()
@@ -122,6 +125,7 @@ final class ReaderChromeUITests: XCTestCase {
         let fixture = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Reader Swipe Test Book")).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15))
         fixture.tap()
+        revealReadingControls(in: app)
         let picker = app.buttons["reader.chapters"]
         XCTAssertTrue(picker.waitForExistence(timeout: 10))
         picker.tap()
@@ -191,6 +195,7 @@ final class ReaderChromeUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15), "The library must be available before any provider authorization.")
         fixture.tap()
+        revealReadingControls(in: app)
         let reader = app.descendants(matching: .any).matching(identifier: "reader.content").firstMatch
         XCTAssertTrue(reader.waitForExistence(timeout: 10), "A local book must open without a CloudReader account or storage connection.")
         XCTAssertTrue(app.buttons["reader.appearance"].waitForExistence(timeout: 3))
@@ -209,6 +214,7 @@ final class ReaderChromeUITests: XCTestCase {
         settings.tap()
         XCTAssertTrue(app.staticTexts["No account required"].waitForExistence(timeout: 5))
         let explanation = app.staticTexts["settings.cloudStorageExplanation"]
+        for _ in 0..<4 where !explanation.isHittable { app.swipeUp() }
         XCTAssertTrue(explanation.waitForExistence(timeout: 5))
         XCTAssertTrue(explanation.label.contains("this does not create or sign in to a CloudReader account"))
         attachScreenshot(app, name: "Optional cloud storage, no app account")
@@ -238,6 +244,7 @@ final class ReaderChromeUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15), "The isolated fixture should be in the library.")
         fixture.tap()
+        revealReadingControls(in: app)
 
         let askAI = app.buttons["reader.askAI"]
         let appearance = app.buttons["reader.appearance"]
@@ -245,6 +252,7 @@ final class ReaderChromeUITests: XCTestCase {
         XCTAssertTrue(askAI.waitForExistence(timeout: 10), "The reader toolbar should be visible when the book opens.")
         XCTAssertTrue(appearance.waitForExistence(timeout: 3), "The reading appearance control should be visible with the chrome.")
         XCTAssertTrue(reader.waitForExistence(timeout: 10), "The fixture should open in the actual reader.")
+        try assertSystemClockVisible()
         let visibleFrame = reader.frame
         let passageBefore = try renderedPassage(in: reader)
         let start = reader.coordinate(withNormalizedOffset: CGVector(dx: 0.58, dy: 0.32))
@@ -257,6 +265,8 @@ final class ReaderChromeUITests: XCTestCase {
         let hiddenToolbar = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: askAI)
         let hiddenAppearance = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: appearance)
         XCTAssertEqual(XCTWaiter.wait(for: [hiddenToolbar, hiddenAppearance], timeout: 3), .completed)
+        XCTAssertTrue(app.buttons["reader.compactProgress"].exists)
+        try assertSystemClockVisible()
         XCTAssertFalse(app.tabBars.firstMatch.exists, "Library and Settings tabs must leave the reading surface and accessibility tree.")
         XCTAssertEqual(reader.frame, visibleFrame, "Toggling controls must keep the text viewport fixed.")
         XCTAssertTrue(try renderedPassage(in: reader) == passageBefore, "The plain-text passage must stay at the same pixels.")
@@ -265,6 +275,46 @@ final class ReaderChromeUITests: XCTestCase {
         reader.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.46)).tap()
         XCTAssertTrue(askAI.waitForExistence(timeout: 3), "A second content tap should restore the reading controls.")
         XCTAssertTrue(appearance.waitForExistence(timeout: 3), "Restoring the chrome should restore its appearance control too.")
+    }
+
+    @MainActor
+    func testDarkPaperExtendsAcrossSystemBarsInLightApp() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["CLOUDREADER_UI_TEST_MODE"] = "1"
+        app.launch()
+        app.buttons["Settings"].firstMatch.tap()
+        app.buttons["Light"].tap()
+        app.buttons["Library"].firstMatch.tap()
+        let book = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "The Open Shelf")).firstMatch
+        for _ in 0..<8 where !book.isHittable { app.swipeUp() }
+        book.tap()
+        revealReadingControls(in: app)
+        app.buttons["reader.appearance"].tap()
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Theme")).firstMatch.tap()
+        app.buttons["Dark"].tap()
+        app.buttons["Done"].tap()
+        let slider = app.sliders["Reading progress"]
+        slider.adjust(toNormalizedSliderPosition: 0.4)
+        attachScreenshot(app, name: "Dark paper with Liquid Glass controls")
+        let reader = app.descendants(matching: .any).matching(identifier: "reader.content").firstMatch
+        reader.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.46)).tap()
+        XCTAssertTrue(app.buttons["reader.compactProgress"].waitForExistence(timeout: 5))
+        let progress = app.buttons["reader.compactProgress"].value as? String
+        XCTAssertNotNil(progress)
+        XCTAssertNotEqual(progress, "0%")
+        let shot = app.screenshot()
+        let pixels = try XCTUnwrap(shot.image.cgImage)
+        for y in [8, pixels.height - 9] {
+            let sample = try XCTUnwrap(pixels.cropping(to: CGRect(x: pixels.width / 4, y: y, width: 1, height: 1)))
+            var rgba = [UInt8](repeating: 0, count: 4)
+            try rgba.withUnsafeMutableBytes { bytes in
+                let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: 1, height: 1, bitsPerComponent: 8,
+                    bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                context.draw(sample, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+            }
+            XCTAssertLessThan(rgba.prefix(3).max()!, 64, "Dark paper must cover the safe area at y=\(y)")
+        }
+        attachScreenshot(app, name: "Dark paper with status and progress")
     }
 
     @MainActor
@@ -279,6 +329,7 @@ final class ReaderChromeUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15), "The isolated PDF fixture should be in the library.")
         fixture.tap()
+        revealReadingControls(in: app)
 
         let reader = app.descendants(matching: .any).matching(identifier: "reader.content").firstMatch
         let pageStatus = app.staticTexts["reader.pageStatus"]
@@ -310,6 +361,7 @@ final class ReaderChromeUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15), "The isolated EPUB fixture should be in the library.")
         fixture.tap()
+        revealReadingControls(in: app)
 
         let reader = app.webViews.firstMatch
         let pageStatus = app.staticTexts["reader.pageStatus"]
@@ -363,6 +415,7 @@ final class ReaderChromeUITests: XCTestCase {
         let book = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Reader Swipe Test Book")).firstMatch
         XCTAssertTrue(book.waitForExistence(timeout: 15))
         book.tap()
+        revealReadingControls(in: app)
 
         let page = app.webViews.firstMatch
         let status = app.staticTexts["reader.pageStatus"]
@@ -420,6 +473,7 @@ final class ReaderChromeUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15), "The isolated FB2 fixture should be in the library.")
         fixture.tap()
+        revealReadingControls(in: app)
 
         let chapterPicker = app.buttons["reader.chapters"]
         let pageStatus = app.staticTexts["reader.pageStatus"]
@@ -440,6 +494,7 @@ final class ReaderChromeUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15), "The isolated CBZ fixture should be in the library.")
         fixture.tap()
+        revealReadingControls(in: app)
 
         let reader = app.descendants(matching: .any).matching(identifier: "reader.content").firstMatch
         let pageStatus = app.staticTexts["reader.pageStatus"]
@@ -466,6 +521,7 @@ final class ReaderChromeUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15))
         fixture.tap()
+        revealReadingControls(in: app)
 
         let appearance = app.buttons["reader.appearance"]
         XCTAssertTrue(appearance.waitForExistence(timeout: 10))
@@ -504,6 +560,7 @@ final class ReaderChromeUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15))
         fixture.tap()
+        revealReadingControls(in: app)
 
         let appearance = app.buttons["reader.appearance"]
         XCTAssertTrue(appearance.waitForExistence(timeout: 10))
@@ -537,6 +594,7 @@ final class ReaderChromeUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(fixture.waitForExistence(timeout: 15))
         fixture.tap()
+        revealReadingControls(in: app)
 
         let appearance = app.buttons["reader.appearance"]
         XCTAssertTrue(appearance.waitForExistence(timeout: 10))
@@ -585,6 +643,7 @@ final class ReaderChromeUITests: XCTestCase {
         let book = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Reader Swipe Test Book")).firstMatch
         XCTAssertTrue(book.waitForExistence(timeout: 15))
         book.tap()
+        revealReadingControls(in: app)
         let appearance = app.buttons["reader.appearance"]
         XCTAssertTrue(appearance.waitForExistence(timeout: 10))
         appearance.tap()
@@ -607,6 +666,26 @@ final class ReaderChromeUITests: XCTestCase {
         let advanced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", firstScreen), object: status)
         XCTAssertEqual(XCTWaiter.wait(for: [advanced], timeout: 5), .completed)
         XCTAssertEqual(chapters.value as? String, "First chapter")
+    }
+
+    @MainActor
+    private func assertSystemClockVisible(file: StaticString = #filePath, line: UInt = #line) throws {
+        // The system can place the clock in a side rail outside the app's accessibility tree.
+        let image = try XCTUnwrap(XCUIScreen.main.screenshot().image.cgImage, file: file, line: line)
+        let clock = VNRecognizeTextRequest()
+        clock.regionOfInterest = CGRect(x: 0, y: 0.7, width: 1, height: 0.3)
+        clock.usesLanguageCorrection = false
+        try VNImageRequestHandler(cgImage: image).perform([clock])
+        let text = clock.results?.compactMap { $0.topCandidates(1).first?.string } ?? []
+        XCTAssertTrue(text.contains { $0.range(of: #"[0-9]{1,2}:[0-9]{2}"#, options: .regularExpression) != nil },
+                      "Expected the rendered system clock in the upper part of the display.", file: file, line: line)
+    }
+
+    @MainActor
+    private func revealReadingControls(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let progress = app.buttons["reader.compactProgress"]
+        XCTAssertTrue(progress.waitForExistence(timeout: 15), file: file, line: line)
+        progress.tap()
     }
 
     @MainActor

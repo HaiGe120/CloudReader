@@ -4,7 +4,7 @@ CloudReader is an **open-source, offline-first book library and reader for iOS, 
 
 [Download CloudReader for iPhone and iPad on the App Store](https://apps.apple.com/app/id6825674209).
 
-Sync directly with storage destinations you choose. Your books, reading progress, favorites, deletions, and saved AI conversations can move between devices; provider credentials stay on each device.
+Sync directly with storage destinations you choose. Your books, reading progress, favorites, deletions, and saved AI conversations can move between devices; storage credentials stay on each device. On iOS and macOS, enable AI settings sync in Settings to share the model configuration and API key through iCloud Keychain.
 
 ## Features
 

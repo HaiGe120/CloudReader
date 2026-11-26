@@ -1,3 +1,4 @@
+import CloudReaderCore
 import AppIntents
 import Foundation
 import SwiftUI
@@ -48,6 +49,7 @@ struct CloudReaderApp: App {
                 try ReaderUITestFixture.writeCBZ(at: cbzFixture)
                 try ReaderUITestFixture.writeFB2(at: fb2Fixture)
                 try ReaderUITestFixture.writePDF(at: pdfFixture)
+                isolatedLibrary.installDemoBookIfNeeded()
                 isolatedLibrary.importBooks(from: [fixture, epubFixture, cbzFixture, fb2Fixture, pdfFixture])
                 isolatedLibrary.alertMessage = nil
             } catch {
@@ -91,7 +93,7 @@ struct CloudReaderApp: App {
                     .environment(\.readerTranslationLanguages, isUITestMode ? { ["fr", "ja", "zh-Hans"] } : ReaderTranslationTarget.supportedIdentifiers)
                     #endif
                     .defaultAppStorage(uiTestDefaults ?? .standard)
-                    .tint(Color(red: 0.40, green: 0.34, blue: 0.28))
+                    .tint(.readerAccent)
             }
         }
     }
@@ -181,6 +183,10 @@ private struct RootTabView: View {
     @EnvironmentObject private var library: BookLibrary
     @EnvironmentObject private var cloudSync: CloudSyncCoordinator
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("app.appearance") private var appearance = AppAppearance.system
+    @AppStorage("reader.theme") private var readerTheme = ReaderTheme.system
+    @AppStorage("reader.customBackground") private var customPaper = "F8F4EB"
+    @State private var navigationPath: [Book] = []
     @State private var selection: AppTab = .library
     @State private var syncTask: Task<Void, Never>?
     @StateObject private var imports = BookImportCoordinator()
@@ -193,13 +199,16 @@ private struct RootTabView: View {
     var body: some View {
         TabView(selection: $selection) {
             Tab("Library", systemImage: "books.vertical.fill", value: .library) {
-                LibraryView()
+                LibraryView(navigationPath: $navigationPath)
             }
 
             Tab("Settings", systemImage: "slider.horizontal.3", value: .settings) {
                 SettingsView()
             }
         }
+        .preferredColorScheme(selection == .library && !navigationPath.isEmpty
+                              ? readerTheme.colorScheme(customPaper: customPaper) ?? appearance.colorScheme
+                              : appearance.colorScheme)
         .environmentObject(imports)
         .onOpenURL { url in
             guard url.isFileURL else { return }

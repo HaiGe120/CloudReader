@@ -46,8 +46,12 @@ struct ReaderChromeControls: View {
         .padding(.horizontal, 18)
         .padding(.top, 10)
         .padding(.bottom, 8)
+#if os(iOS)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26))
+#else
         .background(.regularMaterial)
         .overlay(alignment: .top) { Rectangle().fill(.primary.opacity(0.08)).frame(height: 0.5) }
+#endif
     }
 
     private var progressControl: some View {

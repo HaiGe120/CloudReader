@@ -1,5 +1,13 @@
 # Changelog
 
+## iOS source preview — 2026-11-26
+
+- Choose System, Light, or Dark for the app. Reader controls follow the page color, including custom paper.
+- Read with the toolbar tucked away. A compact progress indicator shows your place and reopens the controls. The status bar stays visible.
+- Optionally share the AI profile and its endpoint-bound API key across Apple devices through iCloud Keychain. A supported on-device Apple model can answer when offline and the next online request uses the configured provider again.
+
+This preview follows iOS 1.2.0 build 5. The [build 5 source](https://github.com/HaiGe120/CloudReader/releases/tag/ios-v1.2.0) includes per-book conversations, surrounding-page context, keyboard Send, model browsing, optional web search and selected-word translation.
+
 ## 1.2.1 Google connection preview — 2026-11-01
 
 Prerelease: `v1.2.1-google-connect-preview`; compiled source `48d8b5e154bc5b101bb85051d869836e02039069`;

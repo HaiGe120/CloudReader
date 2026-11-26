@@ -6,5 +6,10 @@
 	<array>
 		<string>group.io.github.haige120.cloudreader</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+		<string>$(AppIdentifierPrefix)io.github.haige120.cloudreader.ai</string>
+	</array>
 </dict>
 </plist>

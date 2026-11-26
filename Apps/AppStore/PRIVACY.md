@@ -1,12 +1,12 @@
 # CloudReader Privacy Policy
 
-**Effective date: November 24, 2026**
+**Effective date: November 26, 2026**
 
 CloudReader is an offline-first book library. It does not require a CloudReader account, and the developer does not operate a server that stores your library or AI conversations.
 
 ## Information stored on your device
 
-CloudReader stores the books you import, library details, reading progress, favorites, reader settings, and any AI conversations you choose to save. Provider connection settings and credentials are stored on your device; credentials are kept in the operating system’s secure credential store. These items are not sent to the CloudReader developer.
+CloudReader stores the books you import, library details, reading progress, favorites, reader settings, and any AI conversations you choose to save. Storage provider connection settings and credentials are stored on your device; credentials are kept in the operating system’s secure credential store. These items are not sent to the CloudReader developer.
 
 ## Optional sync to storage you choose
 
@@ -17,6 +17,8 @@ CloudReader does not operate these storage services. Copies stored there are gov
 ## Optional AI features
 
 Apple’s Foundation Model runs on device when supported by the device and available in the user’s system settings. If you configure a remote AI API, CloudReader sends your submitted question to the endpoint you configure. In a book chat, book context is enabled by default. It can include the title, a brief description, your selected passage, and readable text from the current and adjacent pages. You can turn off book context before sending a question. Requests go directly from your device to that endpoint; the developer does not receive them. The provider’s terms and retention practices apply to remote requests.
+
+On iOS and macOS, you can enable AI settings sync through iCloud Keychain. The synchronized item contains your AI provider, endpoint, model, web search and offline preferences, and saved API key. This uses the Apple Account and Passwords & Keychain settings on your devices. Removing the saved API key while AI settings sync is enabled updates the shared item. When offline fallback is enabled, CloudReader can answer with the available Apple model and use the remote provider again on your next online request.
 
 Choosing Browse models contacts your configured endpoint to fetch its model list, using your API key when provided. If you enable web search, your remote AI provider may send search queries to its search service. Optional word translation uses Apple Translation.
 

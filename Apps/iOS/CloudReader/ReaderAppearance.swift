@@ -2,6 +2,26 @@ import SwiftUI
 import UIKit
 import CloudReaderCore
 
+enum AppAppearance: String, CaseIterable {
+    case system, light, dark
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+}
+
+extension Color {
+    static let readerAccent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.62, green: 0.84, blue: 0.75, alpha: 1)
+            : UIColor(red: 0.18, green: 0.39, blue: 0.32, alpha: 1)
+    })
+}
+
 extension ReaderPageLayout {
     var title: String {
         switch self {
@@ -13,6 +33,23 @@ extension ReaderPageLayout {
 }
 
 extension ReaderTheme {
+    func colorScheme(customPaper: String) -> ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light, .sepia: return .light
+        case .dark: return .dark
+        case .custom:
+            let color = ReaderColor.uiColor(hex: customPaper)
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
+            color.getRed(&r, green: &g, blue: &b, alpha: nil)
+            func linear(_ c: CGFloat) -> CGFloat {
+                c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+            }
+            let luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+            return luminance < 0.179 ? .dark : .light
+        }
+    }
+
     var title: String {
         switch self {
         case .system: "System"

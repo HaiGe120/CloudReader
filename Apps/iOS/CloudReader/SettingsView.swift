@@ -19,10 +19,7 @@ struct SettingsView: View {
     @State private var sftpPassword = ""
     @State private var sftpHostKey = ""
     @State private var showingFolderPicker = false
-    @State private var aiProfile = AIProfileStore.load()
-    @State private var aiAPIKey = ""
-    @State private var aiHasSavedKey = AIProfileStore.hasAPIKey
-    @State private var aiSaveMessage: String?
+    @AppStorage("app.appearance") private var appearance = AppAppearance.system
     @State private var connectingProvider: CloudProviderKind?
     @State private var cloudAlertTitle = "Cloud storage"
     @State private var cloudAlertMessage = ""
@@ -32,20 +29,30 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    Label {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("CloudReader")
-                                .font(.system(size: 18, weight: .semibold, design: .serif))
-                            Text("A quiet place for your books")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "books.vertical.fill")
-                            .font(.system(size: 23))
-                            .foregroundStyle(Color(red: 0.53, green: 0.39, blue: 0.27))
+                    Link(destination: URL(string: "https://github.com/HaiGe120/CloudReader")!) {
+                        Label("CloudReader on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                     }
-                    .padding(.vertical, 8)
+                } footer: {
+                    Text("Browse the source code, report an issue, or contribute to CloudReader.")
+                }
+
+                Section("Appearance") {
+                    Picker("App appearance", selection: $appearance) {
+                        ForEach(AppAppearance.allCases, id: \.self) { option in
+                            Text(option.rawValue.capitalized).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("Reading") {
+                    NavigationLink {
+                        Form { AISettingsSection() }
+                            .navigationTitle("AI settings")
+                    } label: {
+                        Label("AI settings", systemImage: "sparkles")
+                    }
+                    ReaderTranslationSettings()
                 }
 
                 Section("Your library") {
@@ -139,7 +146,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Cloud storage (optional)")
                 } footer: {
-                    Text("Connect any providers you want, then select multiple destinations below. CloudReader merges books, progress, bookmarks, deletions, and saved AI conversations across them. Conversation context you included, such as a selected passage, syncs with its chat. Connections are configured separately on each device; secrets stay in this device’s Keychain. Use HTTPS for WebDAV.")
+                    Text("Connect any providers you want, then select multiple destinations below. CloudReader merges books, progress, bookmarks, deletions, and saved AI conversations across them. Conversation context you included, such as a selected passage, syncs with its chat. Storage connections and their credentials stay on each device. Use HTTPS for WebDAV.")
                 }
 
                 Section("Other locations") {
@@ -188,84 +195,6 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Reading") {
-                    ReaderTranslationSettings()
-                    LabeledContent("Native readers", value: "EPUB · PDF · TXT")
-                    Text("Additional book formats can be imported and kept in your library, with native readers arriving in later iOS updates.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section {
-                    Picker("AI provider", selection: $aiProfile.modelSource) {
-                        ForEach(AIModelSource.allCases) { source in
-                            Text(source.title).tag(source)
-                        }
-                    }
-                    if aiProfile.modelSource == .remoteAPI {
-                        TextField("Profile name", text: $aiProfile.name)
-                        Picker("API format", selection: $aiProfile.endpointKind) {
-                            ForEach(AIEndpointKind.allCases) { kind in
-                                Text(kind.title).tag(kind)
-                            }
-                        }
-                        TextField("API endpoint or /v1 base URL (optional)", text: $aiProfile.endpointURL)
-                            .accessibilityIdentifier("ai.endpointURL")
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                        SecureField(aiHasSavedKey ? "Replace saved API key (optional)" : "API key", text: $aiAPIKey)
-                            .accessibilityIdentifier("ai.apiKey")
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                        if aiHasSavedKey {
-                            Label("API key stored in this device’s Keychain", systemImage: "lock.shield")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                        AIModelPicker(profile: $aiProfile, enteredKey: aiAPIKey)
-                        Toggle("Allow web search", isOn: $aiProfile.webSearchEnabled)
-                        if aiProfile.webSearchEnabled {
-                            Text(aiProfile.endpointKind == .openAIChatCompletions
-                                 ? "Choose a search-capable Chat Completions model. Provider search charges may apply."
-                                 : "The model can search the web when answering. Your provider may charge for searches.")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    } else {
-                        Label(AIService.onDeviceAvailabilityDescription, systemImage: "iphone.gen3.radiowaves.left.and.right")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("Save AI settings") {
-                        do {
-                            try AIProfileStore.save(aiProfile, apiKey: aiAPIKey)
-                            aiAPIKey = ""
-                            aiHasSavedKey = AIProfileStore.hasAPIKey
-                            aiSaveMessage = "AI settings saved."
-                        } catch {
-                            aiSaveMessage = error.localizedDescription
-                        }
-                    }
-                    if aiHasSavedKey {
-                        Button("Remove saved API key", role: .destructive) {
-                            AIProfileStore.removeAPIKey()
-                            aiHasSavedKey = false
-                            aiSaveMessage = "Saved API key removed from this device."
-                        }
-                    }
-                    if let aiSaveMessage {
-                        Text(aiSaveMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("AI assistant")
-                } footer: {
-                    Text(aiProfile.modelSource == .appleOnDevice
-                         ? "Questions are processed on this device when Apple Intelligence is available. Siri’s Ask CloudReader action uses the selected provider."
-                         : "Supports OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, and compatible custom endpoints. Leave the endpoint blank for the provider default. Questions and optional book text are sent only when you ask; credentials stay in Keychain. Siri’s Ask CloudReader action uses this provider.")
-                }
-
                 Section {
                     LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
                 }
@@ -307,7 +236,7 @@ struct SettingsView: View {
             HStack(spacing: 10) {
                 Image(systemName: provider.symbol)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.45, green: 0.36, blue: 0.27))
+                    .foregroundStyle(Color.readerAccent)
                     .frame(width: 34, height: 34)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 11))
                 Text(provider.title).font(.system(size: 16, weight: .semibold, design: .serif))

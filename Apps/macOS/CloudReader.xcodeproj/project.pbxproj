@@ -62,6 +62,7 @@
 		893C0A5CFFABFFE3BF71EBF0 /* rar5-solid-pages.rar in Resources */ = {isa = PBXBuildFile; fileRef = EE0B91CA81C1572552DCAAE4 /* rar5-solid-pages.rar */; };
 		89B2042C5459705CF48D6E92 /* NIOSSH in Frameworks */ = {isa = PBXBuildFile; productRef = DAE18DE0736CBEC4341583B0 /* NIOSSH */; };
 		8AB81C037CB74B61C5CEA356 /* MacReflowReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892C5E28E8147E58A12ED90B /* MacReflowReaderTests.swift */; };
+		8E3A0A2DEA2353CA866FE2D1 /* AISettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FD07E59A9A3646677A8CAA1 /* AISettingsSection.swift */; };
 		90B068470C2BD1C261BCA710 /* AppleSyncPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 692ECFF924D5F1F09B0614D3 /* AppleSyncPipeline.swift */; };
 		937F39B02AE161225F3431B5 /* LICENSE-CC-BY-SA-4.0.txt in Resources */ = {isa = PBXBuildFile; fileRef = AC2CB1151E1DFB684B11B9C6 /* LICENSE-CC-BY-SA-4.0.txt */; };
 		970A2F2F2AAB521A8ECDF0CB /* BookLibraryRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12026F87D2B625A97EF8256 /* BookLibraryRepositories.swift */; };
@@ -70,6 +71,7 @@
 		9B7D49A545BDA1EE0A3FF0E4 /* CloudReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C4D8636AB0409D34771BB02 /* CloudReaderApp.swift */; };
 		9C118FCCDD28480AE99EB9DD /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 4A74AF56DB37FF912B6E8246 /* ZIPFoundation */; };
 		9C70491198EFB93541F7DECD /* rar5-no-image.rar in Resources */ = {isa = PBXBuildFile; fileRef = D32D774E064247B39318585F /* rar5-no-image.rar */; };
+		9CC91F8BE6CF19D600418519 /* AIConnectivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 221B6E6E2F3A62611EFFFF21 /* AIConnectivity.swift */; };
 		A9A929C3F6C4B48C520020E7 /* SharedBookInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459882B555974C239290F380 /* SharedBookInbox.swift */; };
 		AA460B322F1033CFEAA0A725 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = 9D0EB27AD51B8F6AA8121ADA /* Citadel */; };
 		ADE4A09C613CE298C6CEDAD7 /* BookCoverArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = E62A4187F3FEBC7556C9AD54 /* BookCoverArtwork.swift */; };
@@ -78,6 +80,7 @@
 		B8B0A12FCD183B7042AE0FCF /* huffdic-unicode.mobi in Resources */ = {isa = PBXBuildFile; fileRef = 765FE39AB689DC0847884989 /* huffdic-unicode.mobi */; };
 		B8E211282BA42845A6C6FE4C /* rar4-solid-skip-unrelated.rar in Resources */ = {isa = PBXBuildFile; fileRef = 2EFCDDF37034871A317B16D6 /* rar4-solid-skip-unrelated.rar */; };
 		B90881B183E3C3E8BFBDCDBF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 63274D14094410C3C675E826 /* PrivacyInfo.xcprivacy */; };
+		B9565AC04C56D37A6ADD52F2 /* AISettingsSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6613F6551ADF9479BC9141BC /* AISettingsSync.swift */; };
 		B977E6CD8B3DE56FBEEC2847 /* SharedBookInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459882B555974C239290F380 /* SharedBookInbox.swift */; };
 		BDF85B42BCDF8A7EFE4C9FE9 /* encrypted-rar4.rar in Resources */ = {isa = PBXBuildFile; fileRef = 1F5A0C31E987EDCE9E79876D /* encrypted-rar4.rar */; };
 		BFC0F1CB81561ACFD11200A7 /* split-volume-rar5.rar in Resources */ = {isa = PBXBuildFile; fileRef = F8596EA4150DAB268321AA86 /* split-volume-rar5.rar */; };
@@ -160,6 +163,7 @@
 		1F5A0C31E987EDCE9E79876D /* encrypted-rar4.rar */ = {isa = PBXFileReference; path = "encrypted-rar4.rar"; sourceTree = "<group>"; };
 		1F65A35A7021FBB234F3C736 /* DemoBookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoBookInstaller.swift; sourceTree = "<group>"; };
 		21C22EECA854133B8A31C9C6 /* LICENSE-libmobi.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LICENSE-libmobi.txt"; sourceTree = "<group>"; };
+		221B6E6E2F3A62611EFFFF21 /* AIConnectivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConnectivity.swift; sourceTree = "<group>"; };
 		23B996118E288276959CDB62 /* ReaderWordTranslation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderWordTranslation.swift; sourceTree = "<group>"; };
 		246D52D1C81D57D48C5D46C2 /* FB2PublicationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FB2PublicationTests.swift; sourceTree = "<group>"; };
 		27B2F8F87F69266A5EA1A873 /* rar4-absolute-directory.rar */ = {isa = PBXFileReference; path = "rar4-absolute-directory.rar"; sourceTree = "<group>"; };
@@ -188,6 +192,7 @@
 		5D9BB58A4A0DDAF6F46ED9D2 /* AppleSyncLocalStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSyncLocalStateStore.swift; sourceTree = "<group>"; };
 		63274D14094410C3C675E826 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		65AE13C05DD8A0B56EB0A6BC /* MacLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLibraryView.swift; sourceTree = "<group>"; };
+		6613F6551ADF9479BC9141BC /* AISettingsSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISettingsSync.swift; sourceTree = "<group>"; };
 		692ECFF924D5F1F09B0614D3 /* AppleSyncPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSyncPipeline.swift; sourceTree = "<group>"; };
 		6B455AC11DCFEB3F73BB6AEC /* ReaderChatSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderChatSession.swift; sourceTree = "<group>"; };
 		71BA90C59581BAAD10A23F91 /* AppleSyncPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSyncPipelineTests.swift; sourceTree = "<group>"; };
@@ -205,6 +210,7 @@
 		97FD5BFA2F12F79361D98432 /* CloudReaderMacUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CloudReaderMacUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9CFA9B7D6281EA00AED872C7 /* IllustratedCoverSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IllustratedCoverSource.swift; sourceTree = "<group>"; };
 		9F590D3D844F038611930F07 /* ReaderChromeControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderChromeControls.swift; sourceTree = "<group>"; };
+		9FD07E59A9A3646677A8CAA1 /* AISettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISettingsSection.swift; sourceTree = "<group>"; };
 		A12026F87D2B625A97EF8256 /* BookLibraryRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookLibraryRepositories.swift; sourceTree = "<group>"; };
 		A7BDF8C507725FD9FBB58E03 /* MacBookReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacBookReaderView.swift; sourceTree = "<group>"; };
 		A8DC7D09DAD1FB0BFA2C94F0 /* encrypted-headers-rar5.rar */ = {isa = PBXFileReference; path = "encrypted-headers-rar5.rar"; sourceTree = "<group>"; };
@@ -365,10 +371,13 @@
 		73AF7C6AD49555EE4AB9D413 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				221B6E6E2F3A62611EFFFF21 /* AIConnectivity.swift */,
 				3EC744D826CF7624E0253089 /* AIConversationHistoryView.swift */,
 				C2A2B33230A5F768EB62EA88 /* AIModelCatalog.swift */,
 				0C946635A951C684B0414FE5 /* AIModelPicker.swift */,
 				ECD0D88D22D5C35C85035416 /* AIService.swift */,
+				9FD07E59A9A3646677A8CAA1 /* AISettingsSection.swift */,
+				6613F6551ADF9479BC9141BC /* AISettingsSync.swift */,
 				5D9BB58A4A0DDAF6F46ED9D2 /* AppleSyncLocalStateStore.swift */,
 				692ECFF924D5F1F09B0614D3 /* AppleSyncPipeline.swift */,
 				E62A4187F3FEBC7556C9AD54 /* BookCoverArtwork.swift */,
@@ -691,10 +700,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9CC91F8BE6CF19D600418519 /* AIConnectivity.swift in Sources */,
 				4E4C2BCC334EB678F8654D02 /* AIConversationHistoryView.swift in Sources */,
 				CAD196FA9FE5D54D740F793F /* AIModelCatalog.swift in Sources */,
 				8242080565A37866FC156FE6 /* AIModelPicker.swift in Sources */,
 				8025ECB6775D468033DCA448 /* AIService.swift in Sources */,
+				8E3A0A2DEA2353CA866FE2D1 /* AISettingsSection.swift in Sources */,
+				B9565AC04C56D37A6ADD52F2 /* AISettingsSync.swift in Sources */,
 				3BC859614A702BB651566482 /* AppleSyncLocalStateStore.swift in Sources */,
 				90B068470C2BD1C261BCA710 /* AppleSyncPipeline.swift in Sources */,
 				ADE4A09C613CE298C6CEDAD7 /* BookCoverArtwork.swift in Sources */,

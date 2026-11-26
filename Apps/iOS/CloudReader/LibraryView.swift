@@ -13,7 +13,7 @@ struct LibraryView: View {
     @State private var bookToRename: Book?
     @State private var draftTitle = ""
     @State private var bookToDelete: Book?
-    @State private var navigationPath: [Book] = []
+    @Binding var navigationPath: [Book]
 
     private var visibleBooks: [Book] {
         let ordered = library.books.sorted { $0.addedAt > $1.addedAt }
@@ -214,7 +214,7 @@ struct LibraryView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.primary)
-            .glassEffect(.clear.interactive(), in: Capsule())
+            .glassEffect(.regular.interactive(), in: Capsule())
             .accessibilityLabel("Ask AI")
 
             Button {
@@ -227,7 +227,7 @@ struct LibraryView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.primary)
-            .glassEffect(.clear.interactive(), in: Circle())
+            .glassEffect(.regular.interactive(), in: Circle())
             .accessibilityLabel("Import books")
             .disabled(imports.isImporting)
         }
@@ -361,7 +361,7 @@ struct LibraryView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(.white.opacity(0.42), lineWidth: 1)
+                .strokeBorder(.primary.opacity(0.09), lineWidth: 1)
         }
     }
 
@@ -463,7 +463,7 @@ struct LibraryView: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(.white.opacity(0.35), lineWidth: 1)
+                .strokeBorder(.primary.opacity(0.09), lineWidth: 1)
         }
     }
 
@@ -531,7 +531,7 @@ struct LibraryView: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(.white.opacity(0.48), lineWidth: 1)
+                    .strokeBorder(.primary.opacity(0.09), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -641,7 +641,7 @@ private struct BookTile: View {
                 .lineLimit(1)
             if book.progress > 0 {
                 ProgressView(value: book.progress)
-                    .tint(Color(red: 0.43, green: 0.51, blue: 0.45))
+                    .tint(Color.readerAccent)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

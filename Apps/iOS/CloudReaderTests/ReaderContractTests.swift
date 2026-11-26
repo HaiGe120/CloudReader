@@ -1,5 +1,6 @@
 import CloudReaderCore
 import Translation
+import Security
 #if os(macOS)
 import AppKit
 #endif
@@ -7,6 +8,47 @@ import XCTest
 @testable import CloudReader
 
 final class ReaderContractTests: XCTestCase {
+    func testOfflineModelRoutingPreservesTheSavedChoice() throws {
+        var profile = try JSONDecoder().decode(AIProviderConfiguration.self, from: Data("{}".utf8))
+        XCTAssertTrue(profile.useAppleWhenOffline)
+        XCTAssertEqual(AIService.effectiveSource(profile: profile, offline: true, appleAvailable: true), .appleOnDevice)
+        XCTAssertEqual(AIService.effectiveSource(profile: profile, offline: false, appleAvailable: true), .remoteAPI)
+        XCTAssertEqual(AIService.effectiveSource(profile: profile, offline: true, appleAvailable: false), .remoteAPI)
+        profile.useAppleWhenOffline = false
+        XCTAssertEqual(try JSONDecoder().decode(AIProviderConfiguration.self, from: JSONEncoder().encode(profile)), profile)
+        XCTAssertEqual(AIService.effectiveSource(profile: profile, offline: true, appleAvailable: true), .remoteAPI)
+        profile.modelSource = .appleOnDevice
+        XCTAssertEqual(AIService.effectiveSource(profile: profile, offline: false, appleAvailable: false), .appleOnDevice)
+    }
+
+    #if targetEnvironment(simulator)
+    func testSharedKeychainProfileKeepsCredentialAndSettingsTogether() throws {
+        let store = AISettingsKeychain(account: "ai.test.\(UUID())")
+        let group = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "AIKeychainAccessGroup") as? String)
+        defer {
+            SecItemDelete([kSecClass as String: kSecClassGenericPassword,
+                           kSecAttrService as String: "io.github.haige120.cloudreader",
+                           kSecAttrAccount as String: store.account, kSecAttrAccessGroup as String: group,
+                           kSecAttrSynchronizable as String: true] as CFDictionary)
+        }
+        var profile = AIProviderConfiguration()
+        profile.model = "fixture-model"
+        profile.endpointURL = "https://fixture.invalid/v1"
+        profile.webSearchEnabled = true
+        profile.useAppleWhenOffline = false
+        let origin = URL(string: "https://fixture.invalid")!
+        let snapshot = AISettingsSnapshot(profile: profile, secret: AIAPISecret(value: "fixture", origin: origin))
+        try store.write(snapshot)
+        try store.write(AISettingsSnapshot(profile: .init(), secret: nil), onlyIfAbsent: true)
+        let read = try XCTUnwrap(store.read())
+        XCTAssertEqual(read.profile, profile)
+        XCTAssertEqual(read.secret?.value, "fixture")
+        XCTAssertEqual(read.secret?.origin, origin)
+        try store.write(AISettingsSnapshot(profile: profile, secret: nil))
+        XCTAssertNil(try store.read()?.secret)
+    }
+    #endif
+
     func testPageWindowKeepsChapterOrderBoundsAndVisibleSpread() throws {
         let pages = ["before", "current", "also current", "after", "unrelated"]
         let context = try XCTUnwrap(ReaderPageContext.pages(count: pages.count, first: 1, visibleCount: 2) { pages[$0] })
@@ -50,6 +92,13 @@ final class ReaderContractTests: XCTestCase {
     }
 
     #if !targetEnvironment(simulator)
+    func testInstalledAppleModelAnswersLocallyWhenAvailable() async throws {
+        try XCTSkipUnless(AIService.onDeviceAvailable, AIService.onDeviceAvailabilityDescription)
+        let answer = try await AIService.askOnDevice(messages: [.user("What color is the sky on a clear day?")],
+                                                      instructions: "Answer in one sentence.")
+        XCTAssertFalse(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     func testAvailableFrenchTargetTranslatesWithInstalledSystemModel() async throws {
         let identifiers = await ReaderTranslationTarget.supportedIdentifiers()
         XCTAssertFalse(identifiers.contains { Locale.Language(identifier: $0).languageCode?.identifier == "en" })

@@ -21,10 +21,6 @@ struct MacSettingsView: View {
     @State private var sftpPassword = ""
     @State private var sftpHostKey = ""
     @State private var isChoosingFolder = false
-    @State private var aiProfile = AIProfileStore.load()
-    @State private var aiAPIKey = ""
-    @State private var aiHasSavedKey = AIProfileStore.hasAPIKey
-    @State private var aiSaveMessage: String?
 
     var body: some View {
         Form {
@@ -186,7 +182,7 @@ struct MacSettingsView: View {
                 if let error = cloudSync.errorMessage {
                     Text(error).foregroundStyle(.red)
                 }
-                Text("Books, reading positions, bookmarks, deletions, and saved AI conversations sync to every selected destination when this app is open. Credentials stay in this Mac’s Keychain.")
+                Text("Books, reading positions, bookmarks, deletions, and saved AI conversations sync to every selected destination when this app is open. Storage credentials stay in this Mac’s Keychain.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -195,72 +191,7 @@ struct MacSettingsView: View {
                 ReaderTranslationSettings()
             }
 
-            Section("AI assistant") {
-                Picker("AI provider", selection: $aiProfile.modelSource) {
-                    ForEach(AIModelSource.allCases) { source in
-                        Text(source.title).tag(source)
-                    }
-                }
-
-                if aiProfile.modelSource == .remoteAPI {
-                    TextField("Profile name", text: $aiProfile.name)
-                        .textFieldStyle(.roundedBorder)
-                    Picker("API format", selection: $aiProfile.endpointKind) {
-                        ForEach(AIEndpointKind.allCases) { kind in
-                            Text(kind.title).tag(kind)
-                        }
-                    }
-                    TextField("API endpoint or /v1 base URL (optional)", text: $aiProfile.endpointURL)
-                        .accessibilityIdentifier("ai.endpointURL")
-                        .textFieldStyle(.roundedBorder)
-                    SecureField(aiHasSavedKey ? "Replace saved API key (optional)" : "API key", text: $aiAPIKey)
-                        .accessibilityIdentifier("ai.apiKey")
-                        .textFieldStyle(.roundedBorder)
-                    if aiHasSavedKey {
-                        Label("API key is stored in this Mac’s Keychain", systemImage: "lock.shield")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    AIModelPicker(profile: $aiProfile, enteredKey: aiAPIKey)
-                    Toggle("Allow web search", isOn: $aiProfile.webSearchEnabled)
-                    if aiProfile.webSearchEnabled {
-                        Text(aiProfile.endpointKind == .openAIChatCompletions
-                             ? "Choose a search-capable Chat Completions model. Provider search charges may apply."
-                             : "The model can search the web when answering. Your provider may charge for searches.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                } else {
-                    Label(AIService.onDeviceAvailabilityDescription, systemImage: "cpu")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack {
-                    Button("Save AI settings") {
-                        do {
-                            try AIProfileStore.save(aiProfile, apiKey: aiAPIKey)
-                            aiAPIKey = ""
-                            aiHasSavedKey = AIProfileStore.hasAPIKey
-                            aiSaveMessage = "AI settings saved."
-                        } catch {
-                            aiSaveMessage = error.localizedDescription
-                        }
-                    }
-                    if aiHasSavedKey {
-                        Button("Remove saved API key", role: .destructive) {
-                            AIProfileStore.removeAPIKey()
-                            aiHasSavedKey = false
-                            aiSaveMessage = "Saved API key removed from this Mac."
-                        }
-                    }
-                }
-                if let aiSaveMessage {
-                    Text(aiSaveMessage).font(.caption).foregroundStyle(.secondary)
-                }
-                Text("Add Ask CloudReader to a shortcut to ask a question with this provider. Saved conversations sync with your selected library destinations.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            AISettingsSection()
 
             Section("Readers") {
                 LabeledContent("EPUB", value: "Built-in reader")
@@ -270,6 +201,7 @@ struct MacSettingsView: View {
                 LabeledContent("CBZ and CBR", value: "Comic reader")
             }
             Section("About") {
+                Link("CloudReader on GitHub", destination: URL(string: "https://github.com/HaiGe120/CloudReader")!)
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
             }
         }
