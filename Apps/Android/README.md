@@ -2,23 +2,11 @@
 
 Native Kotlin and Jetpack Compose application. Android 12 (API 31) or newer.
 
-## 1.2.1 Google connection preview
+## Download the Android 1.2.2 preview
 
-Download the [1.2.1 prerelease](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.1-google-connect-preview):
-`CloudReader-1.2.1-android-debug.apk` (version 1.2.1, code 5) or the all-platform
-preview ZIP. Compiled revision: `48d8b5e154bc5b101bb85051d869836e02039069`; coordinated run `41315984334`.
-See [release notes and exact hashes](../../docs/releases/1.2.1-google-connect-preview.md).
-Keep the notices companion/source references with redistributions.
+[Download the APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.2-android-preview/CloudReader-1.2.2-android-debug.apk) for Android 12 or newer. This build is version code 6. See the [release notes, SHA-256 checksums and third-party notices](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.2-android-preview).
 
-The release APK is built **locally from the same frozen source and version** as
-the coordinated packages, with the retained older preview key. Its certificate
-SHA-1 is `E3:F7:0B:33:F7:71:2E:FC:B3:75:5B:82:59:5F:BF:43:19:1E:11:9B`, already
-registered with Google. **No signing private key is uploaded to GitHub or CI.**
-The public 1.2.0 APK's certificate is
-`4F:2D:16:4E:E4:43:9D:5E:6A:1F:76:F2:AF:38:EC:6A:A9:77:84:C7`; its private
-signing key is unavailable. **1.2.1 is not an in-place update over public 1.2.0.**
-Do not uninstall CloudReader or clear app data to bypass the mismatch. The key
-may match some 1.0.x previews, but installed update/data retention is untested.
+The 1.2.2 APK uses the same preview certificate as 1.2.1 (SHA-1 `E3:F7:0B:33:F7:71:2E:FC:B3:75:5B:82:59:5F:BF:43:19:1E:11:9B`). The public 1.2.0 APK used a different certificate and cannot update in place. If you use 1.2.0, keep your installation and its library data.
 
 ## Build
 

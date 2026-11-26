@@ -1,6 +1,8 @@
 # Changelog
 
-## Android reader and AI update — 2026-11-26
+## Android 1.2.2 preview — 2026-11-26
+
+[Download the Android preview and checksums](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.2-android-preview).
 
 - Choose system, light or dark appearance and reopen reading controls from the compact progress display.
 - Resume a book’s latest conversation or start a new one. Review the selected passage and nearby text, toggle context, and send from the keyboard.

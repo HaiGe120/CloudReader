@@ -2,18 +2,22 @@
 
 CloudReader is an **open-source, offline-first book library and reader for iOS, macOS, Android, Windows and Linux**. Import DRM-free books while keeping the original files untouched. The library works offline, with no CloudReader account or hosted backend.
 
-[Download CloudReader for iPhone and iPad on the App Store](https://apps.apple.com/app/id6825674209).
-
-Sync directly with storage destinations you choose. Your books, reading progress, favorites, deletions, and saved AI conversations can move between devices; storage credentials stay on each device. On iOS and macOS, enable AI settings sync in Settings to share the model configuration and API key through iCloud Keychain.
+[iPhone and iPad on the App Store](https://apps.apple.com/app/id6825674209) · [Android 1.2.2 preview APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.2-android-preview/CloudReader-1.2.2-android-debug.apk) · [Windows and Linux downloads](#downloads)
 
 ## Features
 
-- Read DRM-free books with native apps for each platform.
-- Import from the Files app, Android document picker, or supported share flows.
-- Choose multiple sync destinations, including Google Drive, Dropbox, pCloud, WebDAV, SFTP, and platform file providers. Availability varies by platform.
-- Ask questions with a compatible remote AI service, or use Apple's on-device model on supported Apple devices. On Apple devices, book chats can include nearby pages and the book’s details. You can turn context off before sending, resume a conversation by book, and select a remote model from the provider’s catalog.
-- Translate a selected English word into a language you choose on iPhone, iPad, and Mac.
-- Keep credentials out of sync data. Android uses Keystore; desktop uses Windows Credential Manager or Linux Secret Service. If a desktop vault is unavailable, credentials are session-only unless the user explicitly opts into the disclosed plaintext fallback.
+- **Bring your own books.** Import DRM-free files through Files, the Android document picker or a supported share action. Read offline and pick up where you left off.
+- **Sync through your own storage.** Move books, progress, favorites and saved AI conversations between devices. Choose from Google Drive, Dropbox, pCloud, WebDAV, SFTP and platform file providers, depending on your platform.
+- **Ask questions as you read.** On iOS, macOS and Android, resume a book’s conversation or start a fresh one. Include nearby text when you want help with a passage, or turn book context off before sending. Send from the keyboard, browse your provider’s models and optionally enable web search with a compatible provider.
+- **Translate a word in place.** Select an English word and choose a target language on iPhone, iPad, Mac or Android. Android uses translation languages available on the device.
+
+### New in the Android 1.2.2 preview
+
+Follow the system appearance or choose Light or Dark. The reader opens with its toolbar tucked away. Tap the compact progress indicator to bring the controls back.
+
+On a supported device with Gemini Nano already installed, Ask AI can answer offline. In Settings, you can explicitly save or restore your AI profile through Android Credential Manager. The saved API key is tied to the provider’s address. [Android release notes](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.2-android-preview)
+
+The November 26 **iOS source preview** also adds compact progress, appearance controls and optional iCloud Keychain sharing for the AI profile. On supported Apple devices, the on-device model can answer offline and the configured provider takes over when connectivity returns. [iOS source preview](https://github.com/HaiGe120/CloudReader/releases/tag/ios-preview-2026-11-26)
 
 ## Platform support
 
@@ -27,55 +31,26 @@ Sync directly with storage destinations you choose. Your books, reading progress
 
 The iOS and macOS apps share their Swift data model and sync implementation. Android is a native Kotlin and Jetpack Compose app that follows the same portable schema. Windows and Linux share a Kotlin/JVM desktop client while keeping OS integrations separate; there is no web app.
 
-## Download the 1.2.1 preview
+## Downloads
 
-Android, Windows and Linux are built together from one version and source revision.
-This **November 1, 2026 prerelease** adds simpler Google connection and readable
-light/dark settings across all three apps. It is a preview, not a production
-release or a claim of complete iOS feature/visual parity.
-
-| Download | Requirements | Distribution status |
+| Platform | Download | Requirements |
 | --- | --- | --- |
-| [All three apps + UI/test evidence](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-all-platforms-preview.zip) | Choose your OS package | Includes notices and labeled build provenance |
-| [Android APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-android-debug.apk) | Android 12+ | Retained preview key; **cannot update public 1.2.0 in place** |
-| [Windows MSI](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-windows.msi) | Windows x64 | Unsigned preview; bundled Java runtime |
-| [Linux DEB](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-linux.deb) | Debian 12 amd64 baseline | Bundled Java runtime; native dependencies required |
+| iPhone and iPad | [App Store](https://apps.apple.com/app/id6825674209) | iOS or iPadOS 26+ |
+| Android | [1.2.2 preview APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.2-android-preview/CloudReader-1.2.2-android-debug.apk) | Android 12+ |
+| Windows | [1.2.1 preview MSI](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-windows.msi) | Windows x64, unsigned installer |
+| Linux | [1.2.1 preview DEB](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-linux.deb) | Debian 12 amd64 baseline |
 
-See the [release notes](docs/releases/1.2.1-google-connect-preview.md),
-[SHA-256 checksums](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/SHA256SUMS)
-and [third-party notices](THIRD_PARTY_NOTICES.md). Matching Java/OpenJFX sources
-and a license companion accompany the release. Apple builds have separate
-versions/channels; see [all releases](https://github.com/HaiGe120/CloudReader/releases).
+**Android upgrades.** The 1.2.2 APK uses the same debug signing certificate as 1.2.1. The public 1.2.0 APK used a different key and cannot update in place. If you use 1.2.0, keep your installation and its library data.
 
-**Keep your existing library.** The public 1.2.0 APK used a temporary CI key that
-is no longer available. The 1.2.1 APK uses the retained older preview key, kept on
-the maintainer's Mac; it is **not an in-place update over 1.2.0**. Do not uninstall
-CloudReader or clear its data to bypass this mismatch. Older-preview installed
-update/data retention remains untested.
+Release pages include checksums and notices. The November 1 Windows and Linux preview includes the bundled Java runtime and standard Google connection. [Android 1.2.2 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.2-android-preview) · [Windows and Linux 1.2.1 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.1-google-connect-preview) · [All releases](https://github.com/HaiGe120/CloudReader/releases)
 
-Normal Google connection no longer asks readers to create projects or enter IDs
-and secrets. Android uses native authorization; the Windows/Linux packages include
-the approved Desktop client. Custom credentials remain optional under Advanced.
-Successful personal-account consent, refresh and backup are still **unverified**.
+When several devices share storage, sync them one at a time. Concurrent writers using schema v1 can overwrite changes they have yet to see. [Sync contract](Contracts/v1/README.md)
 
-The release passed 127 Android JVM tests, six real settings UI tests on its
-locally built APK, 53 tests each on Windows and Debian, 20 shared-core tests and
-four collector tests. Both desktop bundled launchers rendered PDF, turned WebKit
-pages and displayed library/light/dark settings UI. Their bundled Google settings
-matched the approved build input. See [release evidence](docs/engineering/evidence/RELEASE-1.2.1.md).
-
-**Still open:** production signing, installed-OS updates/accessibility, physical
-Android behavior, live OAuth/AI/cross-platform sync, desktop export/share and full
-iOS parity. Schema-v1 concurrent writers can overwrite unseen changes; sync
-devices sequentially. See the [feature matrix and verification limits](docs/engineering/evidence/UNIFIED-KOTLIN-01.md).
-
-### Actual preview UI
-
-Actual Android and Windows settings screens—not mockups:
+### Settings on Android and Windows
 
 <p>
-  <img src="docs/images/1.2.1/android-settings-dark.png" width="220" alt="Android dark settings with the standard Google Connect action">
-  <img src="docs/images/1.2.1/windows-settings-light.png" width="620" alt="Windows light settings captured from the actual bundled runtime">
+  <img src="docs/images/1.2.1/android-settings-dark.png" width="220" alt="Android 1.2.1 settings in dark mode with Google Connect">
+  <img src="docs/images/1.2.1/windows-settings-light.png" width="620" alt="Windows 1.2.1 settings in light mode">
 </p>
 
 ## Build from source
