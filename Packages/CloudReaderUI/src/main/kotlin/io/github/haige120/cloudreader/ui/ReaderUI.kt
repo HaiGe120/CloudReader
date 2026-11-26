@@ -13,7 +13,7 @@ import io.github.haige120.cloudreader.core.application.*
 
 @Composable
 fun ReaderToolbar(title: String, progress: String, onClose: () -> Unit, onPrevious: () -> Unit, onNext: () -> Unit,
-    onAppearance: () -> Unit, onAsk: () -> Unit, onHide: () -> Unit) {
+    onAppearance: () -> Unit, onAsk: () -> Unit, onHide: () -> Unit, onTranslate: (() -> Unit)? = null) {
     Surface(color = MaterialTheme.colorScheme.surface, contentColor = MaterialTheme.colorScheme.onSurface) {
         BoxWithConstraints(Modifier.fillMaxWidth().padding(8.dp)) {
             if(maxWidth>=700.dp) Row(verticalAlignment=Alignment.CenterVertically){
@@ -22,6 +22,7 @@ fun ReaderToolbar(title: String, progress: String, onClose: () -> Unit, onPrevio
                 TextButton(onClick=onPrevious,modifier=Modifier.semantics{contentDescription="Previous page"}){Text("‹")}
                 TextButton(onClick=onNext,modifier=Modifier.semantics{contentDescription="Next page"}){Text("›")}
                 TextButton(onClick=onAppearance){Text("Aa")};TextButton(onClick=onAsk){Text("Ask AI")}
+                onTranslate?.let { TextButton(onClick=it){Text("Translate")} }
                 TextButton(onClick=onHide){Text("Hide")}
             }else Column{
                 Row(verticalAlignment=Alignment.CenterVertically){
@@ -32,6 +33,7 @@ fun ReaderToolbar(title: String, progress: String, onClose: () -> Unit, onPrevio
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceEvenly){
                     TextButton(onClick=onPrevious){Text("Previous")};TextButton(onClick=onNext){Text("Next")}
                     TextButton(onClick=onAppearance){Text("Aa")};TextButton(onClick=onAsk){Text("Ask AI")}
+                    onTranslate?.let { TextButton(onClick=it){Text("Translate")} }
                 }
             }
         }

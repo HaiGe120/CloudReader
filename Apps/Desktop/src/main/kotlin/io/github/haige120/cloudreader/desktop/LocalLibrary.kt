@@ -91,6 +91,12 @@ class FileLibraryRepository(private val root: Path) : LibraryRepository, DropTar
     }
     @Synchronized fun chats(): List<ChatRecord> = state.conversations.sortedByDescending { it.modifiedAt }
     @Synchronized fun saveChat(chat: ChatRecord) = persistState(state.copy(conversations = state.conversations.filterNot { it.id == chat.id } + chat))
+    @Synchronized fun setChatContextConsent(id: String, enabled: Boolean) {
+        val current = state.conversations.firstOrNull { it.id == id } ?: return
+        saveChat(current.copy(includeBookContext = enabled, modifiedAt = nowFoundationSeconds(),
+            selectedText = current.selectedText.takeIf { enabled }, bookContext = current.bookContext.takeIf { enabled },
+            contextDescription = current.contextDescription.takeIf { enabled }))
+    }
     @Synchronized fun removeChat(id: String) = persistState(state.copy(
         conversations = state.conversations.filterNot { it.id.equals(id, true) },
         conversationDeletions = state.conversationDeletions.filterNot { it.conversationID == id } + ConversationTombstone(id, nowFoundationSeconds())))

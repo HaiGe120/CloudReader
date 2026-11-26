@@ -61,8 +61,9 @@ class DesktopReaderRuntimeTest {
                 panel.dispatchEvent(java.awt.event.MouseEvent(panel,java.awt.event.MouseEvent.MOUSE_DRAGGED,now+50,java.awt.event.InputEvent.BUTTON1_DOWN_MASK,400,120,0,false,java.awt.event.MouseEvent.NOBUTTON))
             }
             val selected=AtomicReference("");val done=CountDownLatch(1)
-            host!!.selection{selected.set(it);done.countDown()}
-            assertTrue(done.await(5,TimeUnit.SECONDS));assertEquals("Selected passage",selected.get().trim())
+            val nearby = AtomicReference("")
+            host!!.selection { passage, page -> selected.set(passage); nearby.set(page); done.countDown() }
+            assertTrue(done.await(5,TimeUnit.SECONDS));assertEquals("Selected passage",selected.get().trim()); assertEquals("Selected passage",nearby.get())
         } finally { SwingUtilities.invokeAndWait{host?.close();frame?.dispose()};root.toFile().deleteRecursively() }
     }
     @Test fun nativeWebKitRendersTurnsAndRestoresReflow() = verifyRestore(BookFormat.EPUB,"reflow:0:0.4",0)

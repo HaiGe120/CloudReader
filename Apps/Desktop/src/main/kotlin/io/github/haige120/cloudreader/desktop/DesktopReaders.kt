@@ -7,6 +7,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import io.github.haige120.cloudreader.core.application.*
 import io.github.haige120.cloudreader.core.reader.*
 import io.github.haige120.cloudreader.ui.*
@@ -28,10 +32,11 @@ import javax.swing.*
 import java.util.concurrent.atomic.AtomicBoolean
 
 @Composable
-fun DesktopReader(book: BookRecord, cache: Path, settings: DesktopSettings, onClose: () -> Unit,
-    onPosition: (Double,String) -> Unit, onAsk: (String) -> Unit) {
+fun DesktopReader(book: BookRecord, cache: Path, settings: DesktopSettings, secrets: DesktopSecrets, appDark: Boolean, onClose: () -> Unit,
+    onPosition: (Double,String) -> Unit, onAsk: (String, String) -> Unit) {
+    var translation by remember(book.id) { mutableStateOf<String?>(null) }
     var failure by remember(book.id) { mutableStateOf<String?>(null) }
-    var controls by remember { mutableStateOf(true) }
+    var controls by remember(book.id) { mutableStateOf(false) }
     var appearanceOpen by remember { mutableStateOf(false) }
     var appearance by remember { mutableStateOf(ReadingAppearance(
         fontSize = settings.get("reader.fontSize","20").toIntOrNull() ?: 20,
@@ -40,7 +45,10 @@ fun DesktopReader(book: BookRecord, cache: Path, settings: DesktopSettings, onCl
         customBackground=settings.get("reader.customBackground","#fffdf7"),customForeground=settings.get("reader.customForeground","#292621"))) }
     var status by remember(book.id) { mutableStateOf("Opening…") }
     var host by remember(book.id) { mutableStateOf<DesktopReaderHost?>(null) }
-    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val resolved = if (appearance.theme == "System") appearance.copy(theme = if (appDark) "Dark" else "Light") else appearance.validated()
+    val paper = ComposeColor(Color.decode(resolved.paperColor()).rgb)
+    val ink = if (paper.luminance() < .179f) ComposeColor.White else ComposeColor.Black
+    val chrome = cloudReaderColorScheme(paper.luminance() < .179f).copy(surface = paper, onSurface = ink, primary = ink)
     val prepared by produceState<Result<PreparedPublication>?>(null, book.id) {
         value = withContext(Dispatchers.IO) { runCatching {
             when (book.format) {
@@ -58,33 +66,54 @@ fun DesktopReader(book: BookRecord, cache: Path, settings: DesktopSettings, onCl
             }
         } }
     }
-    Column(Modifier.fillMaxSize()) {
-        if (controls) ReaderToolbar(book.title,status,onClose,{ host?.previous() },{ host?.next() },
-            { appearanceOpen = true },{ host?.selection(onAsk) },{ controls = false })
-        else Row { TextButton(onClick = { controls = true }) { Text("Show controls") } }
-        failure?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(20.dp)) }
-        val result = prepared
-        if (result == null) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        else if (result.isFailure) Text(result.exceptionOrNull()?.message ?: "Could not open this book.", modifier = Modifier.padding(20.dp))
-        else {
-            val publication = result.getOrThrow()
-            val reader = remember(book.id,publication) {
-                when (book.format) {
-                    BookFormat.PDF -> PdfDesktopHost(book, { status = it },onPosition)
-                    BookFormat.CBZ -> ComicDesktopHost(book,publication,{ status = it },onPosition)
-                    else -> ReflowDesktopHost(book,publication,{ status = it },onPosition,{ controls = !controls })
+    fun translateSelection() {
+        host?.selection { word, _ -> translation = word.trim() }
+    }
+    MaterialTheme(colorScheme = chrome) {
+        Column(Modifier.fillMaxSize()) {
+            if (controls) ReaderToolbar(book.title,status,onClose,{ host?.previous() },{ host?.next() },
+                { appearanceOpen = true },{ host?.selection(onAsk) },{ controls = false },
+                onTranslate = if (book.format in setOf(BookFormat.TXT, BookFormat.EPUB, BookFormat.FB2, BookFormat.PDF))
+                    ::translateSelection else null)
+            else Surface(color = paper) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    TextButton(onClick = { controls = true }, modifier = Modifier.semantics { contentDescription = "Show reading controls" }) {
+                        Text(status, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
                 }
             }
-            DisposableEffect(reader) { host = reader; onDispose { reader.close(); if (book.format != BookFormat.PDF) publication.root.deleteRecursively() } }
-            SwingPanel(factory = { reader.component }, modifier = Modifier.weight(1f).fillMaxWidth(), update = {
-                reader.appearance(if (appearance.theme == "System") appearance.copy(theme = if (systemDark) "Dark" else "Light") else appearance)
-            })
+            failure?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(20.dp)) }
+            val result = prepared
+            if (result == null) Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            else if (result.isFailure) Text(result.exceptionOrNull()?.message ?: "Could not open this book.", modifier = Modifier.padding(20.dp))
+            else {
+                val publication = result.getOrThrow()
+                val reader = remember(book.id,publication) {
+                    when (book.format) {
+                        BookFormat.PDF -> PdfDesktopHost(book, { status = it },onPosition)
+                        BookFormat.CBZ -> ComicDesktopHost(book,publication,{ status = it },onPosition)
+                        else -> ReflowDesktopHost(book,publication,{ status = it },onPosition,{ controls = !controls })
+                    }
+                }
+                DisposableEffect(reader) { host = reader; onDispose { reader.close(); if (book.format != BookFormat.PDF) publication.root.deleteRecursively() } }
+                SwingPanel(factory = { reader.component }, modifier = Modifier.weight(1f).fillMaxWidth(), update = {
+                    reader.appearance(resolved)
+                })
+            }
         }
     }
+    translation?.let { DesktopWordTranslation(it, settings, secrets) { translation = null } }
     if (appearanceOpen) AppearanceDialog(appearance, { next ->
         appearance = next
         settings.save(mapOf("reader.fontSize" to next.fontSize.toString(), "reader.fontFamily" to next.family, "reader.theme" to next.theme, "reader.layout" to next.layout.name,"reader.customBackground" to next.customBackground,"reader.customForeground" to next.customForeground))
     }, { appearanceOpen = false })
+}
+
+private fun ReadingAppearance.paperColor() = when (theme) {
+    "Dark" -> "#20211e"
+    "Sepia" -> "#f3e8d0"
+    "Custom" -> customBackground
+    else -> "#fffdf7"
 }
 
 internal interface DesktopReaderHost : AutoCloseable {
@@ -92,7 +121,7 @@ internal interface DesktopReaderHost : AutoCloseable {
     fun next()
     fun previous()
     fun appearance(value: ReadingAppearance)
-    fun selection(callback: (String) -> Unit)
+    fun selection(callback: (String, String) -> Unit)
 }
 
 /** JavaFX WebKit renders local prepared chapters; publisher scripts and remote resources are removed. */
@@ -137,7 +166,7 @@ internal class ReflowDesktopHost(private val book: BookRecord, private val publi
         // The Compose host resolves System appearance. Never initialize Swing's
         // look-and-feel from the JavaFX thread (it can deadlock AppKit startup).
         val dark = p.theme == "Dark"
-        val bg = if(p.theme == "Custom") p.customBackground else if (dark) "#20211e" else if(p.theme == "Sepia") "#f3e8d0" else "#fffdf7"
+        val bg = p.paperColor()
         val fg = if(p.theme == "Custom") p.customForeground else if (dark) "#eee9df" else "#292621"
         val font = when(p.family) { "Mono" -> "monospace"; "Sans" -> "sans-serif"; else -> "serif" }
         web?.engine?.executeScript("reader.configure(${p.fontSize},'$font','$bg','$fg','${p.layout.name}')")
@@ -145,9 +174,12 @@ internal class ReflowDesktopHost(private val book: BookRecord, private val publi
     override fun next() { Platform.runLater { if (loaded) web?.engine?.executeScript("reader.turn(1)") } }
     override fun previous() { Platform.runLater { if (loaded) web?.engine?.executeScript("reader.turn(-1)") } }
     override fun appearance(value: ReadingAppearance) { if (value != currentAppearance) { currentAppearance = value; Platform.runLater { if (loaded) configure() } } }
-    override fun selection(callback: (String)->Unit) { Platform.runLater {
-        val text = web?.engine?.executeScript("String(getSelection()).trim() || document.body.innerText.slice(0,18000)")?.toString().orEmpty().take(18000)
-        SwingUtilities.invokeLater { callback(text) }
+    override fun selection(callback: (String, String) -> Unit) { Platform.runLater {
+        val engine = web?.engine?.takeIf { loaded }
+        val selected = engine?.executeScript("String(getSelection()).trim().slice(0,18000)")?.toString().orEmpty()
+        val anchor = sourceAnchor ?: 0
+        val nearby = engine?.executeScript("document.body.textContent.slice(${maxOf(0, anchor - 3000)},${anchor + 6000})")?.toString().orEmpty()
+        SwingUtilities.invokeLater { if (!closed.get()) callback(selected, nearby) }
     } }
     override fun close() { closed.set(true); Platform.runLater { web?.engine?.load(null); panel.scene = null; web = null } }
     inner class Bridge {
@@ -231,7 +263,16 @@ internal class PdfDesktopHost(private val book: BookRecord,private val status:(S
     override fun next(){worker.submit { document?.let{val step=style.columns(viewportWidth);page=(page/step*step+step).coerceAtMost(it.numberOfPages-1);render()} }}
     override fun previous(){worker.submit { val step=style.columns(viewportWidth);page=(page/step*step-step).coerceAtLeast(0);render() }}
     override fun appearance(value:ReadingAppearance){ if(value!=style){style=value.validated();zoom=style.fontSize/20f;worker.submit{render()}} }
-    override fun selection(callback:(String)->Unit){ worker.submit { document?.let { doc -> val text=panel.selectedText.ifBlank{PDFTextStripper().apply { startPage=page+1;endPage=page+1 }.getText(doc)}.take(18000);SwingUtilities.invokeLater{callback(text)} } } }
+    override fun selection(callback: (String, String) -> Unit) {
+        val selected = panel.selectedText.take(18000)
+        worker.submit {
+            val nearby = document?.let { doc ->
+                PDFTextStripper().apply { startPage = page + 1; endPage = minOf(doc.numberOfPages, page + style.columns(viewportWidth)) }
+                    .getText(doc).trim().take(18000)
+            }.orEmpty()
+            SwingUtilities.invokeLater { if (!closed.get()) callback(selected, nearby) }
+        }
+    }
     override fun close(){closed.set(true);worker.submit{document?.close()};worker.shutdown()}
 }
 
@@ -338,6 +379,6 @@ internal class ComicDesktopHost(private val book:BookRecord,private val publicat
     override fun next(){page=(pages().first()+style.columns(component.width)).coerceAtMost(publication.images.lastIndex);render()}
     override fun previous(){page=(pages().first()-style.columns(component.width)).coerceAtLeast(0);render()}
     override fun appearance(value:ReadingAppearance){if(style!=value){style=value;render()}}
-    override fun selection(callback:(String)->Unit){callback("")}
+    override fun selection(callback: (String, String) -> Unit) = callback("", "")
     override fun close(){closed.set(true);worker.shutdownNow()}
 }

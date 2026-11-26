@@ -20,7 +20,8 @@ fun AssistantContent(chats: List<ChatRecord>, active: ChatRecord?, draft: String
     includeContext: Boolean, contextPreview: String?, error: String?, profileLabel: String,
     onDraft: (String) -> Unit, onSelect: (String) -> Unit, onNew: () -> Unit,
     onConsent: (Boolean) -> Unit, onSend: () -> Unit, onCancel: () -> Unit, onRetry: () -> Unit,
-    onDelete: () -> Unit, onShare: (() -> Unit)? = null, keyboardSend: Boolean = false) {
+    onDelete: () -> Unit, onShare: (() -> Unit)? = null, keyboardSend: Boolean = false,
+    composerModifier: Modifier = Modifier) {
     var deleting by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -75,7 +76,7 @@ fun AssistantContent(chats: List<ChatRecord>, active: ChatRecord?, draft: String
         val keyboardVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
         if (keyboardSend && keyboardVisible) TextButton(onClick = { keyboard?.hide() }) { Text("Hide keyboard") }
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(draft, onDraft, label = { Text("Ask a question") }, modifier = Modifier.weight(1f), maxLines = 5, enabled = !busy,
+            OutlinedTextField(draft, onDraft, label = { Text("Ask a question") }, modifier = composerModifier.weight(1f), maxLines = 5, enabled = !busy,
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction =
                     if (keyboardSend) androidx.compose.ui.text.input.ImeAction.Send else androidx.compose.ui.text.input.ImeAction.Default),
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { if (draft.isNotBlank() && !busy) onSend() }))

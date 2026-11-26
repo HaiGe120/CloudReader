@@ -23,7 +23,7 @@ class DesktopSettings(private val file: Path) {
         val writer = java.io.StringWriter().also { values.store(it, "CloudReader settings; credentials are stored separately") }
         atomicWrite(file, writer.toString().toByteArray())
     }
-    fun profile() = AIProfile(get("ai.name", "My AI"), get("ai.protocol", "openAIResponses"), get("ai.endpoint"), get("ai.model"))
+    fun profile() = AIProfile(get("ai.name", "My AI"), get("ai.protocol", "openAIResponses"), get("ai.endpoint"), get("ai.model"), get("ai.webSearch").toBoolean())
 }
 
 /** OS secret services are used when available; unavailable services use session memory unless opted in. */

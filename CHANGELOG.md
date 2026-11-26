@@ -1,5 +1,15 @@
 # Changelog
 
+## Windows and Linux source preview — 2026-11-26
+
+- Existing and newly imported EPUB, FB2 and CBZ books display embedded cover art on the shelf. PDFs display a first-page thumbnail. Books without readable artwork keep their title card.
+- Choose System, Light or Dark in Settings. Readers open with compact progress controls that follow the page color. Click the progress indicator to reopen the toolbar.
+- Ask AI from a book to resume its latest conversation, or choose New for another conversation about that book. Review the selected passage and nearby text, toggle book context, and send with Ctrl+Enter.
+- Search the configured provider’s model list and optionally enable provider web search. Saved API keys are scoped to the provider origin.
+- Select a word in a text-based reader or PDF and choose Translate. Confirm the target language to send the word to the configured AI provider. Desktop offline system translation, automatic on-device AI fallback and cross-device credential sync remain open.
+
+Desktop verification on macOS covered 56 desktop tests, 25 shared Kotlin tests and an isolated app launch with PDF, WebKit, library and light/dark Settings checks. Windows MSI and Debian package validation and live provider calls are pending for this preview.
+
 ## Android 1.2.3 preview — 2026-11-26
 
 - Show real cover artwork on the Android shelf for existing and newly imported EPUB, FB2, CBZ and PDF books. Books without supported artwork keep their title card.
