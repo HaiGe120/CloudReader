@@ -1,5 +1,6 @@
 package io.github.haige120.cloudreader.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -14,6 +15,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -82,7 +85,8 @@ fun CloudReaderShell(destination: AppDestination, onDestination: (AppDestination
 @Composable
 fun LibraryContent(books: List<BookRecord>, search: String, favoritesOnly: Boolean, syncStatus: String,
     onSearch: (String) -> Unit, onFavorites: () -> Unit, onImport: () -> Unit, onSync: () -> Unit,
-    onOpen: (BookRecord) -> Unit, onAsk: (BookRecord) -> Unit, onFavorite: (BookRecord) -> Unit, onRemove: (BookRecord) -> Unit) {
+    onOpen: (BookRecord) -> Unit, onAsk: (BookRecord) -> Unit, onFavorite: (BookRecord) -> Unit, onRemove: (BookRecord) -> Unit,
+    cover: @Composable (BookRecord) -> ImageBitmap? = { null }) {
     val state = remember(books, search, favoritesOnly) { LibraryPresentation(books, search, favoritesOnly) }
     var removing by remember { mutableStateOf<BookRecord?>(null) }
     Column(Modifier.fillMaxSize().padding(horizontal = 22.dp)) {
@@ -125,10 +129,16 @@ fun LibraryContent(books: List<BookRecord>, search: String, favoritesOnly: Boole
                         val swatches = listOf(0xFF536D59, 0xFF80654B, 0xFF697D82, 0xFF946E62, 0xFF776783)
                         Box(Modifier.fillMaxWidth().aspectRatio(.78f).clip(RoundedCornerShape(12.dp))
                             .background(Color(swatches[(book.title.hashCode() and Int.MAX_VALUE) % swatches.size]))
-                            .clickable { onOpen(book) }.padding(12.dp).semantics { contentDescription = "Open ${book.title}" }) {
-                            Text("CLOUDREADER", color = Color.White.copy(alpha = .7f), fontSize = 8.sp, letterSpacing = 1.sp)
-                            Text(book.title, modifier = Modifier.align(Alignment.CenterStart), color = Color.White, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold, maxLines = 5, overflow = TextOverflow.Ellipsis)
-                            Text(book.format.uppercase(), modifier = Modifier.align(Alignment.BottomStart), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            .clickable { onOpen(book) }.semantics { contentDescription = "Open ${book.title}" }) {
+                            val artwork = cover(book)
+                            if (artwork != null) {
+                                Image(artwork, contentDescription = null, contentScale = ContentScale.Fit,
+                                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant))
+                            } else Box(Modifier.fillMaxSize().padding(12.dp)) {
+                                Text("CLOUDREADER", color = Color.White.copy(alpha = .7f), fontSize = 8.sp, letterSpacing = 1.sp)
+                                Text(book.title, modifier = Modifier.align(Alignment.CenterStart), color = Color.White, fontFamily = FontFamily.Serif, fontWeight = FontWeight.SemiBold, maxLines = 5, overflow = TextOverflow.Ellipsis)
+                                Text(book.format.uppercase(), modifier = Modifier.align(Alignment.BottomStart), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                         Text(book.title, fontFamily = FontFamily.Serif, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(book.author ?: book.format.uppercase(), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

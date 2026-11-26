@@ -2,11 +2,13 @@
 
 Native Kotlin and Jetpack Compose application. Android 12 (API 31) or newer.
 
-## Download the Android 1.2.2 preview
+## Download the Android 1.2.3 preview
 
-[Download the APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.2-android-preview/CloudReader-1.2.2-android-debug.apk) for Android 12 or newer. This build is version code 6. See the [release notes, SHA-256 checksums and third-party notices](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.2-android-preview).
+[Download the APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.3-android-preview/CloudReader-1.2.3-android-debug.apk) for Android 12 or newer. This build is version code 7. See the [release notes, SHA-256 checksums and third-party notices](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.3-android-preview).
 
-The 1.2.2 APK uses the same preview certificate as 1.2.1 (SHA-1 `E3:F7:0B:33:F7:71:2E:FC:B3:75:5B:82:59:5F:BF:43:19:1E:11:9B`). The public 1.2.0 APK used a different certificate and cannot update in place. If you use 1.2.0, keep your installation and its library data.
+Shelf covers come from each managed book file, so existing books need no re-import. EPUB and FB2 use embedded artwork, CBZ uses its first image and PDF uses its first page. Books without supported artwork keep the title card.
+
+The 1.2.3 APK uses the same preview certificate as 1.2.1 and 1.2.2 (SHA-1 `E3:F7:0B:33:F7:71:2E:FC:B3:75:5B:82:59:5F:BF:43:19:1E:11:9B`). The public 1.2.0 APK used a different certificate and cannot update in place. If you use 1.2.0, keep your installation and its library data.
 
 ## Build
 

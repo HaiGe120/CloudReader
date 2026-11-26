@@ -145,6 +145,7 @@ fun LibraryScreen(app: CloudReaderApp, actions: LibraryScreenActions) {
         books = state.books, search = state.searchQuery, favoritesOnly = state.favoritesOnly,
         syncStatus = status, onSearch = model::search, onFavorites = model::toggleFavorites,
         onImport = actions.onImport, onSync = actions.onSync, onOpen = actions.onOpen,
+        cover = { book -> shelfArtwork(app, book) },
         onAsk = { actions.onAsk(it, null) }, onFavorite = actions.onToggleFavorite, onRemove = actions.onRemove,
     )
 }

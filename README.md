@@ -2,7 +2,7 @@
 
 CloudReader is an **open-source, offline-first book library and reader for iOS, macOS, Android, Windows and Linux**. Import DRM-free books while keeping the original files untouched. The library works offline, with no CloudReader account or hosted backend.
 
-[iPhone and iPad on the App Store](https://apps.apple.com/app/id6825674209) · [Android 1.2.2 preview APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.2-android-preview/CloudReader-1.2.2-android-debug.apk) · [Windows and Linux downloads](#downloads)
+[iPhone and iPad on the App Store](https://apps.apple.com/app/id6825674209) · [Android 1.2.3 preview APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.3-android-preview/CloudReader-1.2.3-android-debug.apk) · [Windows and Linux downloads](#downloads)
 
 ## Features
 
@@ -11,11 +11,13 @@ CloudReader is an **open-source, offline-first book library and reader for iOS, 
 - **Ask questions as you read.** On iOS, macOS and Android, resume a book’s conversation or start a fresh one. Include nearby text when you want help with a passage, or turn book context off before sending. Send from the keyboard, browse your provider’s models and optionally enable web search with a compatible provider.
 - **Translate a word in place.** Select an English word and choose a target language on iPhone, iPad, Mac or Android. Android uses translation languages available on the device.
 
-### New in the Android 1.2.2 preview
+### Reading on Android
+
+The shelf shows embedded cover art for EPUB and FB2 books, the first image of a CBZ comic, and the first page of a PDF. Books already in your library pick up their covers automatically.
 
 Follow the system appearance or choose Light or Dark. The reader opens with its toolbar tucked away. Tap the compact progress indicator to bring the controls back.
 
-On a supported device with Gemini Nano already installed, Ask AI can answer offline. In Settings, you can explicitly save or restore your AI profile through Android Credential Manager. The saved API key is tied to the provider’s address. [Android release notes](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.2-android-preview)
+On a supported device with Gemini Nano already installed, Ask AI can answer offline. In Settings, you can explicitly save or restore your AI profile through Android Credential Manager. The saved API key is tied to the provider’s address. [Android release notes](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.3-android-preview)
 
 The November 26 **iOS source preview** also adds compact progress, appearance controls and optional iCloud Keychain sharing for the AI profile. On supported Apple devices, the on-device model can answer offline and the configured provider takes over when connectivity returns. [iOS source preview](https://github.com/HaiGe120/CloudReader/releases/tag/ios-preview-2026-11-26)
 
@@ -36,13 +38,13 @@ The iOS and macOS apps share their Swift data model and sync implementation. And
 | Platform | Download | Requirements |
 | --- | --- | --- |
 | iPhone and iPad | [App Store](https://apps.apple.com/app/id6825674209) | iOS or iPadOS 26+ |
-| Android | [1.2.2 preview APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.2-android-preview/CloudReader-1.2.2-android-debug.apk) | Android 12+ |
+| Android | [1.2.3 preview APK](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.3-android-preview/CloudReader-1.2.3-android-debug.apk) | Android 12+ |
 | Windows | [1.2.1 preview MSI](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-windows.msi) | Windows x64, unsigned installer |
 | Linux | [1.2.1 preview DEB](https://github.com/HaiGe120/CloudReader/releases/download/v1.2.1-google-connect-preview/CloudReader-1.2.1-linux.deb) | Debian 12 amd64 baseline |
 
-**Android upgrades.** The 1.2.2 APK uses the same debug signing certificate as 1.2.1. The public 1.2.0 APK used a different key and cannot update in place. If you use 1.2.0, keep your installation and its library data.
+**Android upgrades.** The 1.2.3 APK uses the same debug signing certificate as 1.2.1 and 1.2.2. The public 1.2.0 APK used a different key and cannot update in place. If you use 1.2.0, keep your installation and its library data.
 
-Release pages include checksums and notices. The November 1 Windows and Linux preview includes the bundled Java runtime and standard Google connection. [Android 1.2.2 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.2-android-preview) · [Windows and Linux 1.2.1 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.1-google-connect-preview) · [All releases](https://github.com/HaiGe120/CloudReader/releases)
+Release pages include checksums and notices. The November 1 Windows and Linux preview includes the bundled Java runtime and standard Google connection. [Android 1.2.3 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.3-android-preview) · [Windows and Linux 1.2.1 release](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.1-google-connect-preview) · [All releases](https://github.com/HaiGe120/CloudReader/releases)
 
 When several devices share storage, sync them one at a time. Concurrent writers using schema v1 can overwrite changes they have yet to see. [Sync contract](Contracts/v1/README.md)
 

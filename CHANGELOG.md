@@ -1,5 +1,9 @@
 # Changelog
 
+## Android 1.2.3 preview — 2026-11-26
+
+- Show real cover artwork on the Android shelf for existing and newly imported EPUB, FB2, CBZ and PDF books. Books without supported artwork keep their title card.
+
 ## Android 1.2.2 preview — 2026-11-26
 
 [Download the Android preview and checksums](https://github.com/HaiGe120/CloudReader/releases/tag/v1.2.2-android-preview).

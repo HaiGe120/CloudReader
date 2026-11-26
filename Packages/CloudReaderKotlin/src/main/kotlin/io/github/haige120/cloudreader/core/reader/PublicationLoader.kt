@@ -19,7 +19,7 @@ object PublicationLoader {
     private const val MAX_ENTRY = 64L * 1024 * 1024
     private const val MAX_TOTAL = 1024L * 1024 * 1024
     private const val MAX_XML = 16 * 1024 * 1024
-    private val natural = Comparator<String> { a, b ->
+    internal val natural = Comparator<String> { a, b ->
         val x = Regex("[0-9]+|[^0-9]+").findAll(a.lowercase()).map { it.value }.toList()
         val y = Regex("[0-9]+|[^0-9]+").findAll(b.lowercase()).map { it.value }.toList()
         for (i in 0 until minOf(x.size, y.size)) {
