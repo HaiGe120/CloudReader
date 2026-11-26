@@ -59,7 +59,7 @@ class AssistantViewModelTest {
         assertEquals(2, saved.messages.size)
     }
 
-    @Test fun incomingReaderContextStaysAvailableUntilSendingAndRequiresConsent() = runTest(dispatcher) {
+    @Test fun incomingBookContextIsShownBeforeSendingAndDefaultsOn() = runTest(dispatcher) {
         val store = FakeStore()
         var requested: ChatRecord? = null
         val model = AssistantViewModel(store, AssistantRequester { _, chat -> requested = chat; "answer" })
@@ -69,7 +69,7 @@ class AssistantViewModelTest {
 
         model.prepareReaderContext(context)
         assertEquals(context, model.state.value.pendingReaderContext)
-        assertFalse(model.state.value.includeContext)
+        assertTrue(model.state.value.includeContext)
         assertTrue(store.chats.value.isEmpty())
 
         model.setContextConsent(true)
@@ -184,6 +184,23 @@ class AssistantViewModelTest {
         val restored = AssistantViewModel(store, AssistantRequester { _, _ -> "answer" }, handle)
         runCurrent()
         assertFalse(restored.state.value.includeContext)
+    }
+
+    @Test fun enteringBookBeforeHistoryArrivesResumesLatestAndHonorsItsOptOut() = runTest(dispatcher) {
+        val book = BookRecord("book", "Title", fileName = "a.txt", format = "txt", addedAt = 1.0, modifiedAt = 1.0)
+        val old = chat("old", true).copy(bookID = book.id, modifiedAt = 1.0)
+        val latest = chat("latest", false).copy(bookID = book.id, modifiedAt = 2.0)
+        val store = FakeStore(listOf(old, latest, chat("other").copy(modifiedAt = 7.0)))
+        val model = AssistantViewModel(store, AssistantRequester { _, _ -> "ok" })
+        val context = AssistantContext(book, boundedBookText = "new nearby passage")
+        model.prepareReaderContext(context)
+        runCurrent()
+        assertEquals(latest.id, model.state.value.activeConversationId)
+        assertFalse(model.state.value.includeContext)
+        model.newBookConversation(context)
+        assertNull(model.state.value.activeConversationId)
+        assertEquals(context, model.state.value.pendingReaderContext)
+        assertTrue(model.state.value.includeContext)
     }
 
     private class FakeStore(initial: List<ChatRecord> = emptyList()) : AssistantStore {

@@ -30,13 +30,15 @@ class PdfReaderActivity : FragmentActivity() {
     private lateinit var book: BookRecord
     private lateinit var chrome: NativeReaderChrome
     private lateinit var contentTaps: ReaderContentTapObserver
+    private var visiblePage = 0
+    private var translationEnabled = false
     private var documentView: PdfView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         chrome = NativeReaderChrome(this, R.id.pdf_viewer_container)
         chrome.setTitle("PDF")
-        chrome.setControlsVisible(savedInstanceState?.getBoolean(STATE_CONTROLS_VISIBLE, true) ?: true)
+        chrome.setControlsVisible(savedInstanceState?.getBoolean(STATE_CONTROLS_VISIBLE, false) ?: false)
         contentTaps = ReaderContentTapObserver(
             this,
             canStartTap = { event ->
@@ -52,7 +54,18 @@ class PdfReaderActivity : FragmentActivity() {
         lifecycleScope.launch {
             val resolved = (application as CloudReaderApp).database.libraryDao().book(id)?.toDomain()
             if (resolved == null) { finish(); return@launch }
+            val prefs = (application as CloudReaderApp).preferences
+            val palette = EpubReaderAppearance.fromSettings(EpubReaderAppearance.SETTING_KEYS.mapNotNull { key ->
+                prefs.get(key)?.let { key to it }
+            }.toMap()).palette(when (prefs.get("app.appearance")) {
+                "dark" -> true
+                "light" -> false
+                else -> resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+            })
+            chrome.setReadingColors(palette.background, palette.foreground, palette.muted)
             book = resolved
+            translationEnabled = (application as CloudReaderApp).preferences.getBool("reader.translateWords")
+            onSelection(null)
             chrome.setTitle(book.title)
             chrome.setProgress("${(book.progress * 100).toInt().coerceIn(0, 100)}%")
             val file = (application as CloudReaderApp).library.fileFor(book)
@@ -88,9 +101,28 @@ class PdfReaderActivity : FragmentActivity() {
     internal fun onSelection(text: String?) {
         runOnUiThread {
             selectedText = text.orEmpty().take(18_000)
-            chrome.setSelectionAction(selectedText.isNotBlank()) {
-                if (selectedText.isNotBlank()) {
-                    setResult(RESULT_OK, Intent().putExtra(EXTRA_BOOK_ID, intent.getStringExtra(EXTRA_BOOK_ID)).putExtra(EXTRA_SELECTED_TEXT, selectedText))
+            chrome.setTranslateAction(translationEnabled && selectedText.isNotBlank()) { WordTranslation.show(this, selectedText) }
+            chrome.setSelectionAction(true) {
+                val document = documentView?.pdfDocument
+                val selection = selectedText
+                val page = visiblePage
+                lifecycleScope.launch {
+                    val nearby = if (document == null) null else kotlinx.coroutines.withContext(Dispatchers.IO) {
+                        runCatching { buildString {
+                            for (index in maxOf(0, page - 1)..minOf(document.pageCount - 1, page + 1)) {
+                                val lines = document.getPageContent(index)?.textContents.orEmpty()
+                                var remaining = 6000
+                                for (line in lines) {
+                                    val part = line.text.take(remaining)
+                                    append(part).append(' ')
+                                    remaining -= part.length + 1
+                                    if (remaining <= 0) break
+                                }
+                            }
+                        }.take(18_000) }.getOrNull()
+                    }
+                    setResult(RESULT_OK, Intent().putExtra(EXTRA_BOOK_ID, intent.getStringExtra(EXTRA_BOOK_ID))
+                        .putExtra(EXTRA_SELECTED_TEXT, selection).putExtra("nearby_text", nearby))
                     finish()
                 }
             }
@@ -101,6 +133,7 @@ class PdfReaderActivity : FragmentActivity() {
 
     internal fun onPage(page: Int, count: Int) {
         runOnUiThread {
+            visiblePage = page
             if (::chrome.isInitialized) chrome.setProgress("${page + 1} / $count", "Page ${page + 1} of $count")
         }
     }

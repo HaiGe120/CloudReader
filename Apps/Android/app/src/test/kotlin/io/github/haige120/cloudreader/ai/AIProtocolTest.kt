@@ -16,6 +16,7 @@ import org.junit.Test
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Request
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.Response
 import java.io.IOException
 import okio.Timeout
@@ -52,6 +53,14 @@ class AIProtocolTest {
         assertFalse(included.contains("y".repeat(18_001)))
     }
 
+    @Test fun providerWebSearchIsOptInForEachProtocol() {
+        for ((protocol, field) in listOf("openAIChatCompletions" to "web_search_options", "openAIResponses" to "tools", "anthropicMessages" to "tools")) {
+            val request = profile.copy(protocol = protocol)
+            assertFalse(buildAIPayload(request, messages, "instructions").containsKey(field))
+            assertTrue(buildAIPayload(request.copy(webSearch = true), messages, "instructions").containsKey(field))
+        }
+    }
+
     @Test fun decodesProviderResponses() {
         val json = Json
         assertEquals("chat answer", decodeAIAnswer("openAIChatCompletions", json.parseToJsonElement(
@@ -63,6 +72,23 @@ class AIProtocolTest {
         assertEquals("anthropic answer", decodeAIAnswer("anthropicMessages", json.parseToJsonElement(
             """{"content":[{"type":"text","text":"anthropic answer"}]}""",
         ).jsonObject))
+    }
+
+    @Test fun modelCatalogPreservesCustomPrefixAndPagesWithoutChangingOrigin() = runBlocking {
+        val requests = mutableListOf<Request>()
+        val client = okhttp3.OkHttpClient.Builder().addInterceptor { chain ->
+            val req = chain.request()
+            requests += req
+            val page = if (requests.size == 1) """{"data":[{"id":"z"}],"has_more":true,"last_id":"z"}"""
+                else """{"data":[{"id":"a"},{"id":"z"}],"has_more":false}"""
+            Response.Builder().request(req).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
+                .body(page.toResponseBody()).build()
+        }.build()
+        val service = AIService.forTesting({ "saved" }, client)
+        val models = service.models(profile.copy(protocol = "anthropicMessages", endpoint = "https://example.test/proxy/v1/messages"), "entered")
+        assertEquals(listOf("a", "z"), models)
+        assertEquals(listOf(null, "z"), requests.map { it.url.queryParameter("after_id") })
+        assertTrue(requests.all { it.url.encodedPath == "/proxy/v1/models" && it.header("x-api-key") == "entered" })
     }
 
     @Test fun coroutineCancellationCancelsTheActiveOkHttpCall() = runBlocking {

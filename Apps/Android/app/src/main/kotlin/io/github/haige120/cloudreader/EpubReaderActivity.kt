@@ -35,7 +35,7 @@ class EpubReaderActivity : AppCompatActivity() {
         super.onCreate(null)
         val bookId = intent.getStringExtra(EXTRA_BOOK_ID)
         val containerId = R.id.epub_viewer_container
-        chrome = NativeReaderChrome(this, containerId, showRestoreControl = false, immersiveSystemBars = true)
+        chrome = NativeReaderChrome(this, containerId, showRestoreControl = true)
         chrome.setTitle("EPUB")
         setContentView(chrome.root)
 
@@ -82,12 +82,22 @@ class EpubReaderActivity : AppCompatActivity() {
             readerHost = EpubReaderHost(
                 this@EpubReaderActivity, chrome, containerId,
                 onSettingChanged = { key, value -> app.preferences.set(key, value) },
+                appAppearance = app.preferences.get("app.appearance") ?: "system",
                 onLocatorChanged = { locator -> checkpoint(locator) },
                 onSelectedText = { selected ->
-                    setResult(RESULT_OK, android.content.Intent()
+                    lifecycleScope.launch {
+                        val navigator = readerHost?.navigator
+                        val locator = navigator?.currentSelection()?.locator ?: navigator?.currentLocator?.value
+                        val excerpt = navigator?.evaluateJavascript(EPUB_CONTEXT_SCRIPT)
+                        val nearby = runCatching { org.json.JSONArray("[$excerpt]").getString(0) }
+                            .getOrNull()?.takeIf { it.isNotBlank() && it != "null" }
+                            ?: listOfNotNull(locator?.text?.before, locator?.text?.highlight, locator?.text?.after).joinToString(" ")
+
+                        setResult(RESULT_OK, android.content.Intent().putExtra("nearby_text", nearby.take(18_000))
                         .putExtra(PdfReaderActivity.EXTRA_BOOK_ID, book.id)
                         .putExtra(PdfReaderActivity.EXTRA_SELECTED_TEXT, selected.take(18_000)))
-                    finish()
+                        finish()
+                    }
                 },
             ).also { it.attach(publication, savedLocator, EpubReaderAppearance.fromSettings(settings)) }
         }
@@ -121,3 +131,27 @@ class EpubReaderActivity : AppCompatActivity() {
         super.onDestroy()
     }
 }
+
+// Walk text nodes around the visible viewport and retain a bounded excerpt across paragraph breaks.
+private val EPUB_CONTEXT_SCRIPT = """
+    (() => {
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        let before = '', nearby = '', found = false;
+        while (walker.nextNode()) {
+            const node = walker.currentNode;
+            if (!node.textContent.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            if (!found) {
+                found = Array.from(range.getClientRects()).some(r =>
+                    r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight);
+            }
+            if (!found) before = (before + ' ' + node.textContent.slice(-3000)).slice(-3000);
+            else {
+                nearby += ' ' + node.textContent.slice(0, 6000 - nearby.length);
+                if (nearby.length >= 6000) break;
+            }
+        }
+        return found ? (before + nearby).trim() : '';
+    })()
+""".trimIndent()

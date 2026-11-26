@@ -18,6 +18,7 @@ public data class AIProfile(
     val protocol: String = "openAIResponses",
     val endpoint: String = "",
     val model: String = "",
+    val webSearch: Boolean = false,
 )
 
 /** Builds bounded, reference-only context instructions shared by desktop and Android. */
@@ -44,16 +45,21 @@ public fun buildAIPayload(profile: AIProfile, messages: List<ChatMessage>, instr
     }
     return when (profile.protocol) {
         "openAIChatCompletions" -> buildJsonObject {
+            if (profile.webSearch) put("web_search_options", buildJsonObject {})
             put("model", JsonPrimitive(profile.model)); put("messages", buildJsonArray {
                 add(message("system", instructions)); messages.forEach { add(message(it.role, it.text)) }
             })
         }
         "openAIResponses" -> buildJsonObject {
+            if (profile.webSearch) put("tools", buildJsonArray { add(buildJsonObject { put("type", "web_search") }) })
             put("model", JsonPrimitive(profile.model)); put("input", buildJsonArray {
                 add(message("developer", instructions)); messages.forEach { add(message(it.role, it.text)) }
             })
         }
         "anthropicMessages" -> buildJsonObject {
+            if (profile.webSearch) put("tools", buildJsonArray {
+                add(buildJsonObject { put("type", "web_search_20250305"); put("name", "web_search"); put("max_uses", 3) })
+            })
             put("model", JsonPrimitive(profile.model)); put("max_tokens", JsonPrimitive(1200)); put("system", JsonPrimitive(instructions))
             put("messages", buildJsonArray { messages.forEach { add(message(it.role, it.text)) } })
         }

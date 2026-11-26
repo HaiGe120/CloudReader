@@ -1,5 +1,7 @@
 package io.github.haige120.cloudreader
 
+import io.github.haige120.cloudreader.ai.origin
+import io.github.haige120.cloudreader.ai.AIProfile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -237,16 +239,51 @@ class SettingsViewModel(
         store.selectProvider("sftp", true)
     }
 
-    fun saveAi() = runAction("AI profile saved") {
-        val s = state.value
+    fun saveAi() = runAction("AI profile saved") { writeAi(state.value) }
+
+    private suspend fun writeAi(s: SettingsUiState, replacingKey: Boolean = false) {
         require(s.aiModel.isNotBlank()) { "Add a model ID." }
         if (s.aiEndpoint.isNotBlank()) require(s.aiEndpoint.startsWith("https://")) { "AI endpoints must use HTTPS." }
+        val origin = AIProfile(protocol = s.aiProtocol, endpoint = s.aiEndpoint.trim()).origin()
+        val previousOrigin = savedProfile().origin()
+        val existing = io.github.haige120.cloudreader.ai.boundKey(store.getSecret("ai.apiKey"), previousOrigin, origin)
+        val key = s.aiKey.trim().ifBlank { if (replacingKey) null else existing }
+        if (key == null) store.removeSecret("ai.apiKey")
+        else store.setSecret("ai.apiKey", io.github.haige120.cloudreader.ai.encodeKey(key, origin))
         store.set("ai.name", s.aiName.ifBlank { "My AI" })
         store.set("ai.protocol", s.aiProtocol)
         store.set("ai.model", s.aiModel.trim())
         store.set("ai.endpoint", s.aiEndpoint.trim())
-        if (s.aiKey.isNotBlank()) store.setSecret("ai.apiKey", s.aiKey.trim())
     }
+
+    private suspend fun savedProfile() = AIProfile(
+        name = store.get("ai.name") ?: "My AI", protocol = store.get("ai.protocol") ?: "openAIResponses",
+        endpoint = store.get("ai.endpoint").orEmpty(), model = store.get("ai.model").orEmpty(),
+        webSearch = store.get("ai.webSearch").toBoolean()
+    )
+
+    internal suspend fun exportAi(): AiSettingsCopy {
+        val saved = savedProfile()
+        require(saved.model.isNotBlank()) { "Save your AI profile first." }
+        val key = io.github.haige120.cloudreader.ai.boundKey(store.getSecret("ai.apiKey"), saved.origin(), saved.origin())
+        return AiSettingsCopy(name = saved.name, protocol = saved.protocol, endpoint = saved.endpoint, model = saved.model,
+            webSearch = saved.webSearch, offlineFallback = store.get("ai.offlineFallback") != "false", apiKey = key)
+    }
+
+    internal suspend fun importAi(copy: AiSettingsCopy) {
+        require(copy.version == 1 && copy.protocol in setOf("openAIResponses", "openAIChatCompletions", "anthropicMessages")) {
+            "This password manager entry is not a supported CloudReader AI profile."
+        }
+        val next = state.value.copy(aiName = copy.name, aiProtocol = copy.protocol, aiEndpoint = copy.endpoint,
+            aiModel = copy.model, aiKey = copy.apiKey.orEmpty())
+        writeAi(next, replacingKey = true)
+        store.set("ai.webSearch", copy.webSearch.toString())
+        store.set("ai.offlineFallback", copy.offlineFallback.toString())
+        mutableState.value = state.value.copy(aiName = next.aiName, aiProtocol = next.aiProtocol, aiEndpoint = next.aiEndpoint,
+            aiModel = next.aiModel, aiKey = "", message = "AI settings restored")
+    }
+
+    fun removeAiKey() = runAction("AI key removed") { store.removeSecret("ai.apiKey") }
 
     fun consumeMessage() { mutableState.value = mutableState.value.copy(message = null) }
 

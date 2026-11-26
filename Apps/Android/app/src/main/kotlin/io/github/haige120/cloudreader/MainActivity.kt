@@ -177,12 +177,12 @@ private fun CloudReaderRoot(activity: MainActivity, app: CloudReaderApp) {
     }
     val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val selected = result.data?.getStringExtra(PdfReaderActivity.EXTRA_SELECTED_TEXT)?.takeIf(String::isNotBlank)
-        if (selected != null) {
+        if (result.resultCode == Activity.RESULT_OK && result.data?.hasExtra(PdfReaderActivity.EXTRA_BOOK_ID) == true) {
             scope.launch {
                 val resolved = result.data?.getStringExtra(PdfReaderActivity.EXTRA_BOOK_ID)?.let { id ->
                     app.library.books.first().firstOrNull { book -> book.id == id }
                 }
-                readerContext = ReaderContext(resolved, selected, null)
+                readerContext = ReaderContext(resolved, selected, result.data?.getStringExtra("nearby_text"))
                 destination = MainDestination.ASSISTANT
             }
         }
@@ -218,7 +218,14 @@ private fun CloudReaderRoot(activity: MainActivity, app: CloudReaderApp) {
         }
     }
 
-    io.github.haige120.cloudreader.ui.CloudReaderTheme {
+    val appearance by app.preferences.observe("app.appearance", "system").collectAsState(initial = "system")
+    val dark = when (appearance) {
+        "dark" -> true
+        "light" -> false
+        else -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
+    io.github.haige120.cloudreader.ui.CloudReaderTheme(darkTheme = dark) {
+        ReaderSystemBars(MaterialTheme.colorScheme.background)
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground) {
             BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { rootWindowOffset = it.positionInWindow() }) {
                 val expanded = maxWidth >= 840.dp
@@ -228,8 +235,8 @@ private fun CloudReaderRoot(activity: MainActivity, app: CloudReaderApp) {
                         app = app,
                         book = textBook,
                         onClose = { readerContext = null },
-                        onAsk = { excerpt ->
-                            readerContext = ReaderContext(textBook, excerpt, null)
+                        onAsk = { excerpt, nearby ->
+                            readerContext = ReaderContext(textBook, excerpt.ifBlank { null }, nearby)
                             destination = MainDestination.ASSISTANT
                         },
                     )

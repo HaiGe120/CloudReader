@@ -54,7 +54,7 @@ class NativeReaderChromeTest {
             var appearanceClicks = 0
             val ink = 0xFFF1EDE2.toInt()
             scenario.onActivity { activity ->
-                chrome = NativeReaderChrome(activity, R.id.epub_viewer_container, showRestoreControl = false, immersiveSystemBars = true)
+                chrome = NativeReaderChrome(activity, R.id.epub_viewer_container, showRestoreControl = false)
                 chrome.setTitle("Appearance fixture")
                 chrome.setAppearanceAction { appearanceClicks++ }
                 chrome.setReadingColors(0xFF202120.toInt(), ink, 0xFFB8B6AF.toInt())

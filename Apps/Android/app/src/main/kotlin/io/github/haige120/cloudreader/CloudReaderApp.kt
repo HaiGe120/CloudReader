@@ -25,7 +25,7 @@ class CloudReaderApp : Application() {
     val library by lazy { LibraryRepository(this, database.libraryDao()) }
     val preferences by lazy { CloudReaderPreferences(this) }
     val vault by lazy { SecureVault(this) }
-    val ai by lazy { AIService(vault) }
+    val ai by lazy { AIService(vault, preferences) }
     val sync by lazy {
         SyncEngine(this, database.libraryDao(), library, preferences, vault) {
             OAuthConnector(this, preferences, vault).refreshGoogleToken()
@@ -33,6 +33,17 @@ class CloudReaderApp : Application() {
     }
     val syncOutcome = MutableStateFlow<SyncOutcome?>(null)
     val ready = CompletableDeferred<Unit>()
+
+    internal suspend fun answer(profile: io.github.haige120.cloudreader.ai.AIProfile, chat: io.github.haige120.cloudreader.domain.ChatRecord): String {
+        val title = listOfNotNull(chat.bookTitle, chat.bookDescription).joinToString(" — ").takeIf { chat.includeBookContext }
+        val selected = chat.selectedText.takeIf { chat.includeBookContext }
+        val nearby = chat.bookContext.takeIf { chat.includeBookContext }
+        val network = getSystemService(android.net.ConnectivityManager::class.java)
+        if (network.activeNetwork == null && preferences.getBool("ai.offlineFallback", true)) {
+            return io.github.haige120.cloudreader.ai.answerOffline(chat.messages, title, selected, nearby)
+        }
+        return ai.ask(profile, chat.messages, title, selected, nearby)
+    }
 
     override fun onCreate() {
         super.onCreate()

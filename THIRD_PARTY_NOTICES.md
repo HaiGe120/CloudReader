@@ -49,3 +49,5 @@ upstream attributions. The all-app bundle includes that companion; keep it with
 individual-package redistributions. Matching Java/OpenJFX source archives are
 separate assets in the same release. The project's MIT license applies to
 CloudReader's original code, not all bundled dependencies or platform SDKs.
+
+Android uses AndroidX Credential Manager (Apache License 2.0) for user-initiated AI profile transfer and Google ML Kit for optional on-device generation. [ML Kit GenAI terms](https://developers.google.com/ml-kit/genai-terms).

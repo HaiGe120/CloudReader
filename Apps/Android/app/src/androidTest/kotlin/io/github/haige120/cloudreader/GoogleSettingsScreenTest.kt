@@ -11,8 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
@@ -70,7 +68,7 @@ class GoogleSettingsScreenTest {
             file.outputStream().use { compose.onNodeWithTag("real-settings-screen").captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
             compose.onNodeWithText("Advanced Google settings (optional)").performScrollTo().performClick()
             compose.onNodeWithText("Google OAuth client ID (Web application)").assertDoesNotExist()
-            val switch = compose.onNode(isToggleable() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+            val switch = compose.onNodeWithContentDescription("Use custom Google credentials")
             switch.performScrollTo().assertIsOff().performClick()
             compose.onNodeWithText("Google OAuth client ID (Web application)").performScrollTo().assertIsDisplayed()
             compose.onNodeWithText("Google OAuth client secret").performScrollTo().assertIsDisplayed()

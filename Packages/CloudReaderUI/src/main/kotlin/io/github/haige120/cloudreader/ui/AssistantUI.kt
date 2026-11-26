@@ -20,7 +20,7 @@ fun AssistantContent(chats: List<ChatRecord>, active: ChatRecord?, draft: String
     includeContext: Boolean, contextPreview: String?, error: String?, profileLabel: String,
     onDraft: (String) -> Unit, onSelect: (String) -> Unit, onNew: () -> Unit,
     onConsent: (Boolean) -> Unit, onSend: () -> Unit, onCancel: () -> Unit, onRetry: () -> Unit,
-    onDelete: () -> Unit, onShare: (() -> Unit)? = null) {
+    onDelete: () -> Unit, onShare: (() -> Unit)? = null, keyboardSend: Boolean = false) {
     var deleting by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -44,7 +44,18 @@ fun AssistantContent(chats: List<ChatRecord>, active: ChatRecord?, draft: String
             }
             items(active?.messages.orEmpty(), key = { it.id }) { message ->
                 Card(colors = CardDefaults.cardColors(containerColor = if (message.role == "user") MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)) {
-                    SelectionContainer { Text(message.text, modifier = Modifier.fillMaxWidth().padding(14.dp)) }
+                    SelectionContainer {
+                        val text = remember(message.text) {
+                            androidx.compose.ui.text.buildAnnotatedString {
+                                append(message.text)
+                                val start = message.text.lastIndexOf("\n\nSources\n")
+                                if (start >= 0) Regex("https?://[^\\s]+").findAll(message.text, start).forEach { link ->
+                                    addLink(androidx.compose.ui.text.LinkAnnotation.Url(link.value), link.range.first, link.range.last + 1)
+                                }
+                            }
+                        }
+                        Text(text, modifier = Modifier.fillMaxWidth().padding(14.dp))
+                    }
                 }
             }
             if (busy) item { CircularProgressIndicator() }
@@ -60,8 +71,14 @@ fun AssistantContent(chats: List<ChatRecord>, active: ChatRecord?, draft: String
             Text(contextPreview.take(240), style = MaterialTheme.typography.bodySmall, maxLines = 3)
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, maxLines = 3) }
+        val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+        val keyboardVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+        if (keyboardSend && keyboardVisible) TextButton(onClick = { keyboard?.hide() }) { Text("Hide keyboard") }
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(draft, onDraft, label = { Text("Ask a question") }, modifier = Modifier.weight(1f), maxLines = 5, enabled = !busy)
+            OutlinedTextField(draft, onDraft, label = { Text("Ask a question") }, modifier = Modifier.weight(1f), maxLines = 5, enabled = !busy,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction =
+                    if (keyboardSend) androidx.compose.ui.text.input.ImeAction.Send else androidx.compose.ui.text.input.ImeAction.Default),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSend = { if (draft.isNotBlank() && !busy) onSend() }))
             if (busy) TextButton(onClick = onCancel) { Text("Stop") }
             else {
                 if (error != null) TextButton(onClick = onRetry) { Text("Retry") }

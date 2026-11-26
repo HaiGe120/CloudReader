@@ -49,6 +49,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -76,40 +78,49 @@ fun AssistantScreen(app: CloudReaderApp, context: ReaderContext?, onContextConsu
     val protocol by app.preferences.observe("ai.protocol", "openAIResponses").collectAsState(initial = "openAIResponses")
     val endpoint by app.preferences.observe("ai.endpoint", "").collectAsState(initial = "")
     val model by app.preferences.observe("ai.model", "").collectAsState(initial = "")
+    val search by app.preferences.observe("ai.webSearch", "false").collectAsState(initial = "false")
     val assistant: AssistantViewModel = viewModel(factory = AssistantViewModel.factory(app))
     val state by assistant.state.collectAsStateWithLifecycle()
     val chats = state.conversations
     val active = state.activeConversation
     val readerContext = state.pendingReaderContext
-    var confirmDelete by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val androidContext = LocalContext.current
 
-    LaunchedEffect(context?.book?.id, context?.selectedText) {
+    LaunchedEffect(context) {
         if (context != null) {
-            assistant.prepareReaderContext(AssistantContext(context.book, context.selectedText))
+            assistant.prepareReaderContext(AssistantContext(context.book, context.selectedText, context.bookText))
             onContextConsumed()
         }
     }
     LaunchedEffect(state.error) { state.error?.let(onMessage) }
 
     io.github.haige120.cloudreader.ui.AssistantContent(
-        chats = chats, active = active, draft = state.draft, busy = state.busy,
+        keyboardSend = true, chats = chats, active = active, draft = state.draft, busy = state.busy,
         includeContext = state.includeContext,
-        contextPreview = readerContext?.selectedText ?: active?.selectedText ?: readerContext?.book?.title ?: active?.bookTitle,
+        contextPreview = if (readerContext != null) readerContext.selectedText ?: readerContext.boundedBookText ?: readerContext.book?.title
+            else active?.selectedText ?: active?.bookContext ?: active?.bookTitle,
         error = state.error, profileLabel = "$aiName · ${model.ifBlank { "Set up an AI model in Settings" }}",
-        onDraft = assistant::updateDraft, onSelect = assistant::selectConversation, onNew = assistant::newConversation,
+        onDraft = assistant::updateDraft, onSelect = assistant::selectConversation, onNew = {
+            scope.launch {
+                val source = readerContext ?: active?.bookID?.let { id -> app.database.libraryDao().book(id)?.toDomain()?.let { AssistantContext(it) } }
+                assistant.newBookConversation(source)
+            }
+        },
         onConsent = assistant::setContextConsent,
         onSend = {
             scope.launch {
                 val sourceBook = readerContext?.book ?: active?.bookID?.let { id -> app.database.libraryDao().book(id)?.toDomain() }
-                val selected = readerContext?.selectedText ?: active?.selectedText
-                val bounded = if (state.includeContext && selected.isNullOrBlank() && sourceBook != null) boundedBookText(androidContext, app, sourceBook) else null
-                assistant.send(AIProfile(aiName, protocol, endpoint, model), AssistantContext(sourceBook, selected, bounded))
+                val selected = if (readerContext != null) readerContext.selectedText else active?.selectedText
+                val bounded = if (state.includeContext && sourceBook != null) {
+                    (if (readerContext != null) readerContext.boundedBookText else active?.bookContext)
+                        ?: boundedBookText(androidContext, app, sourceBook)
+                } else null
+                assistant.send(AIProfile(aiName, protocol, endpoint, model, search.toBoolean()), AssistantContext(sourceBook, selected, bounded))
             }
         },
         onCancel = assistant::cancelRequest,
-        onRetry = { assistant.retry(AIProfile(aiName, protocol, endpoint, model)) },
+        onRetry = { assistant.retry(AIProfile(aiName, protocol, endpoint, model, search.toBoolean())) },
         onDelete = assistant::deleteActive,
         onShare = {
             active?.let { chat ->
@@ -165,7 +176,36 @@ fun SettingsScreen(
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Settings", fontFamily = FontFamily.Serif, fontSize = 29.sp, fontWeight = FontWeight.SemiBold)
-        Text("Your connection details stay on this device. Sync copies books, progress, favorites, deletions, and saved conversations.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Library connection details stay on this device. Sync copies books, progress, favorites, deletions, and saved conversations.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SectionTitle("Reading")
+        val translate by app.preferences.observe("reader.translateWords", "false").collectAsState(initial = "false")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Translate selected English words", Modifier.weight(1f))
+            Switch(translate.toBoolean(), { scope.launch { app.preferences.setBool("reader.translateWords", it) } },
+                modifier = Modifier.semantics { contentDescription = "Translate selected English words" })
+        }
+        if (translate.toBoolean()) {
+            val systemLanguage = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].toLanguageTag()
+            val target by app.preferences.observe("reader.translationTarget", systemLanguage).collectAsState(initial = systemLanguage)
+            var showLanguages by remember { mutableStateOf(false) }
+            TextButton(onClick = { showLanguages = true }) { Text("Translation language · " + java.util.Locale.forLanguageTag(target).displayName) }
+            if (showLanguages) ModelPicker(
+                title = "Translation language", searchLabel = "Search languages",
+                load = { WordTranslation.targets(activity) },
+                label = { java.util.Locale.forLanguageTag(it).displayName },
+                empty = "No matching installed languages. Check your device’s translation settings.",
+                choose = { scope.launch { app.preferences.set("reader.translationTarget", it) }; showLanguages = false },
+                dismiss = { showLanguages = false }
+            )
+        }
+        SectionTitle("App appearance")
+        val appearance by app.preferences.observe("app.appearance", "system").collectAsState(initial = "system")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("system", "light", "dark").forEach { choice ->
+                FilterChip(appearance == choice, { scope.launch { app.preferences.set("app.appearance", choice) } },
+                    label = { Text(choice.replaceFirstChar(Char::uppercase)) })
+            }
+        }
         SectionTitle("Sync destinations")
         Text("Connect Google Drive, choose your account and allow backup access. No client ID or secret is needed for the standard connection.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.googleUseCustomCredentials) {
@@ -207,7 +247,7 @@ fun SettingsScreen(
         if (showAdvancedGoogle) {
         SectionTitle("Advanced Google settings")
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(checked = state.googleUseCustomCredentials, onCheckedChange = model::setCustomGoogleCredentials, enabled = !googleConnection.busy && !state.googleCredentialsSaving)
+            Switch(modifier = Modifier.semantics { contentDescription = "Use custom Google credentials" }, checked = state.googleUseCustomCredentials, onCheckedChange = model::setCustomGoogleCredentials, enabled = !googleConnection.busy && !state.googleCredentialsSaving)
             Text("Use my own Google Cloud project", modifier = Modifier.padding(start = 12.dp))
         }
         TextButton(onClick = { showGoogleSetup = true }) { Text("Google connection help and registration") }
@@ -256,8 +296,32 @@ fun SettingsScreen(
         Field("Model", state.aiModel, { model.update(SettingsField.AI_MODEL, it) }, placeholder = "Model ID")
         Field("Custom HTTPS endpoint (optional)", state.aiEndpoint, { model.update(SettingsField.AI_ENDPOINT, it) }, placeholder = "Leave blank for the provider default")
         SecretField("API key", state.aiKey, { model.update(SettingsField.AI_KEY, it) })
+        var browse by remember { mutableStateOf(false) }
+        TextButton(onClick = { browse = true }) { Text("Browse models") }
+        if (browse) ModelPicker(
+            load = { app.ai.models(AIProfile(protocol = state.aiProtocol, endpoint = state.aiEndpoint.trim()), state.aiKey) },
+            choose = { model.update(SettingsField.AI_MODEL, it); browse = false }, dismiss = { browse = false }
+        )
+        val search by app.preferences.observe("ai.webSearch", "false").collectAsState(initial = "false")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Allow provider web search", Modifier.weight(1f))
+            Switch(search.toBoolean(), { scope.launch { app.preferences.setBool("ai.webSearch", it) } },
+                modifier = Modifier.semantics { contentDescription = "Allow provider web search" })
+        }
+        val fallback by app.preferences.observe("ai.offlineFallback", "true").collectAsState(initial = "true")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Use installed Gemini Nano when offline", Modifier.weight(1f))
+            Switch(fallback.toBoolean(), { scope.launch { app.preferences.setBool("ai.offlineFallback", it) } },
+                modifier = Modifier.semantics { contentDescription = "Use installed Gemini Nano when offline" })
+        }
+        TextButton(onClick = { model.removeAiKey() }) { Text("Remove saved API key") }
         Button(onClick = { model.saveAi() }) { Text("Save AI profile") }
-        Text("Book text is included only when you turn it on in a conversation and press Send. Android uses remote AI; Apple on-device models and Siri stay Apple-only.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+        Text("Your password manager can carry a saved copy of this AI profile and its API key to another Android device.")
+        Row {
+            TextButton(onClick = { scope.launch { transferAiSettings(activity, model, save = true, onMessage) } }) { Text("Save copy") }
+            TextButton(onClick = { scope.launch { transferAiSettings(activity, model, save = false, onMessage) } }) { Text("Restore copy") }
+        }
+        Text("Book chats start with context enabled. Turn it off before sending to keep book details out of the request. Offline answers require a supported device with Gemini Nano available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         Spacer(Modifier.height(18.dp))
     }
     if (showGoogleSetup) {
@@ -304,4 +368,31 @@ private fun Field(label: String, value: String, onValue: (String) -> Unit, place
 @Composable
 private fun SecretField(label: String, value: String, onValue: (String) -> Unit, placeholder: String = "") {
     OutlinedTextField(value, onValueChange = onValue, modifier = Modifier.fillMaxWidth(), label = { Text(label) }, placeholder = { if (placeholder.isNotBlank()) Text(placeholder) }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+}
+
+@Composable
+private fun ModelPicker(load: suspend () -> List<String>, choose: (String) -> Unit, dismiss: () -> Unit,
+    title: String = "Choose a model", searchLabel: String = "Search models", label: (String) -> String = { it }, empty: String = "No matching models.") {
+    var models by remember { mutableStateOf<List<String>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var query by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        try { models = load() }
+        catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (failure: Exception) { error = failure.localizedMessage ?: "Could not load models." }
+    }
+    AlertDialog(onDismissRequest = dismiss, title = { Text(title) }, text = {
+        Column {
+            OutlinedTextField(query, { query = it }, label = { Text(searchLabel) }, singleLine = true)
+            val filtered = models?.filter { it.contains(query, ignoreCase = true) || label(it).contains(query, ignoreCase = true) }
+            when {
+                error != null -> Text(error.orEmpty())
+                filtered == null -> CircularProgressIndicator()
+                filtered.isEmpty() -> Text(empty)
+                else -> LazyColumn(Modifier.fillMaxWidth().height(280.dp)) {
+                    items(filtered, key = { it }) { id -> TextButton(onClick = { choose(id) }) { Text(label(id)) } }
+                }
+            }
+        }
+    }, confirmButton = { TextButton(onClick = dismiss) { Text("Close") } })
 }

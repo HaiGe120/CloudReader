@@ -69,6 +69,7 @@ class TextReaderChromeTest {
                 )
             }
         }
+        compose.onNodeWithText("Show controls", substring = true).performClick()
         compose.onNodeWithText("Page color").assertDoesNotExist()
         compose.onNodeWithText("Serif").assertDoesNotExist()
         compose.onNodeWithContentDescription("Reading appearance").performClick()
@@ -101,10 +102,11 @@ class TextReaderChromeTest {
                 )
             }
         }
+        compose.onNodeWithText("Show controls", substring = true).performClick()
         onView(isAssignableFrom(ScrollView::class.java)).perform(click())
         awaitHidden()
         compose.onNodeWithContentDescription("Close book").assertDoesNotExist()
-        compose.onNodeWithText("Show controls").performClick()
+        compose.onNodeWithText("Show controls", substring = true).performClick()
         compose.onNodeWithContentDescription("Reading appearance").assertIsDisplayed()
         onView(isAssignableFrom(ScrollView::class.java)).perform(swipeUp())
         compose.runOnIdle { assertTrue("A native scroll must advance the reading position", lastOffset > 0) }
@@ -136,20 +138,20 @@ class TextReaderChromeTest {
                 )
             }
         }
-        compose.onNodeWithContentDescription("Hide reading controls").performClick()
+        awaitHidden()
         compose.onNodeWithText("Next").assertDoesNotExist()
         // Find the native page by its text rather than touching the restore button overlay.
         onView(isRoot()).perform(swipeLeft())
         compose.runOnIdle { assertTrue("Horizontal paging must remain active with hidden controls", lastOffset > 0) }
         var hiddenOffset = 0
         compose.runOnIdle { hiddenOffset = lastOffset }
-        compose.onNodeWithText("Show controls").performClick()
+        compose.onNodeWithText("Show controls", substring = true).performClick()
         compose.onNodeWithText("Next").assertIsDisplayed()
         assertVisibleTextContains(hiddenOffset)
     }
 
     private fun awaitHidden() {
-        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("Show controls").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(timeoutMillis = 5_000) { compose.onAllNodesWithText("Show controls", substring = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun assertVisibleTextContains(offset: Int) {

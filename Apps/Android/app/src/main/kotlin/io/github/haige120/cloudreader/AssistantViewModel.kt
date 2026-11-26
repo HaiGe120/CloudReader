@@ -59,17 +59,24 @@ class AssistantViewModel(
     val state: StateFlow<AssistantUiState> = mutableState.asStateFlow()
     private var requestJob: Job? = null
 
+    private var historyLoaded = false
+    private var waitingForReaderHistory = false
+
     init {
         viewModelScope.launch {
             store.conversations.collect { chats ->
                 val sorted = chats.sortedByDescending { it.modifiedAt }
-                val selected = mutableState.value.activeConversationId
+                val reader = mutableState.value.pendingReaderContext
+                val restored = if (waitingForReaderHistory) sorted.firstOrNull { it.bookID == reader?.book?.id && it.bookID != null } else null
+                historyLoaded = true
+                waitingForReaderHistory = false
+                val selected = restored?.id ?: mutableState.value.activeConversationId
                 val active = selected?.let { id -> sorted.firstOrNull { it.id == id } }
                 if (selected != null && active == null) selectConversation(null)
                 mutableState.value = mutableState.value.copy(
                     conversations = sorted,
                     activeConversationId = active?.id,
-                    includeContext = active?.includeBookContext ?: false,
+                    includeContext = active?.includeBookContext ?: (reader != null && mutableState.value.includeContext),
                 )
                 active?.id?.let { savedState[ACTIVE_ID] = it }
             }
@@ -79,6 +86,7 @@ class AssistantViewModel(
     fun updateDraft(value: String) { mutableState.value = mutableState.value.copy(draft = value) }
 
     fun selectConversation(id: String?) {
+        waitingForReaderHistory = false
         savedState[ACTIVE_ID] = id
         val chat = mutableState.value.conversations.firstOrNull { it.id == id }
         mutableState.value = mutableState.value.copy(activeConversationId = id, includeContext = chat?.includeBookContext ?: false, error = null, pendingReaderContext = null)
@@ -86,9 +94,16 @@ class AssistantViewModel(
 
     fun newConversation() = selectConversation(null)
 
-    fun prepareReaderContext(context: AssistantContext) {
+    fun newBookConversation(context: AssistantContext?) {
         newConversation()
-        mutableState.value = mutableState.value.copy(pendingReaderContext = context)
+        mutableState.value = mutableState.value.copy(draft = "", pendingReaderContext = context, includeContext = context?.book != null)
+    }
+
+    fun prepareReaderContext(context: AssistantContext) {
+        val previous = context.book?.let { book -> mutableState.value.conversations.firstOrNull { it.bookID == book.id } }
+        selectConversation(previous?.id)
+        waitingForReaderHistory = !historyLoaded
+        mutableState.value = mutableState.value.copy(pendingReaderContext = context, includeContext = previous?.includeBookContext ?: (context.book != null))
     }
 
     fun removeConversation(chat: ChatRecord) {
@@ -117,7 +132,7 @@ class AssistantViewModel(
     fun send(profile: AIProfile, context: AssistantContext? = null) {
         val current = mutableState.value
         val question = current.draft.trim()
-        if (question.isBlank() || current.busy) return
+        if (question.isBlank() || current.busy || waitingForReaderHistory) return
         val old = current.activeConversation
         val consent = current.includeContext
         val preparedContext = context ?: current.pendingReaderContext ?: AssistantContext()
@@ -126,11 +141,12 @@ class AssistantViewModel(
             try {
                 val now = nowFoundationSeconds()
                 val book = preparedContext.book
-                val selected = if (consent) preparedContext.selectedText ?: old?.selectedText else null
-                val text = if (consent && selected.isNullOrBlank()) preparedContext.boundedBookText ?: old?.bookContext else null
+                val hasReader = context != null || current.pendingReaderContext != null
+                val selected = (if (hasReader) preparedContext.selectedText else old?.selectedText).takeIf { consent }
+                val text = (if (hasReader) preparedContext.boundedBookText else old?.bookContext).takeIf { consent }
                 val user = ChatMessage(UUID.randomUUID().toString().uppercase(), "user", question, now)
                 val withUser = (old ?: ChatRecord(
-                    id = UUID.randomUUID().toString().uppercase(), title = "New conversation", messages = emptyList(),
+                    id = UUID.randomUUID().toString().uppercase(), title = question.take(60), messages = emptyList(),
                     createdAt = now, modifiedAt = now,
                 )).copy(
                     messages = (old?.messages.orEmpty() + user),
@@ -217,7 +233,7 @@ class AssistantViewModel(
                     override suspend fun remove(chat: ChatRecord) = app.library.removeChat(chat)
                 }
                 return AssistantViewModel(store, AssistantRequester { profile, chat ->
-                    app.ai.ask(profile, chat.messages, chat.bookTitle, chat.selectedText, chat.bookContext)
+                    app.answer(profile, chat)
                 }, extras.createSavedStateHandle()) as T
             }
         }

@@ -174,7 +174,7 @@ class EpubReaderHostTest {
             ActivityScenario.launch<EpubReaderActivity>(intent).use { scenario ->
                 lateinit var reader: FixtureReader
                 scenario.onActivity { activity ->
-                    val chrome = NativeReaderChrome(activity, R.id.epub_viewer_container, showRestoreControl = false, immersiveSystemBars = true)
+                    val chrome = NativeReaderChrome(activity, R.id.epub_viewer_container, showRestoreControl = false)
                     chrome.setTitle("Isolated EPUB fixture")
                     activity.setContentView(chrome.root)
                     reader = FixtureReader(activity, scenario, chrome)

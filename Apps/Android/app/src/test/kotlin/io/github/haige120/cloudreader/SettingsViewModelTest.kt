@@ -449,8 +449,21 @@ class SettingsViewModelTest {
         model.saveAi()
         runCurrent()
         assertEquals("model-id", store.values["ai.model"])
-        assertEquals("existing", store.secrets["ai.apiKey"])
+        assertEquals("existing", model.exportAi().apiKey)
         assertEquals("AI profile saved", model.state.value.message)
+    }
+
+    @Test fun importingAProfileReplacesOriginAndClearsAnAbsentKey() = runTest {
+        val store = FakeSettingsStore().apply { secrets["ai.apiKey"] = "old-key" }
+        val model = SettingsViewModel(store, backgroundScope)
+        runCurrent()
+        val copy = AiSettingsCopy(name = "Private endpoint", protocol = "openAIResponses", model = "model",
+            endpoint = "https://ai.example/v1/responses", offlineFallback = false, webSearch = true, apiKey = "new-key")
+        model.importAi(copy)
+        assertEquals(copy, model.exportAi())
+        assertEquals(null, io.github.haige120.cloudreader.ai.boundKey(store.secrets["ai.apiKey"], "", "https://wrong.example:443"))
+        model.importAi(copy.copy(apiKey = null))
+        assertEquals(null, model.exportAi().apiKey)
     }
 
     private class FakeSettingsStore : SettingsStore {

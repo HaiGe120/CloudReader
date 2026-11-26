@@ -20,6 +20,8 @@ Apple’s Foundation Model runs on device when supported by the device and avail
 
 On iOS and macOS, you can enable AI settings sync through iCloud Keychain. The synchronized item contains your AI provider, endpoint, model, web search and offline preferences, and saved API key. This uses the Apple Account and Passwords & Keychain settings on your devices. Removing the saved API key while AI settings sync is enabled updates the shared item. When offline fallback is enabled, CloudReader can answer with the available Apple model and use the remote provider again on your next online request.
 
+On Android, **Save copy** sends your saved AI profile and API key to the password manager you select. Its sync and retention settings govern that copy. **Restore copy** retrieves it on a device where you use the same credential provider. Remove stored copies in your password manager. Optional offline answers use an available Gemini Nano model through Google ML Kit. Word translation uses the Android device’s translation service.
+
 Choosing Browse models contacts your configured endpoint to fetch its model list, using your API key when provided. If you enable web search, your remote AI provider may send search queries to its search service. Optional word translation uses Apple Translation.
 
 CloudReader saves AI conversations to your local library after you ask a question. If sync is enabled, those conversations and any included book context are synchronized to your selected storage destinations.

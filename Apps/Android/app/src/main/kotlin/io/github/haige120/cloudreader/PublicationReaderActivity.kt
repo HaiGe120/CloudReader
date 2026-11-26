@@ -41,6 +41,7 @@ class PublicationReaderActivity:FragmentActivity(){
     private var sourceAnchor:Int?=null
     private var onStatus:(String)->Unit={}
     private var onControls:()->Unit={}
+    private var appAppearance = "system"
     private var currentAppearance=ReadingAppearance()
     private var restoredComicPage:Int?=null
     private var currentComicPage=0
@@ -53,6 +54,7 @@ class PublicationReaderActivity:FragmentActivity(){
             runCatching{
                 val record=app.database.libraryDao().book(id)?.toDomain()?:error("Book not found")
                 book=record
+                appAppearance = app.preferences.get("app.appearance") ?: "system"
                 currentAppearance=ReadingAppearance(
                     fontSize=app.preferences.get("reader.fontSize")?.toDoubleOrNull()?.toInt()?:20,
                     family=app.preferences.get("reader.font")?.replaceFirstChar{it.uppercase()}?:"Serif",
@@ -79,7 +81,7 @@ class PublicationReaderActivity:FragmentActivity(){
         }
     }
     @Composable private fun Reader(record:BookRecord,publication:PreparedPublication){
-        var controls by remember{mutableStateOf(true)}
+        var controls by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
         var appearanceOpen by remember{mutableStateOf(false)}
         var appearance by remember{mutableStateOf(currentAppearance)}
         var status by remember{mutableStateOf("Opening…")}
@@ -90,63 +92,113 @@ class PublicationReaderActivity:FragmentActivity(){
         val pageStep=appearance.columns(screenWidth)
         SideEffect{onStatus={status=it};onControls={controls=!controls}}
         fun imageTurn(delta:Int){imageIndex=(imageIndex+delta*pageStep).coerceIn(publication.images.indices);scale=1f;pan=androidx.compose.ui.geometry.Offset.Zero}
-        Column(Modifier.fillMaxSize()){
-            if(controls)ReaderToolbar(record.title,status,{finish()},
-                {if(record.format=="cbz")imageTurn(-1)else web?.evaluateJavascript("reader.turn(-1)",null)},
-                {if(record.format=="cbz")imageTurn(1)else web?.evaluateJavascript("reader.turn(1)",null)},
-                {appearanceOpen=true},{web?.evaluateJavascript("String(getSelection()).trim() || document.body.innerText.slice(0,18000)"){value->
-                    val text=runCatching{org.json.JSONArray("[$value]").getString(0)}.getOrDefault("")
-                    setResult(RESULT_OK,Intent().putExtra(PdfReaderActivity.EXTRA_BOOK_ID,record.id).putExtra(PdfReaderActivity.EXTRA_SELECTED_TEXT,text));finish()
-                }},{controls=false})
-            else TextButton(onClick={controls=true}){Text("Show controls")}
-            if(record.format=="cbz"){
-                val pages=comicSpread(imageIndex,publication.images.size,appearance,screenWidth)
-                val bitmaps by produceState<List<android.graphics.Bitmap>>(emptyList(),pages){
-                    value=withContext(Dispatchers.IO){runCatching{pages.map{index->
-                        val path=publication.images[index].absolutePath
-                        val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true};BitmapFactory.decodeFile(path,bounds)
-                        require(bounds.outWidth>0&&bounds.outHeight>0&&bounds.outWidth.toLong()*bounds.outHeight<=256_000_000L){"Invalid or oversized comic image"}
-                        val options=BitmapFactory.Options().apply{inSampleSize=maxOf(1,maxOf(bounds.outWidth,bounds.outHeight)/2048)}
-                        BitmapFactory.decodeFile(path,options)?:error("Could not decode the comic image")
-                    }}.getOrElse { failure -> onStatus(failure.message?:"Could not decode this comic page");emptyList() }}
+        val palette = readerPalette(appearance)
+        val paper = androidx.compose.ui.graphics.Color(palette.background)
+        CloudReaderTheme(darkTheme = androidx.core.graphics.ColorUtils.calculateLuminance(palette.background) < 0.179) {
+            ReaderSystemBars(paper)
+            Surface(color = paper, contentColor = androidx.compose.ui.graphics.Color(palette.foreground)) {
+                Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)){
+                    if(controls)ReaderToolbar(record.title,status,{finish()},
+                        {if(record.format=="cbz")imageTurn(-1)else web?.evaluateJavascript("reader.turn(-1)",null)},
+                        {if(record.format=="cbz")imageTurn(1)else web?.evaluateJavascript("reader.turn(1)",null)},
+                        {appearanceOpen=true},{
+                            val result = Intent().putExtra(PdfReaderActivity.EXTRA_BOOK_ID, record.id)
+                            val view = web
+                            if (view == null) {
+                                setResult(RESULT_OK, result)
+                                finish()
+                            } else {
+                                val offset = sourceAnchor ?: 0
+                                val script = "[String(getSelection()).slice(0,18000),document.body.textContent.slice(${maxOf(0,offset-3000)},${offset+6000})]"
+                                view.evaluateJavascript(script) { value ->
+                                    val data = runCatching { org.json.JSONArray(value) }.getOrNull()
+                                    setResult(RESULT_OK, result.putExtra(PdfReaderActivity.EXTRA_SELECTED_TEXT, data?.optString(0))
+                                        .putExtra("nearby_text", data?.optString(1)))
+                                    finish()
+                                }
+                            }
+                        },{controls=false})
+
+                    if(record.format=="cbz"){
+                        val pages=comicSpread(imageIndex,publication.images.size,appearance,screenWidth)
+                        val bitmaps by produceState<List<android.graphics.Bitmap>>(emptyList(),pages){
+                            value=withContext(Dispatchers.IO){runCatching{pages.map{index->
+                                val path=publication.images[index].absolutePath
+                                val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true};BitmapFactory.decodeFile(path,bounds)
+                                require(bounds.outWidth>0&&bounds.outHeight>0&&bounds.outWidth.toLong()*bounds.outHeight<=256_000_000L){"Invalid or oversized comic image"}
+                                val options=BitmapFactory.Options().apply{inSampleSize=maxOf(1,maxOf(bounds.outWidth,bounds.outHeight)/2048)}
+                                BitmapFactory.decodeFile(path,options)?:error("Could not decode the comic image")
+                            }}.getOrElse { failure -> onStatus(failure.message?:"Could not decode this comic page");emptyList() }}
+                        }
+                        LaunchedEffect(imageIndex,pages){val first=pages.first();currentComicPage=first;status=if(pages.size==2)"Pages ${first+1}–${pages.last()+1} of ${publication.images.size}" else "Page ${first+1} of ${publication.images.size}";session?.checkpoint(if(publication.images.size==1)0.0 else first.toDouble()/(publication.images.size-1),"comic:$first")}
+                        val transform=rememberTransformableState{zoom,offset,_->scale=(scale*zoom).coerceIn(1f,4f);pan=if(scale>1f)pan+offset else androidx.compose.ui.geometry.Offset.Zero}
+                        val swipe=Modifier.then(if(scale==1f)Modifier.pointerInput(imageIndex,pageStep){
+                            var distance=0f
+                            detectHorizontalDragGestures(onDragStart={distance=0f},onDragEnd={if(kotlin.math.abs(distance)>80)imageTurn(if(distance<0)1 else -1)}){_,delta->distance+=delta}
+                        }else Modifier)
+                        Row(Modifier.weight(1f).fillMaxWidth().then(swipe).transformable(transform),verticalAlignment=Alignment.CenterVertically){
+                            bitmaps.forEachIndexed{index,bitmap->Image(bitmap.asImageBitmap(),contentDescription="Comic page ${pages[index]+1}",modifier=Modifier.weight(1f).fillMaxHeight().graphicsLayer(scaleX=scale,scaleY=scale,translationX=pan.x,translationY=pan.y))}
+                            if(pageStep==2&&bitmaps.size==1)Spacer(Modifier.weight(1f))
+                        }
+                    }else AndroidView(factory={context->WebView(context).apply{
+                        web=this
+                        settings.javaScriptEnabled=true;settings.blockNetworkLoads=true
+                        settings.allowContentAccess=false;settings.allowFileAccess=true
+                        settings.setSupportMultipleWindows(false)
+                        addJavascriptInterface(Bridge(),"nativeReader")
+                        webViewClient=object:WebViewClient(){
+                            override fun shouldOverrideUrlLoading(view:WebView,request:WebResourceRequest):Boolean=
+                                request.url.scheme!="file"||runCatching{val file=File(request.url.path.orEmpty());!file.canonicalPath.startsWith(publication.root.canonicalPath+File.separator)||file.extension.lowercase() !in listOf("html","htm","xhtml")}.getOrDefault(true)
+                            override fun shouldInterceptRequest(view:WebView,request:WebResourceRequest):WebResourceResponse?{
+                                val safe=request.url.scheme=="file"&&runCatching{File(request.url.path.orEmpty()).canonicalPath.startsWith(publication.root.canonicalPath+File.separator)}.getOrDefault(false)
+                                return if(safe)null else WebResourceResponse("text/plain","utf-8",java.io.ByteArrayInputStream(ByteArray(0)))
+                            }
+                            override fun onPageFinished(view:WebView,url:String){view.evaluateJavascript(ReflowScript.script){configure();view.evaluateJavascript(sourceAnchor?.let{"reader.restoreSource($it)"}?:"reader.restore($fraction)",null)}}
+                        }
+                        loadUrl(publication.chapters[chapter].file.toURI().toString())
+                    }},modifier=Modifier.weight(1f).fillMaxWidth())
+                    if (!controls) TextButton(onClick = { controls = true }, modifier = Modifier.fillMaxWidth()) { Text("$status · Show controls") }
                 }
-                LaunchedEffect(imageIndex,pages){val first=pages.first();currentComicPage=first;status=if(pages.size==2)"Pages ${first+1}–${pages.last()+1} of ${publication.images.size}" else "Page ${first+1} of ${publication.images.size}";session?.checkpoint(if(publication.images.size==1)0.0 else first.toDouble()/(publication.images.size-1),"comic:$first")}
-                val transform=rememberTransformableState{zoom,offset,_->scale=(scale*zoom).coerceIn(1f,4f);pan=if(scale>1f)pan+offset else androidx.compose.ui.geometry.Offset.Zero}
-                val swipe=Modifier.then(if(scale==1f)Modifier.pointerInput(imageIndex,pageStep){
-                    var distance=0f
-                    detectHorizontalDragGestures(onDragStart={distance=0f},onDragEnd={if(kotlin.math.abs(distance)>80)imageTurn(if(distance<0)1 else -1)}){_,delta->distance+=delta}
-                }else Modifier)
-                Row(Modifier.weight(1f).fillMaxWidth().then(swipe).transformable(transform),verticalAlignment=Alignment.CenterVertically){
-                    bitmaps.forEachIndexed{index,bitmap->Image(bitmap.asImageBitmap(),contentDescription="Comic page ${pages[index]+1}",modifier=Modifier.weight(1f).fillMaxHeight().graphicsLayer(scaleX=scale,scaleY=scale,translationX=pan.x,translationY=pan.y))}
-                    if(pageStep==2&&bitmaps.size==1)Spacer(Modifier.weight(1f))
-                }
-            }else AndroidView(factory={context->WebView(context).apply{
-                web=this
-                settings.javaScriptEnabled=true;settings.blockNetworkLoads=true
-                settings.allowContentAccess=false;settings.allowFileAccess=true
-                settings.setSupportMultipleWindows(false)
-                addJavascriptInterface(Bridge(),"nativeReader")
-                webViewClient=object:WebViewClient(){
-                    override fun shouldOverrideUrlLoading(view:WebView,request:WebResourceRequest):Boolean=
-                        request.url.scheme!="file"||runCatching{val file=File(request.url.path.orEmpty());!file.canonicalPath.startsWith(publication.root.canonicalPath+File.separator)||file.extension.lowercase() !in listOf("html","htm","xhtml")}.getOrDefault(true)
-                    override fun shouldInterceptRequest(view:WebView,request:WebResourceRequest):WebResourceResponse?{
-                        val safe=request.url.scheme=="file"&&runCatching{File(request.url.path.orEmpty()).canonicalPath.startsWith(publication.root.canonicalPath+File.separator)}.getOrDefault(false)
-                        return if(safe)null else WebResourceResponse("text/plain","utf-8",java.io.ByteArrayInputStream(ByteArray(0)))
-                    }
-                    override fun onPageFinished(view:WebView,url:String){view.evaluateJavascript(ReflowScript.script){configure();view.evaluateJavascript(sourceAnchor?.let{"reader.restoreSource($it)"}?:"reader.restore($fraction)",null)}}
-                }
-                loadUrl(publication.chapters[chapter].file.toURI().toString())
-            }},modifier=Modifier.weight(1f).fillMaxWidth())
+            }
+            if(appearanceOpen)AppearanceDialog(appearance,{next->appearance=next;currentAppearance=next;configure();lifecycleScope.launch{
+                app.preferences.set("reader.fontSize",next.fontSize.toString());app.preferences.set("reader.font",next.family.lowercase())
+                app.preferences.set("reader.theme",next.theme.lowercase());app.preferences.set("reader.publication.layout",next.layout.name)
+                app.preferences.set("reader.customBackground",next.customBackground);app.preferences.set("reader.customForeground",next.customForeground)
+            }},{appearanceOpen=false})
         }
-        if(appearanceOpen)AppearanceDialog(appearance,{next->appearance=next;currentAppearance=next;configure();lifecycleScope.launch{
-            app.preferences.set("reader.fontSize",next.fontSize.toString());app.preferences.set("reader.font",next.family.lowercase())
-            app.preferences.set("reader.theme",next.theme.lowercase());app.preferences.set("reader.publication.layout",next.layout.name)
-            app.preferences.set("reader.customBackground",next.customBackground);app.preferences.set("reader.customForeground",next.customForeground)
-        }},{appearanceOpen=false})
     }
-    private fun configure(){
-        val p=currentAppearance.validated();val dark=p.theme=="Dark"||(p.theme=="System"&&resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK==android.content.res.Configuration.UI_MODE_NIGHT_YES);val bg=if(p.theme=="Custom")p.customBackground else if(dark)"#20211e" else if(p.theme=="Sepia")"#f3e8d0" else "#fffdf7"
-        web?.evaluateJavascript("reader.configure(${p.fontSize},'${when(p.family){"Mono"->"monospace";"Sans"->"sans-serif";else->"serif"}}','$bg','${if(p.theme=="Custom")p.customForeground else if(dark)"#eee9df" else "#292621"}','${p.layout.name}')",null)
+    override fun onActionModeStarted(mode: android.view.ActionMode) {
+        super.onActionModeStarted(mode)
+        val view = web ?: return
+        lifecycleScope.launch {
+            if (app.preferences.getBool("reader.translateWords")) {
+                mode.menu.add(0, WordTranslation.MENU_ID, 101, "Translate word").setOnMenuItemClickListener {
+                    view.evaluateJavascript("String(getSelection()).slice(0,101)") { value ->
+                        val word = runCatching { org.json.JSONArray("[$value]").getString(0) }.getOrDefault("")
+                        WordTranslation.show(this@PublicationReaderActivity, word)
+                    }
+                    true
+                }
+            }
+        }
+    }
+
+    private fun readerPalette(value: ReadingAppearance): EpubReaderPalette {
+        val systemDark = when (appAppearance) {
+            "dark" -> true
+            "light" -> false
+            else -> resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        }
+        return EpubReaderAppearance(theme = value.theme.lowercase(), customBackground = value.customBackground,
+            customForeground = value.customForeground).palette(systemDark)
+    }
+
+    private fun configure() {
+        val style = currentAppearance.validated()
+        val palette = readerPalette(style)
+        fun css(color: Int) = "#%06x".format(color and 0xffffff)
+        val family = when (style.family) { "Mono" -> "monospace"; "Sans" -> "sans-serif"; else -> "serif" }
+        web?.evaluateJavascript("reader.configure(${style.fontSize},'$family','${css(palette.background)}','${css(palette.foreground)}','${style.layout.name}')", null)
     }
     inner class Bridge{
         @JavascriptInterface fun location(value:Double,page:Int,pages:Int,anchor:Int){runOnUiThread{

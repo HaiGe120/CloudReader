@@ -1,5 +1,13 @@
 # Changelog
 
+## Android reader and AI update — 2026-11-26
+
+- Choose system, light or dark appearance and reopen reading controls from the compact progress display.
+- Resume a book’s latest conversation or start a new one. Review the selected passage and nearby text, toggle context, and send from the keyboard.
+- Search a provider’s model list, enable web search, or use an installed Gemini Nano model when offline on a supported device.
+- Translate selected English words with installed Android translation languages.
+- Save and restore an AI profile and its API key with Android Credential Manager. Saved keys are bound to their provider origin.
+
 ## iOS source preview — 2026-11-26
 
 - Choose System, Light, or Dark for the app. Reader controls follow the page color, including custom paper.

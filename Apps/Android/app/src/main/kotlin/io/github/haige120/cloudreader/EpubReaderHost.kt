@@ -31,6 +31,7 @@ internal class EpubReaderHost(
     private val onSettingChanged: suspend (String, String) -> Unit,
     private val onLocatorChanged: suspend (Locator) -> Unit,
     private val onSelectedText: (String) -> Unit = {},
+    private val appAppearance: String = "system",
 ) {
     var navigator: EpubNavigatorFragment? = null
         private set
@@ -50,14 +51,17 @@ internal class EpubReaderHost(
             configuration = EpubNavigatorFragment.Configuration(
                 selectionActionModeCallback = object : android.view.ActionMode.Callback {
                     override fun onCreateActionMode(mode: android.view.ActionMode, menu: android.view.Menu): Boolean {
+                        WordTranslation.addAction(activity, menu)
                         menu.add(0, 9321, 100, "Ask AI")
                         return true
                     }
                     override fun onPrepareActionMode(mode: android.view.ActionMode, menu: android.view.Menu) = false
                     override fun onActionItemClicked(mode: android.view.ActionMode, item: android.view.MenuItem): Boolean {
-                        if (item.itemId != 9321) return false
+                        if (item.itemId != 9321 && item.itemId != WordTranslation.MENU_ID) return false
                         activity.lifecycleScope.launch {
-                            navigator?.currentSelection()?.locator?.text?.highlight?.takeIf(String::isNotBlank)?.let(onSelectedText)
+                            navigator?.currentSelection()?.locator?.text?.highlight?.takeIf(String::isNotBlank)?.let { text ->
+                                if (item.itemId == WordTranslation.MENU_ID) WordTranslation.show(activity, text) else onSelectedText(text)
+                            }
                             mode.finish()
                         }
                         return true
@@ -93,6 +97,7 @@ internal class EpubReaderHost(
             }
         })
         reader.addInputListener(DirectionalNavigationAdapter(reader))
+        chrome.setSelectionAction(true) { onSelectedText("") }
         chrome.setAppearanceAction { showAppearance() }
         applyColors()
         // No floating recovery control covers the publication. Center taps and accessibility
@@ -148,8 +153,11 @@ internal class EpubReaderHost(
         chrome.setReadingColors(colors.background, colors.foreground, colors.muted)
     }
 
-    private fun systemDark(): Boolean =
-        activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    private fun systemDark(): Boolean = when (appAppearance) {
+        "light" -> false
+        "dark" -> true
+        else -> activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    }
 
     private fun wideScreen(): Boolean = activity.resources.configuration.screenWidthDp >= 600
 

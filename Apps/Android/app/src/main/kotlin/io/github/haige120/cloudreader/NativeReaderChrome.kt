@@ -25,7 +25,6 @@ internal class NativeReaderChrome(
     private val activity: Activity,
     containerId: Int,
     private val showRestoreControl: Boolean = true,
-    private val immersiveSystemBars: Boolean = false,
 ) {
     private var foregroundColor = INK
     private var controlsAccessibilityAction: Int? = null
@@ -40,7 +39,7 @@ internal class NativeReaderChrome(
     }
     private val title = TextView(activity).apply {
         textSize = 16f
-        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        typeface = Typeface.create("serif", Typeface.BOLD)
         setTextColor(INK)
         setSingleLine()
         ellipsize = TextUtils.TruncateAt.END
@@ -52,7 +51,8 @@ internal class NativeReaderChrome(
         setSingleLine()
         setPadding(0, 0, dp(4), 0)
     }
-    private val selectionAction = action("AI", "Ask AI about selection").apply { visibility = View.GONE }
+    private val selectionAction = action("AI", "Ask AI about this book").apply { visibility = View.GONE }
+    private val translateAction = action("文", "Translate selected word").apply { visibility = View.GONE }
     private val appearanceAction = action("Aa", "Reading appearance").apply {
         textSize = 18f
         visibility = View.GONE
@@ -94,6 +94,7 @@ internal class NativeReaderChrome(
         title.gravity = Gravity.CENTER_VERTICAL
         toolbar.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         toolbar.addView(selectionAction, LinearLayout.LayoutParams(dp(48), dp(48)))
+        toolbar.addView(translateAction, LinearLayout.LayoutParams(dp(48), dp(48)))
         toolbar.addView(appearanceAction, LinearLayout.LayoutParams(dp(48), dp(48)))
         toolbar.addView(action("⌄", "Hide reading controls").apply {
             textSize = 24f
@@ -103,9 +104,8 @@ internal class NativeReaderChrome(
         column.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(column, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         if (showRestoreControl) {
-            root.addView(restore, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48), Gravity.TOP or Gravity.END).apply {
-                topMargin = dp(8)
-                marginEnd = dp(12)
+            column.addView(restore, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
             })
         }
         root.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
@@ -118,6 +118,8 @@ internal class NativeReaderChrome(
     }
 
     fun setProgress(value: String, description: String = value) {
+        restore.text = value
+        restore.contentDescription = "$description. Show reading controls"
         progress.text = value
         progress.contentDescription = description
     }
@@ -125,6 +127,11 @@ internal class NativeReaderChrome(
     fun setSelectionAction(available: Boolean, onClick: () -> Unit) {
         selectionAction.visibility = if (available) View.VISIBLE else View.GONE
         selectionAction.setOnClickListener { onClick() }
+    }
+
+    fun setTranslateAction(available: Boolean, action: () -> Unit) {
+        translateAction.visibility = if (available) View.VISIBLE else View.GONE
+        translateAction.setOnClickListener { action() }
     }
 
     fun setAppearanceAction(onClick: () -> Unit) {
@@ -150,7 +157,7 @@ internal class NativeReaderChrome(
             (content.getChildAt(index) as? TextView)?.setTextColor(foreground)
         }
         val controller = WindowCompat.getInsetsController(activity.window, root)
-        val lightBackground = ColorUtils.calculateLuminance(background) > 0.5
+        val lightBackground = ColorUtils.calculateLuminance(background) > 0.179
         controller.isAppearanceLightStatusBars = lightBackground
         controller.isAppearanceLightNavigationBars = lightBackground
     }
@@ -160,8 +167,7 @@ internal class NativeReaderChrome(
         toolbar.visibility = if (visible) View.VISIBLE else View.GONE
         restore.visibility = if (showRestoreControl && !visible) View.VISIBLE else View.GONE
         val controller = WindowCompat.getInsetsController(activity.window, root)
-        val bars = if (immersiveSystemBars) WindowInsetsCompat.Type.systemBars() else WindowInsetsCompat.Type.statusBars()
-        if (visible) controller.show(bars) else controller.hide(bars)
+        controller.show(WindowInsetsCompat.Type.systemBars())
         controlsAccessibilityAction?.let { ViewCompat.removeAccessibilityAction(root, it) }
         controlsAccessibilityAction = ViewCompat.addAccessibilityAction(
             root,

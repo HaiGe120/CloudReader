@@ -67,7 +67,12 @@ Connection status remains visible below the Google row, with optional expandable
 
 ## Reading controls
 
-TXT, EPUB and PDF use a compact reader bar. EPUB opens with the bar and system bars hidden, with no floating button covering the book. Tap the center area to show or hide the controls; edge taps retain Readium page navigation. Accessibility actions also show or hide the bar. TXT and PDF retain their small **Show controls** button.
+Readers open with compact progress and a control for reopening the toolbar. TXT and EPUB also support tapping the reading surface to toggle controls. App appearance supports System, Light and Dark.
+
+Opening Ask AI from a book resumes its latest conversation and prepares bounded text near the reading position where available. New book chats enable context by default. Turn it off before sending to exclude book details. Settings supports searchable provider model lists, optional web search, and on-device answers with an already available Gemini Nano model when the device has no network connection. Selected English words can be translated with a supported installed Android translation language.
+
+**Save copy** and **Restore copy** in AI settings transfer a saved profile, its options, and its origin-bound key through Android Credential Manager. Choose a password manager that syncs across your devices. Save another copy after changing settings. Removing a local key leaves earlier password-manager copies under the user's control.
+
 
 EPUB's **Aa** panel provides serif, sans and monospace fonts, text size, System/Light/Sepia/Dark/Custom colors, scrolling, one page and two pages. Changes are saved on this device and apply to the open book. Two pages use screens at least 600 dp wide, with one page on compact screens; fixed-layout EPUBs retain their original typography. Font and color preferences are shared with TXT, while EPUB's page layout is saved separately. TXT also groups its appearance options under **Aa**. Reading gestures and native text selection remain available while the bar is hidden. See [current reader evidence](../../docs/engineering/evidence/UNIFIED-KOTLIN-01.md) for checks and limits.
 

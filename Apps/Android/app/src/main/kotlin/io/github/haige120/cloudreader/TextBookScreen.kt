@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -89,7 +90,7 @@ import androidx.lifecycle.LifecycleEventObserver
 private class ReaderViewState(var textSize: Float, var font: String, var theme: String, var fraction: Float, var restoring: Boolean = true, var content: String? = null)
 
 @Composable
-fun TextBookScreen(app: CloudReaderApp, book: BookRecord, onClose: () -> Unit, onAsk: (String) -> Unit) {
+fun TextBookScreen(app: CloudReaderApp, book: BookRecord, onClose: () -> Unit, onAsk: (String, String?) -> Unit) {
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
     var contents by remember(book.id) { mutableStateOf<String?>(null) }
@@ -147,7 +148,10 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRecord, onClose: () -> Unit, o
         initialProgress = book.progress,
         initialOffset = restoredTextOffset ?: 0,
         facingOffset = facingOffset,
-        appearance = TextReaderAppearance(fontSize, fontSetting, themeSetting, customBackground, customForeground, layoutSetting),
+        appearance = TextReaderAppearance(fontSize, fontSetting, if (themeSetting == "system") {
+            val appTheme by app.preferences.observe("app.appearance", "system").collectAsState(initial = "system")
+            appTheme
+        } else themeSetting, customBackground, customForeground, layoutSetting),
         onSettingChanged = { key, value -> scope.launch { app.preferences.set(key, value) } },
         onProgress = { fraction, offset ->
             currentProgress = fraction
@@ -155,7 +159,13 @@ fun TextBookScreen(app: CloudReaderApp, book: BookRecord, onClose: () -> Unit, o
             readerSession.checkpoint(fraction, "txt:$offset:utf16")
         },
         onClose = { flushProgress(); onClose() },
-        onAsk = onAsk,
+        onAsk = { selected ->
+            val nearby = contents?.let { text ->
+                val offset = facingOffset.coerceIn(0, text.length)
+                text.substring((offset - 3000).coerceAtLeast(0), (offset + 6000).coerceAtMost(text.length))
+            }
+            onAsk(selected, nearby)
+        },
     )
 }
 
@@ -186,7 +196,7 @@ internal fun TextReaderContent(
     onClose: () -> Unit,
     onAsk: (String) -> Unit,
 ) {
-    var controlsVisible by rememberSaveable(bookId) { mutableStateOf(true) }
+    var controlsVisible by rememberSaveable(bookId) { mutableStateOf(false) }
     var appearanceVisible by rememberSaveable(bookId) { mutableStateOf(false) }
     val readerTheme = if (appearance.theme == "system" && isSystemInDarkTheme()) "dark" else appearance.theme
     val paper = Color(readerBackground(readerTheme, appearance.customBackground))
@@ -194,12 +204,12 @@ internal fun TextReaderContent(
     val currentToggle by rememberUpdatedState { controlsVisible = !controlsVisible }
     val currentAsk by rememberUpdatedState(onAsk)
     BackHandler { onClose() }
-    ReaderSystemBars(controlsVisible)
+    ReaderSystemBars(paper)
 
     Surface(Modifier.fillMaxSize(), color = paper, contentColor = ink) {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Column(Modifier.fillMaxSize()) {
-                if (controlsVisible) {
+                if (controlsVisible || contents == null) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close book") }
                         Column(Modifier.weight(1f)) {
@@ -235,16 +245,12 @@ internal fun TextReaderContent(
                         else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Opening book…", color = ink.copy(alpha = 0.7f)) }
                     }
                 }
-            }
-            if (!controlsVisible) {
-                Surface(
-                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    color = paper.copy(alpha = 0.94f),
-                    contentColor = ink,
-                    tonalElevation = 2.dp,
-                ) {
-                    TextButton(onClick = { controlsVisible = true }) { Text("Show controls") }
+                if (!controlsVisible && contents != null) {
+                    TextButton(onClick = { controlsVisible = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                        androidx.compose.material3.LinearProgressIndicator(progress = { progress.toFloat().coerceIn(0f, 1f) },
+                            modifier = Modifier.width(120.dp).padding(end = 8.dp), color = ink)
+                        Text("${(progress * 100).toInt()}% read · Show controls", color = ink)
+                    }
                 }
             }
         }
@@ -302,32 +308,21 @@ internal fun TextReaderContent(
 }
 
 @Composable
-private fun ReaderSystemBars(controlsVisible: Boolean) {
+internal fun ReaderSystemBars(paper: Color) {
     val context = LocalContext.current
-    val activity = remember(context) {
-        var candidate: Context = context
-        while (candidate is ContextWrapper && candidate !is Activity) candidate = candidate.baseContext
-        candidate as? Activity
-    }
-    val window = activity?.window ?: return
-    DisposableEffect(window) {
-        val insets = ViewCompat.getRootWindowInsets(window.decorView)
-        val statusVisible = insets?.isVisible(WindowInsetsCompat.Type.statusBars()) ?: true
-        val navigationVisible = insets?.isVisible(WindowInsetsCompat.Type.navigationBars()) ?: true
+    val activity = remember(context) { readerActivity(context) } ?: return
+    val light = androidx.core.graphics.ColorUtils.calculateLuminance(paper.toArgbCompat()) > 0.179
+    DisposableEffect(activity, light) {
+        val window = activity.window
         val controller = WindowCompat.getInsetsController(window, window.decorView)
-        val behavior = controller.systemBarsBehavior
+        val oldStatus = controller.isAppearanceLightStatusBars
+        val oldNavigation = controller.isAppearanceLightNavigationBars
+        controller.show(WindowInsetsCompat.Type.systemBars())
+        controller.isAppearanceLightStatusBars = light
+        controller.isAppearanceLightNavigationBars = light
         onDispose {
-            controller.systemBarsBehavior = behavior
-            if (statusVisible) controller.show(WindowInsetsCompat.Type.statusBars()) else controller.hide(WindowInsetsCompat.Type.statusBars())
-            if (navigationVisible) controller.show(WindowInsetsCompat.Type.navigationBars()) else controller.hide(WindowInsetsCompat.Type.navigationBars())
-        }
-    }
-    LaunchedEffect(window, controlsVisible) {
-        val controller = WindowCompat.getInsetsController(window, window.decorView)
-        if (controlsVisible) controller.show(WindowInsetsCompat.Type.systemBars())
-        else {
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.isAppearanceLightStatusBars = oldStatus
+            controller.isAppearanceLightNavigationBars = oldNavigation
         }
     }
 }
@@ -499,15 +494,17 @@ private fun selectableText(context: android.content.Context, onAsk: (String) -> 
     customSelectionActionModeCallback = object : ActionMode.Callback {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
             selecting = true
+            WordTranslation.addAction(context, menu)
             menu.add(0, 1901, 0, "Ask CloudReader").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
             return true
         }
         override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
         override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
-            if (item.itemId != 1901) return false
+            if (item.itemId != 1901 && item.itemId != WordTranslation.MENU_ID) return false
             val start = selectionStart.coerceAtLeast(0); val end = selectionEnd.coerceAtLeast(start)
             val excerpt = text.subSequence(start, end).toString().take(18_000).trim()
-            if (excerpt.isNotEmpty()) onAsk(excerpt)
+            if (item.itemId == WordTranslation.MENU_ID) WordTranslation.show(context, excerpt)
+            else if (excerpt.isNotEmpty()) onAsk(excerpt)
             mode.finish()
             return true
         }
